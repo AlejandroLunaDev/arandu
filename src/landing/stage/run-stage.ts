@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { makeCat } from "./cat";
+import { makeLife } from "./cat-life";
 import { tokenColor } from "./palette";
 import { loadRapier, roomPhysics, type RoomPhysics } from "./physics";
 import { makeKit, type Kit } from "./props";
@@ -11,14 +12,20 @@ import { heroRoom, knowYouRoom, TILT, type Room } from "./rooms";
 // The landing's 3D layer: one fixed canvas over the page that never takes clicks. Each scene with a
 // [data-room] anchor gets its room of shelves, and Arandu follows the scroll from room to room. While
 // a scene is pinned he sits and watches the pointer; while the next scene comes in he walks or leaps
-// to its seat. The props have real gravity once the physics is in (see physics.ts): a tap knocks
-// them, the pointer swings the hanging lamp, the cat shoves them. If WebGL or the models fail, <html>
-// gets the "no3d" class and the page shows its drawn cats instead.
+// to its seat. Left alone a while, he stops watching and lives his own life (see cat-life.ts). The
+// props have real gravity once the physics is in (see physics.ts): a tap knocks them, the pointer
+// swings the hanging lamp, the cat shoves them. If WebGL or the models fail, <html> gets the "no3d"
+// class and the page shows its drawn cats instead.
 
 const BUILD: Record<string, (anchor: HTMLElement, kit: Kit) => Room> = {
   hero: heroRoom,
   "know-you": knowYouRoom,
 };
+
+/** Seconds he keeps watching a pointer that has stopped moving. */
+const GAZE = 4;
+/** What a tap goes to, not to the stage. */
+const CONTROLS = "a, button, input, textarea, select, label, iframe";
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -196,14 +203,42 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   document.fonts?.ready.then(relayout);
   layout();
 
+  const life = makeLife(rooms, (i) => worlds[i] ?? null, reduce);
+  // Where he is in each room, in its frame: his seat, or wherever his own doings left him.
+  const spots = rooms.map((r) => r.seat.position.clone());
+  // Any input stops what he does; only the mouse moving keeps his eyes on it.
+  let lastInput = performance.now() / 1000;
+  let lastMove = -Infinity;
+  const onInput = () => {
+    lastInput = performance.now() / 1000;
+    life.stir();
+  };
+  addEventListener("scroll", onInput, { passive: true });
+  addEventListener("keydown", onInput);
+
   const pointer = { x: 0, y: 0, on: false };
   const onPointer = (e: PointerEvent) => {
+    onInput();
     if (e.pointerType !== "mouse") return;
+    lastMove = lastInput;
     pointer.x = e.clientX;
     pointer.y = e.clientY;
     pointer.on = true;
   };
   addEventListener("pointermove", onPointer, { passive: true });
+
+  // Whether a screen point falls on the cat: a ray from the camera, in his own frame, against a box
+  // round his body. Only while he lives in a room: on the move he is too busy to mind.
+  const catBox = new THREE.Box3(new THREE.Vector3(-0.16, 0, -0.1), new THREE.Vector3(0.22, 0.4, 0.1));
+  const catRay = new THREE.Ray();
+  const catInverse = new THREE.Matrix4();
+  const overCat = (sx: number, sy: number) => {
+    if (life.room < 0) return false;
+    catInverse.copy(cat.yaw.matrixWorld).invert();
+    catRay.origin.set(sx - W / 2, H / 2 - sy, 1000).applyMatrix4(catInverse);
+    catRay.direction.set(0, 0, -1).transformDirection(catInverse);
+    return catRay.intersectsBox(catBox);
+  };
 
   // What the pointer is over: a prop or a lamp of some room, found by a ray from the camera.
   const raycaster = new THREE.Raycaster();
@@ -221,18 +256,28 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     return null;
   };
 
-  // A tap knocks a prop away from where it lands, a little up: on its left side it sends it right.
-  // A tap on a letter of the motto flicks it.
+  // A tap on the cat startles him. A tap knocks a prop away from where it lands, a little up: on its
+  // left side it sends it right. A tap on a letter of the motto flicks it.
   const at = new THREE.Vector3();
   const push = new THREE.Vector3();
   const onDown = (e: PointerEvent) => {
+    lastInput = performance.now() / 1000;
+    if (e.pointerType === "mouse") {
+      lastMove = lastInput;
+      Object.assign(pointer, { x: e.clientX, y: e.clientY, on: true });
+    }
     const target = e.target instanceof Element ? e.target : null;
+    if (!target?.closest(CONTROLS) && overCat(e.clientX, e.clientY)) {
+      life.poke();
+      return;
+    }
+    life.stir();
     const letter = target?.closest<HTMLElement>("[data-letter]");
     if (letter) {
       worlds.forEach((w) => w.flick(letter));
       return;
     }
-    if (target?.closest("a, button, input, textarea, select, label, iframe")) return;
+    if (target?.closest(CONTROLS)) return;
     const hit = pick(e.clientX, e.clientY);
     if (!hit) return;
     const local = rooms[hit.i].content.worldToLocal(at.copy(hit.point));
@@ -271,6 +316,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     return ray.intersectPlane(wall, out);
   };
   const catAt = new THREE.Vector3();
+  const catLocal = new THREE.Vector3();
+  const shadowAt = new THREE.Vector3();
+  let sitNow = 1;
+  let lifeStride = 0;
   let seen = { x: -1, y: -1 };
   let last = performance.now();
   let raf = 0;
@@ -289,45 +338,85 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     });
     kit.tick(t);
 
-    pS = reduce ? progress() : lerp(pS, progress(), 1 - 0.0009 ** dt);
+    // The scroll waits while he is mid-jump or mid-tap: he lands first.
+    if (!life.busy()) pS = reduce ? progress() : lerp(pS, progress(), 1 - 0.0009 ** dt);
     const i0 = clamp(Math.floor(pS), 0, Math.max(0, rooms.length - 2));
     const iB = Math.min(i0 + 1, rooms.length - 1);
     const f = clamp(pS - i0, 0, 1);
     const A = rooms[i0];
     const B = rooms[iB];
-    A.seat.getWorldPosition(pa);
-    B.seat.getWorldPosition(pb);
-    const e = ease(f);
-    const dx = pb.x - pa.x;
-    const dy = pb.y - pa.y;
-    const leap = Math.abs(dy) > 24 || Math.abs(dx) > W * 0.3;
-    const air = leap && !reduce ? Math.sin(Math.PI * f) : 0;
-    const x = lerp(pa.x, pb.x, e);
-    const y = lerp(pa.y, pb.y, e);
-    const z = lerp(pa.z, pb.z, e);
-    const k = lerp(A.k, B.k, e);
-    const hop = air * (k * 0.5 + Math.abs(dy) * 0.25);
-    const sit = 1 - smooth(0, 0.16, f) * (1 - smooth(0.84, 1, f));
 
-    cat.root.position.set(x, y + hop, z);
+    // He lives in a room while its scene stays put, and leaves it as soon as the scroll moves on.
+    const settled = f < 0.01 ? i0 : f > 0.99 ? iB : -1;
+    if (life.room >= 0 && life.room !== settled) life.leave();
+    life.update(dt, t - lastInput);
+    if (life.room < 0 && settled >= 0) {
+      // The rooms he left wait for him at their seats.
+      spots.forEach((s, i) => {
+        if (i !== settled) s.copy(rooms[i].seat.position);
+      });
+      life.enter(settled, spots[settled], yawNow);
+      lifeStride = life.pose.stride;
+    }
+
+    const p = life.pose;
+    const own = life.room >= 0;
+    let k: number;
+    let lift: number; // metres above the ground under him
+    let sitTo: number;
+    let air: number;
+    let leap: number;
+    if (own) {
+      const r = rooms[life.room];
+      spots[life.room].copy(p.pos);
+      r.content.localToWorld(catAt.copy(p.pos));
+      r.content.localToWorld(shadowAt.copy(p.pos).setY(p.pos.y - p.lift));
+      k = r.k;
+      lift = p.lift;
+      yawNow = p.yaw;
+      stride += p.stride - lifeStride;
+      lifeStride = p.stride;
+      ({ sit: sitTo, air, leap } = p);
+    } else {
+      A.content.localToWorld(pa.copy(spots[i0]));
+      B.content.localToWorld(pb.copy(spots[iB]));
+      const e = ease(f);
+      const dx = pb.x - pa.x;
+      const dy = pb.y - pa.y;
+      const jumps = Math.abs(dy) > 24 || Math.abs(dx) > W * 0.3;
+      air = jumps && !reduce ? Math.sin(Math.PI * f) : 0;
+      leap = f;
+      k = lerp(A.k, B.k, e);
+      const hop = air * (k * 0.5 + Math.abs(dy) * 0.25);
+      shadowAt.set(lerp(pa.x, pb.x, e), lerp(pa.y, pb.y, e), lerp(pa.z, pb.z, e));
+      catAt.copy(shadowAt).y += hop;
+      lift = hop / k;
+      sitTo = 1 - smooth(0, 0.16, f) * (1 - smooth(0.84, 1, f));
+      // In profile while he travels, a three-quarter turn toward the copy while he sits.
+      const yawTo = sitTo < 0.5 ? (dx >= 0 ? 0 : -Math.PI) : (f < 0.5 ? A : B).face;
+      yawNow = lerp(yawNow, yawTo, 1 - 0.004 ** dt);
+      if (prevX !== null && !air) stride += Math.abs(catAt.x - prevX) / (k * 0.35);
+    }
+    prevX = catAt.x;
+    // The two hand over to each other mid-pose: the sit eases across.
+    sitNow = lerp(sitNow, sitTo, 1 - 0.0001 ** dt);
+
+    cat.root.position.copy(catAt);
     cat.root.scale.setScalar(k);
     cat.root.rotation.x = TILT;
-    // In profile while he travels, a three-quarter turn toward the copy while he sits.
-    const yawTo = sit < 0.5 ? (dx >= 0 ? 0 : -Math.PI) : (f < 0.5 ? A : B).face;
-    yawNow = lerp(yawNow, yawTo, 1 - 0.004 ** dt);
     cat.yaw.rotation.y = yawNow;
-    if (prevX !== null && !air) stride += Math.abs(x - prevX) / (k * 0.35);
-    prevX = x;
 
-    const watching = pointer.on && sit > 0.5;
-    if (watching) look.set(pointer.x - W / 2, H / 2 - pointer.y, 700);
-    cat.update({ sit, leap: f, air, stride, look: watching ? look : null }, dt, t);
+    // What he looks at: his book while he reads, else the pointer while it moves, else around.
+    let gaze: THREE.Vector3 | null = null;
+    if (own && p.look) gaze = rooms[life.room].content.localToWorld(look.copy(p.look));
+    else if (pointer.on && sitNow > 0.5 && t - lastMove < GAZE) gaze = look.set(pointer.x - W / 2, H / 2 - pointer.y, 700);
+    cat.update({ sit: sitNow, leap, air, stride, tap: p.tap, lids: p.lids, ears: p.ears, look: gaze }, dt, t);
 
     // His body shoves the props of the room he is in, while his feet are on its planks.
-    const home = f < 0.5 ? i0 : iB;
+    const home = own ? life.room : f < 0.5 ? i0 : iB;
     worlds.forEach((w, i) => {
       if (i !== home || air > 0.2) w.cat(null, 0);
-      else w.cat(rooms[i].content.worldToLocal(catAt.set(x, y + hop, z)), yawNow);
+      else w.cat(rooms[i].content.worldToLocal(catLocal.copy(catAt)), yawNow);
     });
 
     // The pointer drags the hanging lamp as it passes, and shows a hand over what a tap would knock.
@@ -341,15 +430,15 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
         });
       }
       seen = { x: pointer.x, y: pointer.y };
-      document.body.style.cursor = pick(pointer.x, pointer.y) ? "pointer" : "";
+      document.body.style.cursor = pick(pointer.x, pointer.y) || overCat(pointer.x, pointer.y) ? "pointer" : "";
     }
     worlds.forEach((w) => w.step(dt));
 
-    const lift = 1 - Math.min(0.7, hop / (k * 1.2));
-    catShadow.position.set(x, y + 0.004 * k, z);
+    const fade = 1 - Math.min(0.7, lift / 1.2);
+    catShadow.position.copy(shadowAt).y += 0.004 * k;
     catShadow.rotation.x = TILT;
-    catShadow.scale.set(k * 0.62 * lift, 1, k * 0.3 * lift);
-    catShadowMaterial.opacity = 0.55 * lift;
+    catShadow.scale.set(k * 0.62 * fade, 1, k * 0.3 * fade);
+    catShadowMaterial.opacity = 0.55 * fade;
 
     renderer.render(scene, camera);
   };
@@ -357,9 +446,12 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
 
   return () => {
     live = false;
+    life.dispose();
     worlds.forEach((w) => w.dispose());
     document.body.style.cursor = "";
     removeEventListener("pointerdown", onDown);
+    removeEventListener("scroll", onInput);
+    removeEventListener("keydown", onInput);
     cancelAnimationFrame(raf);
     tweens.forEach((tween) => tween.kill());
     removeEventListener("resize", relayout);

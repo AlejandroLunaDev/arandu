@@ -4,7 +4,7 @@ import { tokenColor } from "./palette";
 
 // Arandu, from public/models/arandu.glb (built by blender/arandu): feet at the origin, facing +X,
 // metres. The clips (sit, walk, jump, tap) key the body bones only; this file drives the face bones:
-// the head and eyes follow the pointer and the ears twitch now and then.
+// the head and eyes follow the pointer, the lids blink, the ears twitch now and then.
 
 export type CatPose = {
   /** 1 while he sits, 0 while he walks or leaps. */
@@ -15,9 +15,18 @@ export type CatPose = {
   air: number;
   /** Walk cycles done so far: drives the walk clip. */
   stride: number;
+  /** 0..1 through the tap clip, which starts and ends sitting; 0 while he does not tap. */
+  tap: number;
+  /** How far he closes his eyes of his own will, 0..1: a slow blink, a drowsy read. He also blinks on his own. */
+  lids: number;
+  /** How flat his ears lie, 0..1. */
+  ears: number;
   /** A world point to look at, or null to look around on his own. */
   look: THREE.Vector3 | null;
 };
+
+/** Where, through the tap clip, the paw meets the floor: frames 10 and 16 of 32 (blender/arandu/animate.py). */
+export const TAP_HITS = [10 / 32, 16 / 32] as const;
 
 export type Cat = {
   /** Place, scale and tilt the cat through this group. */
@@ -39,6 +48,17 @@ type Rig = {
 
 const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+const smooth = (a: number, b: number, v: number) => {
+  const t = clamp((v - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+// The lids rest open with their edges 50° above and 52° below the eye's forward axis
+// (blender/arandu/build.py); shut, they meet 8° under it.
+const LID_UP = THREE.MathUtils.degToRad(58);
+const LID_LOW = THREE.MathUtils.degToRad(44);
+/** Seconds a blink takes, shut and open again. */
+const BLINK = 0.18;
 
 // A black cat on a dark page: a violet rim keeps his outline. The camera is orthographic, so every
 // fragment looks straight down -Z.
@@ -108,7 +128,7 @@ export function makeCat(gltf: GLTF): Cat {
     a.setEffectiveWeight(0);
     act[clip.name] = a;
   }
-  for (const name of ["walk", "jump"]) if (act[name]) act[name].paused = true;
+  for (const name of ["walk", "jump", "tap"]) if (act[name]) act[name].paused = true;
 
   // Turns about model axes, taken from the bone's rest orientation.
   const tq = new THREE.Quaternion();
@@ -132,6 +152,8 @@ export function makeCat(gltf: GLTF): Cat {
 
   const look = { yaw: 0, pitch: 0, eyeYaw: 0, eyePitch: 0 };
   const twitch = { L: 0, R: 0, next: 2 };
+  // t runs 0..1 through a blink, and rests at 1 between them.
+  const blink = { t: 1, next: 2.5 };
   const local = new THREE.Vector3();
   const earAxis = new THREE.Vector3();
   const back = AX.x.clone().negate();
@@ -141,11 +163,15 @@ export function makeCat(gltf: GLTF): Cat {
     yaw,
     update(p, dt, time) {
       for (const r of Object.values(rig)) if (r.clip) r.bone.quaternion.copy(r.clip);
-      act.sit?.setEffectiveWeight(p.sit);
-      act.walk?.setEffectiveWeight((1 - p.sit) * (1 - p.air));
-      act.jump?.setEffectiveWeight(p.air);
+      // The tap clip takes over from the others while it runs, eased in and out at its ends.
+      const tap = p.tap > 0 && p.tap < 1 ? smooth(0, 0.1, p.tap) * (1 - smooth(0.9, 1, p.tap)) : 0;
+      act.sit?.setEffectiveWeight(p.sit * (1 - tap));
+      act.walk?.setEffectiveWeight((1 - p.sit) * (1 - p.air) * (1 - tap));
+      act.jump?.setEffectiveWeight(p.air * (1 - tap));
+      act.tap?.setEffectiveWeight(tap);
       if (act.walk) act.walk.time = (((p.stride % 1) + 1) % 1) * act.walk.getClip().duration;
       if (act.jump) act.jump.time = clamp(p.leap, 0, 1) * act.jump.getClip().duration;
+      if (act.tap) act.tap.time = clamp(p.tap, 0, 0.999) * act.tap.getClip().duration;
       mixer.update(dt);
 
       // Head and eyes follow the target; with none he looks around slowly.
@@ -190,7 +216,21 @@ export function makeCat(gltf: GLTF): Cat {
       for (const side of ["L", "R"] as const) {
         twitch[side] = Math.max(0, twitch[side] - dt * 4);
         const r = rig[`ear${side}`];
-        if (r) pose(`ear${side}`, [[earAxis.copy(r.dir).cross(back).normalize(), 0.35 * Math.sin(Math.PI * twitch[side])]]);
+        const angle = 0.35 * Math.sin(Math.PI * twitch[side]) + 0.95 * clamp(p.ears, 0, 1);
+        if (r) pose(`ear${side}`, [[earAxis.copy(r.dir).cross(back).normalize(), angle]]);
+      }
+
+      // A blink every few seconds, now and then two in a row.
+      blink.next -= dt;
+      if (blink.next <= 0) {
+        blink.t = 0;
+        blink.next = Math.random() < 0.2 ? 0.3 : 2.5 + Math.random() * 4;
+      }
+      blink.t = Math.min(1, blink.t + dt / BLINK);
+      const shut = Math.max(clamp(p.lids, 0, 1), Math.sin(Math.PI * blink.t));
+      for (const side of ["L", "R"]) {
+        pose(`lidUp${side}`, [[AX.z, -LID_UP * shut]]);
+        pose(`lidLow${side}`, [[AX.z, LID_LOW * shut]]);
       }
     },
     dispose() {

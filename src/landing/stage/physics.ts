@@ -6,7 +6,8 @@ import { TILT, type Room } from "./rooms";
 // Real gravity for the rooms, with Rapier (see docs/adr/0002). Each room is a world of its own, in
 // the metres of its content: the shelves and the wall hold, the props fall, tip, roll and get pushed,
 // the hanging lamp swings from its cord, the motto's letters give and spring back, and the cat is a
-// body that shoves whatever he walks into. A prop that leaves the shelves comes back to its place.
+// body that shoves whatever he walks into. On the letters he does not shove: his weight presses the
+// ones under his paws. A prop that leaves the shelves comes back to its place.
 
 type Rapier = typeof RAPIER;
 
@@ -33,9 +34,21 @@ export type RoomPhysics = {
   sweep(from: THREE.Vector3, to: THREE.Vector3, v: THREE.Vector3): void;
   /** Flicks a letter of the motto up. */
   flick(letter: HTMLElement): void;
+  /**
+   * Takes a prop out of the world, if it stands about where the room put it: from then on the stage
+   * moves it. Returns false if it was knocked away or is already out.
+   */
+  take(prop: THREE.Object3D): boolean;
+  /** Puts a taken prop back in its place, at rest. */
+  restore(prop: THREE.Object3D): void;
+  /** The top of the motto's first line, where the cat can walk, in the content's frame; null without one. */
+  ledge(): Ledge | null;
   step(dt: number): void;
   dispose(): void;
 };
+
+/** A row of letters to walk on: from `from` to `to`, their tops at `y`. */
+export type Ledge = { from: number; to: number; y: number };
 
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
@@ -45,6 +58,16 @@ const POP = 0.45;
 const STRAY = 2.5;
 /** The letters' spring: about 1.6 swings a second, and a damping that lets them wobble. */
 const SPRING = (2 * Math.PI * 1.6) ** 2;
+/** How far (m) the letters under the cat give to his weight; how far his paws reach each side of his feet. */
+export const SINK = 0.015;
+const PAWS = 0.12;
+/** Collision groups: the cat's box passes through the letters, everything else meets both. */
+const LETTER = 0x2;
+const CAT = 0x4;
+const groups = (member: number, apart: number) => ((member << 16) | (0xffff & ~apart)) >>> 0;
+/** How far from where the room put it a prop may stand and still be taken: metres, and radians. */
+const TAKE_SHIFT = 0.03;
+const TAKE_TURN = 0.2;
 /**
  * How close (m) the pointer must pass to the lamp's shade to drag it, how much of its speed it gives,
  * and the most it gives (m/s): a flick swings the lamp, it never spins it round its cord.
@@ -63,9 +86,12 @@ type Prop = {
   pop: number;
   /** Seconds it has lain off the shelves. */
   stray: number;
+  /** Out of the world, moved by the stage. */
+  taken: boolean;
 };
 
-type Letter = { el: HTMLElement; body: RAPIER.RigidBody; rest: THREE.Vector3; css: string };
+/** A letter of the motto: where it rests, how far its ink reaches each side and up. */
+type Letter = { el: HTMLElement; body: RAPIER.RigidBody; rest: THREE.Vector3; half: number; top: number; css: string };
 
 export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
   const world = new R.World({ x: 0, y: -9.81, z: 0 });
@@ -113,7 +139,14 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
   for (const { object, shapes } of room.props) {
     const body = dynamic(object, shapes);
     body.sleep();
-    props.set(object, { object, body, home: { p: object.position.clone(), q: object.quaternion.clone() }, pop: 1, stray: 0 });
+    props.set(object, {
+      object,
+      body,
+      home: { p: object.position.clone(), q: object.quaternion.clone() },
+      pop: 1,
+      stray: 0,
+      taken: false,
+    });
   }
 
   const home = (prop: Prop) => {
@@ -154,8 +187,12 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
 
   // The cat: a box round his body, moved by the stage, never by the world.
   const cat = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setEnabled(false));
-  world.createCollider(R.ColliderDesc.cuboid(0.14, 0.16, 0.09).setTranslation(0.04, 0.16, 0).setFriction(0.9), cat);
+  world.createCollider(
+    R.ColliderDesc.cuboid(0.14, 0.16, 0.09).setTranslation(0.04, 0.16, 0).setFriction(0.9).setCollisionGroups(groups(CAT, LETTER)),
+    cat,
+  );
   let catOn = false;
+  const feet = new THREE.Vector3();
   const turn = new THREE.Quaternion();
   const UP = new THREE.Vector3(0, 1, 0);
 
@@ -191,12 +228,14 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
           .setLinearDamping(3)
           .setAngularDamping(3),
       );
+      const half = r.width / 2 / kx;
+      const halfUp = (bottom - top) / 2 / ky;
       world.createCollider(
-        R.ColliderDesc.cuboid((r.width / 2 / kx) * 0.9, (bottom - top) / 2 / ky, 0.06).setDensity(300).setRestitution(0.2),
+        R.ColliderDesc.cuboid(half * 0.9, halfUp, 0.06).setDensity(300).setRestitution(0.2).setCollisionGroups(groups(LETTER, CAT)),
         body,
       );
       body.sleep();
-      letters.push({ el, body, rest, css: "" });
+      letters.push({ el, body, rest, half, top: rest.y + halfUp, css: "" });
     }
   };
 
@@ -212,6 +251,18 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       const v = body.linvel();
       body.setLinvel({ x: v.x - SPRING * dx * STEP, y: v.y - SPRING * dy * STEP, z: 0 }, true);
       body.setAngvel({ x: 0, y: 0, z: body.angvel().z - SPRING * angle * STEP }, true);
+    }
+  };
+
+  // His weight on the letters under his paws, as much as their springs take to give SINK. He may
+  // stand a little in front of them: what counts is where his feet show on the page.
+  const weigh = () => {
+    if (!catOn) return;
+    const shown = feet.y - feet.z * Math.tan(TILT);
+    for (const { body, rest, half, top } of letters) {
+      if (Math.abs(shown - (top - SINK)) > 0.03 || Math.abs(feet.x - rest.x) > half + PAWS) continue;
+      const v = body.linvel();
+      body.setLinvel({ x: v.x, y: v.y - SPRING * SINK * STEP, z: 0 }, true);
     }
   };
 
@@ -243,6 +294,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
   const sync = (dt: number) => {
     for (const prop of props.values()) {
       const { object, body } = prop;
+      if (prop.taken) continue;
       if (prop.pop < 1) {
         prop.pop = Math.min(1, prop.pop + dt / POP);
         object.scale.setScalar(Math.max(0.001, backOut(prop.pop)));
@@ -278,6 +330,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
         catOn = false;
         return;
       }
+      feet.copy(at);
       turn.setFromAxisAngle(UP, yaw);
       const q = { x: turn.x, y: turn.y, z: turn.z, w: turn.w };
       if (catOn) {
@@ -293,7 +346,8 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     },
     owner(mesh) {
       for (let o: THREE.Object3D | null = mesh; o && o !== room.content; o = o.parent) {
-        if (props.has(o) || (pendant?.on && o === pendant.object)) return o;
+        const prop = props.get(o);
+        if ((prop && !prop.taken) || (pendant?.on && o === pendant.object)) return o;
       }
       return null;
     },
@@ -324,11 +378,44 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       letter.body.setLinvel({ x: 0, y: 1.4, z: 0 }, true);
       letter.body.setAngvel({ x: 0, y: 0, z: (Math.random() - 0.5) * 12 }, true);
     },
+    take(object) {
+      const prop = props.get(object);
+      // Awake is fine: the paw that takes it down has just touched it.
+      if (!prop || prop.taken || prop.pop < 1) return false;
+      const p = prop.body.translation();
+      const q = prop.body.rotation();
+      if (prop.home.p.distanceTo(v.set(p.x, p.y, p.z)) > TAKE_SHIFT) return false;
+      if (prop.home.q.angleTo(turn.set(q.x, q.y, q.z, q.w)) > TAKE_TURN) return false;
+      prop.taken = true;
+      prop.body.setEnabled(false);
+      return true;
+    },
+    restore(object) {
+      const prop = props.get(object);
+      if (!prop?.taken) return;
+      prop.taken = false;
+      prop.body.setEnabled(true);
+      home(prop);
+      // It was carried back: it does not grow in.
+      prop.pop = 1;
+      object.scale.setScalar(1);
+    },
+    ledge() {
+      if (letters.length === 0) return null;
+      const top = Math.max(...letters.map((l) => l.top));
+      const line = letters.filter((l) => top - l.top < 0.05);
+      return {
+        from: Math.min(...line.map((l) => l.rest.x - l.half)),
+        to: Math.max(...line.map((l) => l.rest.x + l.half)),
+        y: top,
+      };
+    },
     step(dt) {
       acc = Math.min(acc + dt, STEP * MAX_STEPS);
       while (acc >= STEP) {
         if (pivot && pendant?.on) pivot.setNextKinematicTranslation({ x: lampX, y: pendant.top + pendant.lift, z: 0 });
         springLetters();
+        weigh();
         world.step();
         acc -= STEP;
       }

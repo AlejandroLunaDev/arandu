@@ -21,6 +21,17 @@ export type Solid = { object: THREE.Object3D; shapes: Shape[] };
  */
 export type Pendant = Solid & { top: number; lift: number; on: boolean };
 
+/** The free stretch of plank around the seat: the cat's feet may go from `from` to `to`, at height `y`. */
+export type Walk = { y: number; from: number; to: number };
+
+/** A book the cat may take down to read: its prop, where it stands, its size and the token of its cover. */
+export type Read = {
+  object: THREE.Object3D;
+  home: { p: THREE.Vector3; q: THREE.Quaternion };
+  size: THREE.Vector3;
+  cover: string;
+};
+
 export type Room = {
   anchor: HTMLElement;
   /** The scene the room belongs to: the cat moves to it while that scene scrolls in. */
@@ -37,6 +48,10 @@ export type Room = {
   letters: HTMLElement[];
   /** Where the cat sits, a point on a plank. */
   seat: THREE.Object3D;
+  /** Where he may walk around the seat. */
+  walk: Walk;
+  /** The books next to that stretch, which he may take down to read. */
+  reads: Read[];
   /** The bulb of the room's main lamp: the stage hangs a warm light there. */
   light: THREE.Object3D;
   /** The cat's turn about Y while he sits here. */
@@ -78,9 +93,10 @@ function put(parent: THREE.Object3D, o: THREE.Object3D, x: number, y: number, z 
   return o;
 }
 
-/** Stands books side by side from x, left to right; returns the x where the row ends. */
+/** Stands books side by side from x, left to right; returns them and the x where the row ends. */
 function standBooks(kit: Kit, parent: THREE.Object3D, x: number, y: number, books: Shelved[]) {
   let cx = x;
+  const row: Read[] = [];
   for (const [name, look, career, lean] of books) {
     const s = kit.size(name);
     const b = kit.book(name, look, career);
@@ -97,8 +113,42 @@ function standBooks(kit: Kit, parent: THREE.Object3D, x: number, y: number, book
       put(parent, b, cx + s.x / 2, y);
       cx += s.x + GAP;
     }
+    // Where it stands, kept apart from the prop that the physics will move.
+    row.push({ object: b, home: { p: b.position.clone(), q: b.quaternion.clone() }, size: s, cover: look.cover });
   }
-  return cx;
+  return { end: cx, books: row };
+}
+
+/** How far the cat's body reaches ahead of his feet, or behind them, with a little room to spare. */
+const BODY = 0.19;
+
+/**
+ * The free stretch of plank around the seat: from the prop on its left to the one on its right, or
+ * to the plank's ends, less the cat's length. The room is not placed yet, so world boxes are its own.
+ */
+function walkway(content: THREE.Object3D, seat: THREE.Object3D): Walk {
+  const { x, y } = seat.position;
+  let from = -Infinity;
+  let to = Infinity;
+  const box = new THREE.Box3();
+  for (const o of content.children) {
+    const name = o.userData.prop as PropName | undefined;
+    if (!name) continue;
+    box.setFromObject(o);
+    const plank = name.startsWith("Shelf");
+    // Only what stands on this plank, or the plank itself.
+    if (plank ? Math.abs(box.max.y - y) > 0.01 || box.min.x > x || box.max.x < x : box.min.y > y + 0.05 || box.max.y < y + 0.02) continue;
+    if (plank) {
+      from = Math.max(from, box.min.x);
+      to = Math.min(to, box.max.x);
+    } else if (box.max.x <= x) from = Math.max(from, box.max.x);
+    else if (box.min.x >= x) to = Math.min(to, box.min.x);
+  }
+  return {
+    y,
+    from: Number.isFinite(from) ? Math.min(from + BODY, x) : x,
+    to: Number.isFinite(to) ? Math.max(to - BODY, x) : x,
+  };
 }
 
 /**
@@ -145,6 +195,8 @@ function base(anchor: HTMLElement, face: number) {
     pendant: null,
     letters: [],
     seat: new THREE.Object3D(),
+    walk: { y: 0, from: 0, to: 0 },
+    reads: [],
     light: group,
     face,
     k: readK(anchor),
@@ -183,15 +235,15 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
 
   // Lower shelf: books, the cat, and a ball of yarn that lost a strand toward him.
   put(content, kit.make("ShelfLarge"), 0.8, 0);
-  const end = standBooks(kit, content, 0.1, 0, [
+  const left = standBooks(kit, content, 0.1, 0, [
     ["Book", LOOK.v6, "Psicologia"],
     ["BookTall", LOOK.a6, "Medicina"],
     ["BookSlim", LOOK.c3, "Letras"],
     ["BookThick", LOOK.v8, "Engenharia"],
     ["BookShort", LOOK.a4, "Filosofia", "lean"],
   ]);
-  const seat = seatAt(content, end + 0.25, 0);
-  standBooks(kit, content, end + 0.52, 0, [
+  const seat = seatAt(content, left.end + 0.25, 0);
+  const right = standBooks(kit, content, left.end + 0.52, 0, [
     ["BookPaperback", LOOK.a8, "Música"],
     ["Book", LOOK.v4, "Economia"],
   ]);
@@ -224,6 +276,9 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
   let lampY = SHADE_LOWEST;
 
   room.seat = seat;
+  room.walk = walkway(content, seat);
+  // The books on either side of his stretch.
+  room.reads = [left.books[left.books.length - 1], right.books[0]];
   room.pendant = pendant;
   room.letters = [...room.scene.querySelectorAll<HTMLElement>("[data-letter]")];
   room.layout = () => {
@@ -259,11 +314,11 @@ export function knowYouRoom(anchor: HTMLElement, kit: Kit): Room {
   // The middle shelf, its middle at (0.66, 0.9), and the top one at (0.66, 1.9).
   const X = 0.66;
   put(content, kit.make("ShelfMedium"), X, 0.9);
-  const end = standBooks(kit, content, X - 0.49, 0.9, [
+  const row = standBooks(kit, content, X - 0.49, 0.9, [
     ["BookThick", LOOK.a8, "Arquitetura"],
     ["BookSlim", LOOK.c3, "Nutrição"],
   ]);
-  const seat = seatAt(content, end + 0.27, 0.9);
+  const seat = seatAt(content, row.end + 0.27, 0.9);
   const lamp = put(content, kit.make("LampClassic"), X + 0.34, 0.9);
 
   put(content, kit.make("ShelfSmall"), X, 1.9);
@@ -272,6 +327,8 @@ export function knowYouRoom(anchor: HTMLElement, kit: Kit): Room {
   put(content, kit.make("Ball"), X + 0.19, 1.9, 0.04);
 
   room.seat = seat;
+  room.walk = walkway(content, seat);
+  room.reads = [row.books[row.books.length - 1]];
   room.light = lamp.getObjectByName("LampClassicLight") ?? lamp;
   collect(room, kit);
   return room;
