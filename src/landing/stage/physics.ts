@@ -170,13 +170,18 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     const ky = room.k * Math.cos(TILT);
     // Measured where the page set them: clear every letter's motion before reading any.
     for (const el of room.letters) el.style.transform = "";
+    // The page may still be bringing the motto in when the physics starts: read its places without
+    // that motion, where it comes to rest.
+    const line = room.letters[0].closest<HTMLElement>("[data-reveal]");
+    const moving = new DOMMatrixReadOnly(line ? getComputedStyle(line).transform : "none");
     for (const el of room.letters) {
       const r = el.getBoundingClientRect();
       if (r.width === 0) continue;
+      const left = r.left - moving.m41;
       // The ink of a letter: its box less the leading above and below.
-      const top = r.top + r.height * 0.24;
-      const bottom = r.bottom - r.height * 0.2;
-      const rest = new THREE.Vector3((r.left + r.width / 2 - a.left) / kx, (a.bottom - (top + bottom) / 2) / ky, 0);
+      const top = r.top - moving.m42 + r.height * 0.24;
+      const bottom = r.bottom - moving.m42 - r.height * 0.2;
+      const rest = new THREE.Vector3((left + r.width / 2 - a.left) / kx, (a.bottom - (top + bottom) / 2) / ky, 0);
       const body = world.createRigidBody(
         R.RigidBodyDesc.dynamic()
           .setTranslation(rest.x, rest.y, 0)
