@@ -1,6 +1,6 @@
 /*
- * The copy: the title across the top, then the phone and the pitch side by side. Without room for
- * the phone beside the pitch, the phone goes and the pitch sits under the title.
+ * The copy: the title across the top, then the phone and the brand with the pitch side by side.
+ * Without room for the phone beside the pitch, the phone goes and the pitch sits under the title.
  */
 .intro {
   display: grid;
@@ -14,9 +14,18 @@
 
 .head {
   grid-area: head;
+}
+
+/* The brand: the app icon beside the wordmark, Reka in the primary color as in the logo. */
+.brand {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--space-3);
+}
+
+/* The logo's wordmark is Outfit ExtraBold: a weight of the logo, not of the type scale. */
+.wordmark {
+  font-weight: 800;
 }
 
 .app {
@@ -85,7 +94,9 @@
     gap: var(--space-4);
   }
 
-  .app {
+  /* The brand stays in the nav: here it would only push the pitch down. */
+  .app,
+  .brand {
     display: none;
   }
 

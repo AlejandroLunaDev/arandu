@@ -4,8 +4,9 @@ import { GITHUB_URL } from "../links";
 import { Scene } from "../scene/scene";
 import styles from "./hero.module.css";
 
-// The hero: the title, and under it the app's path on a phone beside the pitch. On the right, the
-// room where Arandu waits: the stage draws it in 3D, the page only keeps its place in the layout.
+// The hero: the title, and under it Arandu talking with a student on a phone beside the brand and
+// the pitch. On the right, the room where Arandu waits: the stage draws it in 3D, the page only
+// keeps its place in the layout.
 export function Hero() {
   return (
     <Scene
@@ -13,18 +14,19 @@ export function Hero() {
       labelledBy="hero-title"
       copy={
         <div className={styles.intro}>
-          <div className={styles.head}>
-            <p data-reveal className="type-caption uppercase text-text-muted">
-              Arandu Reka
-            </p>
-            <h1 id="hero-title" data-reveal className="type-display text-balance">
-              A busca da sabedoria começa por você.
-            </h1>
-          </div>
+          <h1 id="hero-title" data-reveal className={`${styles.head} type-display text-balance`}>
+            A busca da sabedoria começa por você.
+          </h1>
           <div data-reveal className={styles.app}>
-            <AppScreen src="/screens/B1-Mapa.html" title="Tela do app: o caminho de uma carreira, estante por estante" />
+            <AppScreen src="/screens/G1-Arandu-fala.html" title="Tela do app: o Arandu conversa com o aluno" />
           </div>
           <div className={styles.pitch}>
+            <p data-reveal className={styles.brand}>
+              <Image src="/img/head.svg" alt="" width={44} height={44} />
+              <span className={`${styles.wordmark} type-display`}>
+                Arandu <span className="text-primary">Reka</span>
+              </span>
+            </p>
             <p data-reveal className="type-body-lg text-pretty text-text-muted">
               Um app de orientação vocacional com inteligência artificial, onde o aluno do ensino médio vive
               uma carreira antes de escolher.
