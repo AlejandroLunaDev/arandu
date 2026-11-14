@@ -4,14 +4,16 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { makeCat } from "./cat";
 import { tokenColor } from "./palette";
+import { loadRapier, roomPhysics, type RoomPhysics } from "./physics";
 import { makeKit, type Kit } from "./props";
 import { heroRoom, knowYouRoom, TILT, type Room } from "./rooms";
 
 // The landing's 3D layer: one fixed canvas over the page that never takes clicks. Each scene with a
 // [data-room] anchor gets its room of shelves, and Arandu follows the scroll from room to room. While
 // a scene is pinned he sits and watches the pointer; while the next scene comes in he walks or leaps
-// to its seat. If WebGL or the models fail, <html> gets the "no3d" class and the page shows its
-// drawn cats instead.
+// to its seat. The props have real gravity once the physics is in (see physics.ts): a tap knocks
+// them, the pointer swings the hanging lamp, the cat shoves them. If WebGL or the models fail, <html>
+// gets the "no3d" class and the page shows its drawn cats instead.
 
 const BUILD: Record<string, (anchor: HTMLElement, kit: Kit) => Room> = {
   hero: heroRoom,
@@ -118,6 +120,15 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   });
   if (rooms.length === 0) throw new Error("The page has no [data-room] anchor");
 
+  // The physics comes in after the first frames: until then the props stand where the rooms put them.
+  let worlds: RoomPhysics[] = [];
+  let live = true;
+  loadRapier()
+    .then((R) => {
+      if (live) worlds = rooms.map((r) => roomPhysics(R, r));
+    })
+    .catch((error: unknown) => console.error("The physics could not start: the props stay put", error));
+
   // One warm light per room, hung at its main lamp's bulb. The count never changes, so the shaders
   // compile once.
   const lights = rooms.map(() => {
@@ -153,6 +164,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     Object.assign(camera, { left: -W / 2, right: W / 2, top: H / 2, bottom: -H / 2 });
     camera.updateProjectionMatrix();
     rooms.forEach((r) => r.layout());
+    worlds.forEach((w) => w.layout());
     ranges = rooms.map((r) => {
       const top = r.scene.getBoundingClientRect().top + scrollY;
       return [top - H * 0.85, top];
@@ -193,6 +205,42 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   };
   addEventListener("pointermove", onPointer, { passive: true });
 
+  // What the pointer is over: a prop or a lamp of some room, found by a ray from the camera.
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const pick = (sx: number, sy: number) => {
+    if (worlds.length === 0) return null;
+    ndc.set((sx / W) * 2 - 1, 1 - (sy / H) * 2);
+    raycaster.setFromCamera(ndc, camera);
+    for (const hit of raycaster.intersectObjects(rooms.map((r) => r.content), true)) {
+      for (let i = 0; i < rooms.length; i++) {
+        const prop = worlds[i].owner(hit.object);
+        if (prop) return { i, prop, point: hit.point };
+      }
+    }
+    return null;
+  };
+
+  // A tap knocks a prop away from where it lands, a little up: on its left side it sends it right.
+  // A tap on a letter of the motto flicks it.
+  const at = new THREE.Vector3();
+  const push = new THREE.Vector3();
+  const onDown = (e: PointerEvent) => {
+    const target = e.target instanceof Element ? e.target : null;
+    const letter = target?.closest<HTMLElement>("[data-letter]");
+    if (letter) {
+      worlds.forEach((w) => w.flick(letter));
+      return;
+    }
+    if (target?.closest("a, button, input, textarea, select, label, iframe")) return;
+    const hit = pick(e.clientX, e.clientY);
+    if (!hit) return;
+    const local = rooms[hit.i].content.worldToLocal(at.copy(hit.point));
+    push.set(local.x < hit.prop.position.x ? 1.3 : -1.3, 0.9, -0.2);
+    worlds[hit.i].poke(hit.prop, local, push);
+  };
+  addEventListener("pointerdown", onDown);
+
   // The first room makes its entrance once the models are in: the shelves rise, the lamp drops.
   const intro = { rise: reduce ? 1 : 0, drop: reduce ? 1 : 0 };
   const tweens = reduce
@@ -208,6 +256,22 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   let yawNow = rooms[0].face;
   let stride = 0;
   let prevX: number | null = null;
+  const sweepFrom = new THREE.Vector3();
+  const sweepTo = new THREE.Vector3();
+  const sweepV = new THREE.Vector3();
+  // Where a point of the screen falls on a room's wall plane (z = 0 in its frame): the camera looks
+  // straight down -Z, the room leans back.
+  const ray = new THREE.Ray();
+  const wall = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const inverse = new THREE.Matrix4();
+  const toRoom = (r: Room, sx: number, sy: number, out: THREE.Vector3) => {
+    inverse.copy(r.content.matrixWorld).invert();
+    ray.origin.set(sx - W / 2, H / 2 - sy, 1000).applyMatrix4(inverse);
+    ray.direction.set(0, 0, -1).transformDirection(inverse);
+    return ray.intersectPlane(wall, out);
+  };
+  const catAt = new THREE.Vector3();
+  let seen = { x: -1, y: -1 };
   let last = performance.now();
   let raf = 0;
 
@@ -259,6 +323,28 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (watching) look.set(pointer.x - W / 2, H / 2 - pointer.y, 700);
     cat.update({ sit, leap: f, air, stride, look: watching ? look : null }, dt, t);
 
+    // His body shoves the props of the room he is in, while his feet are on its planks.
+    const home = f < 0.5 ? i0 : iB;
+    worlds.forEach((w, i) => {
+      if (i !== home || air > 0.2) w.cat(null, 0);
+      else w.cat(rooms[i].content.worldToLocal(catAt.set(x, y + hop, z)), yawNow);
+    });
+
+    // The pointer drags the hanging lamp as it passes, and shows a hand over what a tap would knock.
+    if (pointer.on && (pointer.x !== seen.x || pointer.y !== seen.y)) {
+      const moved = seen.x >= 0;
+      if (moved && dt > 0) {
+        rooms.forEach((r, i) => {
+          if (!toRoom(r, seen.x, seen.y, sweepFrom) || !toRoom(r, pointer.x, pointer.y, sweepTo)) return;
+          sweepV.set((pointer.x - seen.x) / dt / r.k, -(pointer.y - seen.y) / dt / (r.k * Math.cos(TILT)), 0);
+          worlds[i]?.sweep(sweepFrom, sweepTo, sweepV);
+        });
+      }
+      seen = { x: pointer.x, y: pointer.y };
+      document.body.style.cursor = pick(pointer.x, pointer.y) ? "pointer" : "";
+    }
+    worlds.forEach((w) => w.step(dt));
+
     const lift = 1 - Math.min(0.7, hop / (k * 1.2));
     catShadow.position.set(x, y + 0.004 * k, z);
     catShadow.rotation.x = TILT;
@@ -270,6 +356,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   raf = requestAnimationFrame(frame);
 
   return () => {
+    live = false;
+    worlds.forEach((w) => w.dispose());
+    document.body.style.cursor = "";
+    removeEventListener("pointerdown", onDown);
     cancelAnimationFrame(raf);
     tweens.forEach((tween) => tween.kill());
     removeEventListener("resize", relayout);

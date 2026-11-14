@@ -23,12 +23,56 @@ export type PropName =
 /** A book's dress: the token names of its cover and of its print (title and bands). */
 export type BookLook = { cover: string; band: string };
 
+type V3 = [number, number, number];
+
+/**
+ * A collider in its prop's frame, in metres: a box by its half sizes, a ball, or an upright
+ * cylinder, centred on `at`, made of a material `density` kilograms a cubic metre.
+ */
+export type Shape = { at: V3; density: number } & (
+  | { kind: "box"; half: V3 }
+  | { kind: "ball"; r: number }
+  | { kind: "cylinder"; r: number; half: number }
+);
+
+/** Every shelf is this deep and hangs with its back on the wall: the wall is this far behind its middle. */
+export const WALL = 0.17;
+
+const PLANK = 0.05;
+const SHELF_LENGTH: Partial<Record<PropName, number>> = { ShelfLarge: 1.6, ShelfMedium: 1.0, ShelfSmall: 0.55 };
+
+const cylinder = (r: number, y0: number, y1: number, density: number): Shape => ({
+  kind: "cylinder",
+  r,
+  half: (y1 - y0) / 2,
+  at: [0, (y0 + y1) / 2, 0],
+  density,
+});
+
+// The colliders of the props that are not books or shelves, measured from blender/props/build.py.
+// They follow each mesh closely enough to stand, tip and roll like it; the heavy parts are the bases.
+const SHAPES: Partial<Record<PropName, Shape[]>> = {
+  LampMushroom: [cylinder(0.088, 0, 0.026, 2400), cylinder(0.016, 0.026, 0.19, 900), cylinder(0.14, 0.19, 0.3, 120)],
+  LampClassic: [cylinder(0.084, 0, 0.19, 1300), cylinder(0.008, 0.19, 0.25, 900), cylinder(0.15, 0.25, 0.41, 80)],
+  LampDesk: [
+    cylinder(0.08, 0, 0.028, 2400),
+    { kind: "box", half: [0.07, 0.13, 0.012], at: [0.02, 0.16, 0], density: 400 },
+    { kind: "ball", r: 0.05, at: [0.1, 0.25, 0], density: 300 },
+  ],
+  LampPendant: [cylinder(0.19, -0.18, 0, 300)],
+  PlantPot: [cylinder(0.097, 0, 0.155, 1100)],
+  YarnBall: [{ kind: "ball", r: 0.1, at: [0, 0.1, 0], density: 120 }],
+  Ball: [{ kind: "ball", r: 0.045, at: [0, 0.045, 0], density: 250 }],
+};
+
 export type Kit = {
   make(name: PropName): THREE.Object3D;
   /** A book with a degree course for title, written down its spine and across its covers. */
   book(name: BookName, look: BookLook, career: string): THREE.Object3D;
   /** Width (x), height (y) and depth (z) of a prop, in metres. */
   size(name: PropName): THREE.Vector3;
+  /** The colliders of a prop. A shelf's is its plank alone. */
+  shapes(name: PropName): Shape[];
   tick(time: number): void;
   dispose(): void;
 };
@@ -100,10 +144,21 @@ export function makeKit(gltf: GLTF): Kit {
     return s;
   };
 
+  // Each copy keeps the name of its prop, so the rooms can give it its colliders.
   const make = (name: PropName) => {
     const o = proto(name).clone();
     o.position.set(0, 0, 0);
+    o.userData.prop = name;
     return o;
+  };
+
+  const shapes = (name: PropName): Shape[] => {
+    const length = SHELF_LENGTH[name];
+    if (length) return [{ kind: "box", half: [length / 2, PLANK / 2, WALL], at: [0, -PLANK / 2, 0], density: 0 }];
+    const listed = SHAPES[name];
+    if (listed) return listed;
+    const s = size(name);
+    return [{ kind: "box", half: [s.x / 2, s.y / 2, s.z / 2], at: [0, s.y / 2, 0], density: 550 }];
   };
 
   // A book's print, drawn on a canvas as tall as TEXTURE_HEIGHT and as wide as the face's proportions
@@ -182,6 +237,7 @@ export function makeKit(gltf: GLTF): Kit {
     make,
     book,
     size,
+    shapes,
     tick(t) {
       time.value = t;
     },
