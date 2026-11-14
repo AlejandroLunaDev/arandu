@@ -16,16 +16,24 @@
   grid-area: head;
 }
 
-/* The brand: the app icon beside the wordmark, Reka in the primary color as in the logo. */
+/*
+ * The logo's wordmark: Arandu over Reka, the same size, Reka a little to the right and in the
+ * primary color. Its size and its ExtraBold weight draw the logo, so they are not steps of the type
+ * scale.
+ */
 .brand {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  align-items: flex-start;
+  font-family: var(--font-display);
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 
-/* The logo's wordmark is Outfit ExtraBold: a weight of the logo, not of the type scale. */
-.wordmark {
-  font-weight: 800;
+.reka {
+  margin-left: 0.25em;
 }
 
 .app {
@@ -78,6 +86,10 @@
 @media (width < 1280px) {
   .app {
     --phone-width: 200px;
+  }
+
+  .brand {
+    font-size: 52px;
   }
 
   .room {

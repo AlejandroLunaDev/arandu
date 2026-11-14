@@ -4,9 +4,9 @@ import { GITHUB_URL } from "../links";
 import { Scene } from "../scene/scene";
 import styles from "./hero.module.css";
 
-// The hero: the title, and under it Arandu talking with a student on a phone beside the brand and
-// the pitch. On the right, the room where Arandu waits: the stage draws it in 3D, the page only
-// keeps its place in the layout.
+// The hero: the title, and under it a course's page in the app on a phone beside the brand and the
+// pitch. On the right, the room where Arandu waits: the stage draws it in 3D, the page only keeps
+// its place in the layout.
 export function Hero() {
   return (
     <Scene
@@ -18,14 +18,15 @@ export function Hero() {
             A busca da sabedoria começa por você.
           </h1>
           <div data-reveal className={styles.app}>
-            <AppScreen src="/screens/G1-Arandu-fala.html" title="Tela do app: o Arandu conversa com o aluno" />
+            <AppScreen
+              src="/screens/U2-Ficha-curso.html"
+              title="Tela do app: a ficha de um curso, com a nota de corte e a fonte"
+            />
           </div>
           <div className={styles.pitch}>
             <p data-reveal className={styles.brand}>
-              <Image src="/img/head.svg" alt="" width={44} height={44} />
-              <span className={`${styles.wordmark} type-display`}>
-                Arandu <span className="text-primary">Reka</span>
-              </span>
+              <span>Arandu</span>{" "}
+              <span className={`${styles.reka} text-primary`}>Reka</span>
             </p>
             <p data-reveal className="type-body-lg text-pretty text-text-muted">
               Um app de orientação vocacional com inteligência artificial, onde o aluno do ensino médio vive
