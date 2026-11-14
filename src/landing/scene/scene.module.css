@@ -49,6 +49,18 @@
   justify-self: end;
 }
 
+/* The foot runs across the scene's bottom, under the copy and the art, centred. */
+.pin:has(> .foot) {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.foot {
+  grid-column: 1 / -1;
+  justify-self: center;
+  padding-bottom: var(--space-8);
+  text-align: center;
+}
+
 /* The hero lays out its own copy, and its room keeps its own width. */
 .hero .copy {
   max-width: none;
@@ -86,5 +98,13 @@
 
   .flip .copy {
     justify-self: start;
+  }
+
+  .pin:has(> .foot) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .foot {
+    padding-bottom: 0;
   }
 }

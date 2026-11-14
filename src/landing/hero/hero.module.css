@@ -1,48 +1,39 @@
 /*
- * The copy: the title across the top, then the phone and the brand with the pitch side by side.
- * Without room for the phone beside the pitch, the phone goes and the pitch sits under the title.
+ * The copy: the phone, and beside it the brand over the pitch, centred on the phone. The motto runs
+ * across the scene's foot (see Hero). Without room for the phone, the phone goes.
  */
 .intro {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas:
-    "head head"
-    "app pitch";
   align-items: center;
   gap: var(--space-8);
 }
 
-.head {
-  grid-area: head;
-}
-
 /*
  * The logo's wordmark: Arandu over Reka, the same size, Reka a little to the right and in the
- * primary color. Its size and its ExtraBold weight draw the logo, so they are not steps of the type
- * scale.
+ * primary color, the two lines close. Its size, weight, tracking and leading are measured from the
+ * logo, so they are not steps of the type scale.
  */
 .brand {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  font-family: var(--font-display);
-  font-size: 64px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
+  font-family: var(--font-body);
+  font-size: 88px;
+  font-weight: 700;
+  line-height: 0.76;
+  letter-spacing: 0.02em;
 }
 
 .reka {
-  margin-left: 0.25em;
+  margin-left: 0.18em;
 }
 
 .app {
-  grid-area: app;
   --phone-width: 240px;
 }
 
 .pitch {
-  grid-area: pitch;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -89,7 +80,7 @@
   }
 
   .brand {
-    font-size: 52px;
+    font-size: 72px;
   }
 
   .room {
@@ -100,16 +91,14 @@
 @media (width < 1024px) {
   .intro {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "head"
-      "pitch";
-    gap: var(--space-4);
   }
 
-  /* The brand stays in the nav: here it would only push the pitch down. */
-  .app,
-  .brand {
+  .app {
     display: none;
+  }
+
+  .brand {
+    font-size: 56px;
   }
 
   .room {
@@ -118,6 +107,10 @@
 }
 
 @media (width < 768px) {
+  .brand {
+    font-size: 40px;
+  }
+
   .room {
     --room-k: 185;
     --room-pendant: 0;
