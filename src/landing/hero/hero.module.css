@@ -41,6 +41,16 @@
   max-width: 26rem;
 }
 
+/* The motto's words never break; each letter moves on its own (see stage/physics.ts). */
+.word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.letter {
+  display: inline-block;
+}
+
 /*
  * The room's footprint. --room-k is how many pixels the stage draws a metre with: the 3D room is
  * 1.8 m by 1.8 m, its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom).

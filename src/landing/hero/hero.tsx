@@ -1,12 +1,16 @@
 import Image from "next/image";
+import { Fragment } from "react";
 import { AppScreen } from "../app-screen/app-screen";
 import { GITHUB_URL } from "../links";
 import { Scene } from "../scene/scene";
 import styles from "./hero.module.css";
 
+const MOTTO = "A busca da sabedoria começa por você.";
+
 // The hero: a course's page in the app on a phone, beside the brand and the pitch, and the motto
 // across the bottom. On the right, the room where Arandu waits: the stage draws it in 3D, the page
-// only keeps its place in the layout.
+// only keeps its place in the layout. The motto's letters are the stage's too: each one is a body
+// that gives under a tap or the cat's paws, so screen readers get the sentence whole instead.
 export function Hero() {
   return (
     <Scene
@@ -51,7 +55,21 @@ export function Hero() {
       }
       foot={
         <p data-reveal className="type-display text-balance">
-          A busca da sabedoria começa por você.
+          <span className="sr-only">{MOTTO}</span>
+          <span aria-hidden="true">
+            {MOTTO.split(" ").map((word, w) => (
+              <Fragment key={w}>
+                {w > 0 && " "}
+                <span className={styles.word}>
+                  {[...word].map((letter, i) => (
+                    <span key={i} data-letter className={styles.letter}>
+                      {letter}
+                    </span>
+                  ))}
+                </span>
+              </Fragment>
+            ))}
+          </span>
         </p>
       }
     />
