@@ -1,0 +1,14 @@
+{
+  "name": "@arandu/db-types",
+  "private": true,
+  "type": "module",
+  "types": "./src/database.ts",
+  "exports": {
+    ".": {
+      "types": "./src/database.ts"
+    }
+  },
+  "scripts": {
+    "gen": "supabase gen types typescript --local --schema public > src/database.ts"
+  }
+}

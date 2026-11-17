@@ -10,8 +10,8 @@ Builds what ADR-0003 and ADR-0004 decide. Each step ends in a reviewable pull re
 
 ## Steps
 
-1. **Monorepo skeleton.** Turborepo, `apps/web` (the landing moved, coordinated with the web squad), empty `apps/api`, `apps/engine`, `packages/contracts`, `packages/db-types`.
-2. **Schema.** A local Supabase plus migrations: institutions, campuses, courses, professions, admission cut-offs, curriculum terms and subjects, sources, runs, fetched documents, staging tables.
+1. **Monorepo skeleton** (done). Turborepo, `apps/web` (the landing moved, coordinated with the web squad), empty `apps/api`, `apps/engine`, `packages/contracts`, `packages/db-types`.
+2. **Schema** (done). A local Supabase plus migrations: institutions, campuses, courses, professions, admission cut-offs, curriculum terms and subjects, sources, runs, fetched documents, staging tables.
 3. **Engine, one adapter at a time**, each with fixture tests:
    1. INEP census: offerings and professions.
    2. Power BI: SISU and ProUni cut-offs.
