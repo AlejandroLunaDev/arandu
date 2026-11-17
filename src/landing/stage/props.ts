@@ -18,7 +18,8 @@ export type PropName =
   | "LampPendant"
   | "PlantPot"
   | "YarnBall"
-  | "Ball";
+  | "Ball"
+  | "BookOpen";
 
 /** A book's dress: the token names of its cover and of its print (title and bands). */
 export type BookLook = { cover: string; band: string };
@@ -29,7 +30,8 @@ type V3 = [number, number, number];
  * A collider in its prop's frame, in metres: a box by its half sizes, a ball, or an upright
  * cylinder, centred on `at`, made of a material `density` kilograms a cubic metre.
  */
-export type Shape = { at: V3; density: number } & (
+/** `bounce` is the share of its speed it keeps off whatever it hits; most props barely bounce. */
+export type Shape = { at: V3; density: number; bounce?: number } & (
   | { kind: "box"; half: V3 }
   | { kind: "ball"; r: number }
   | { kind: "cylinder"; r: number; half: number }
@@ -61,7 +63,7 @@ const SHAPES: Partial<Record<PropName, Shape[]>> = {
   ],
   LampPendant: [cylinder(0.19, -0.18, 0, 300)],
   PlantPot: [cylinder(0.097, 0, 0.155, 1100)],
-  YarnBall: [{ kind: "ball", r: 0.1, at: [0, 0.1, 0], density: 120 }],
+  YarnBall: [{ kind: "ball", r: 0.1, at: [0, 0.1, 0], density: 120, bounce: 0.55 }],
   Ball: [{ kind: "ball", r: 0.045, at: [0, 0.045, 0], density: 250 }],
 };
 
@@ -69,6 +71,8 @@ export type Kit = {
   make(name: PropName): THREE.Object3D;
   /** A book with a degree course for title, written down its spine and across its covers. */
   book(name: BookName, look: BookLook, career: string): THREE.Object3D;
+  /** A book that opens (BookOpen), in the cover and spine of a dressed book. */
+  open(book: THREE.Object3D): THREE.Object3D;
   /** Width (x), height (y) and depth (z) of a prop, in metres. */
   size(name: PropName): THREE.Vector3;
   /** The colliders of a prop. A shelf's is its plank alone. */
@@ -219,6 +223,9 @@ export function makeKit(gltf: GLTF): Kit {
       g.translate(w / 2, h * 0.3);
       write(g, career, w * 0.17, w * 0.76);
     });
+    // Named as the blanks' materials, so an open copy of the book can wear them too.
+    spine.name = "BookSpine";
+    covers.name = "BookCover";
     return { spine, covers };
   };
 
@@ -233,9 +240,22 @@ export function makeKit(gltf: GLTF): Kit {
     return o;
   };
 
+  const open = (dressed: THREE.Object3D) => {
+    const worn = new Map<string, THREE.Material>();
+    dressed.traverse((m) => {
+      if (m instanceof THREE.Mesh) worn.set(m.material.name, m.material);
+    });
+    const o = make("BookOpen");
+    o.traverse((m) => {
+      if (m instanceof THREE.Mesh) m.material = worn.get(m.material.name) ?? m.material;
+    });
+    return o;
+  };
+
   return {
     make,
     book,
+    open,
     size,
     shapes,
     tick(t) {

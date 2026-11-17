@@ -27,5 +27,10 @@ export function Stage() {
     };
   }, []);
 
-  return <div ref={host} className={styles.stage} aria-hidden="true" />;
+  // The cat's speech bubble: run-stage fills it, opens it and keeps it over his head.
+  return (
+    <div ref={host} className={styles.stage} aria-hidden="true">
+      <p data-say className={`${styles.say} type-small`} />
+    </div>
+  );
 }

@@ -1,20 +1,20 @@
 import * as THREE from "three";
-import { TAP_HITS } from "./cat";
-import { makeOpenBook, type OpenBook } from "./open-book";
+import { PAWS, TAP_HITS } from "./cat";
 import { SINK, type Ledge, type RoomPhysics } from "./physics";
-import { WALL } from "./props";
 import { TILT, type Read, type Room } from "./rooms";
 
 // Arandu's own life, while a scene stays put. After a few quiet seconds he does something: he turns
 // round where he sits, walks his stretch of plank, jumps down to walk the motto's letters (they give
 // under his paws), or takes a book down and reads it. Anything on the page stops him: a walk stops
 // where it is, a jump or a tap ends first, a book goes back to its shelf. A tap on him startles him.
+// Throw his ball of yarn and he drops whatever he does: he watches it land, goes after it, bats it
+// about, picks it up in his mouth and carries it back to its place.
 // Each doing is a generator that runs one step a frame. Everything here is in the room's content
 // frame, in metres.
 
 /** Seconds of quiet before he does something of his own; seconds between two of his doings. */
-const IDLE = 6;
-const REST: [number, number] = [3, 7];
+const IDLE = 8;
+const REST: [number, number] = [10, 20];
 /** Walking speed (m/s), the length of a walk cycle (m), how fast he turns (rad/s). */
 const SPEED = 0.3;
 const STRIDE = 0.35;
@@ -29,14 +29,23 @@ const ACROSS = 0.8;
 // FRONT toward the camera, his jump bowing OUT past the plank's edge so he goes round it.
 const FRONT = 0.1;
 const OUT = 0.25;
-/** The open book leans this much toward the camera, its near edge on his paws. */
-const LECTERN = 0.5;
 /** He reads this far out from the shelf's middle, toward the wall. */
 const READ_Z = -0.05;
-/** Seconds he reads, at most; seconds a line takes; lines on each page before the other. */
+/** Seconds he reads, at most; seconds a line takes; lines down the page before he starts it again. */
 const READ: [number, number] = [18, 28];
+/** Seconds he sleeps. */
+const SLEEP: [number, number] = [40, 80];
 const LINE = 1.3;
 const LINES = 5;
+
+/** How small his toy shows while he carries it. */
+export const CARRY = 0.5;
+
+/** How far ahead (m) he looks for something in his way; the highest (m) he leaps up. */
+const AHEAD = 0.12;
+const LEAP_UP = 1.5;
+/** How far (m) from the screen's sides he keeps his feet. */
+const ROOM = 0.25;
 
 const FACE_CAMERA = -Math.PI / 2;
 const RIGHT = 0;
@@ -55,6 +64,10 @@ export type LifePose = {
   tap: number;
   lids: number;
   ears: number;
+  /** How far he has a book up in his paws, 0..1. */
+  hold: number;
+  /** How far he lies down, 0..1. */
+  lie: number;
   /** What he looks at, or null to leave his eyes to the stage. */
   look: THREE.Vector3 | null;
 };
@@ -63,6 +76,10 @@ export type Life = {
   readonly pose: LifePose;
   /** The room he lives in, or -1 while the scroll carries him. */
   readonly room: number;
+  /** What he carries in his mouth: the stage keeps it there. */
+  readonly carried: THREE.Object3D | null;
+  /** The open book in his paws: the stage keeps it there. */
+  readonly held: THREE.Object3D | null;
   /** In the middle of a jump or a tap: the scroll waits for him. */
   busy(): boolean;
   /** He has settled in room i, at `at`, turned by yaw. */
@@ -73,23 +90,16 @@ export type Life = {
   stir(): void;
   /** A tap on him. */
   poke(): void;
+  /** His toy was thrown, in room i: he goes to fetch it. */
+  fetch(room: number, toy: THREE.Object3D): void;
   /** One frame: idle is how long the page has been quiet, in seconds. */
   update(dt: number, idle: number): void;
   dispose(): void;
 };
 
 type Doing = Generator<void, void, unknown>;
-
-/** A book he took down: the open copy he reads, and the prop that flies between it and the shelf. */
-type Reading = {
-  read: Read;
-  room: Room;
-  world: RoomPhysics;
-  book: OpenBook;
-  x: number;
-  flight: Doing | null;
-  shown: boolean;
-};
+/** A move that may find its goal out of his reach: false then. */
+type Going = Generator<void, boolean, unknown>;
 
 /** Where he jumps down to the letters: from `top` on the plank to `land`, and how far along they go. */
 type Drop = { top: number; land: number; lo: number; hi: number; y: number };
@@ -101,13 +111,22 @@ const smooth = (a: number, b: number, v: number) => {
   return t * t * (3 - 2 * t);
 };
 
-// The closed book on its back, its spine along Z: its thickness turns up, its height runs along
-// the spine, its depth across.
-const LYING = new THREE.Quaternion().setFromRotationMatrix(
-  new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)),
-);
-const TILTED = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), LECTERN);
-const ONE = new THREE.Vector3(1, 1, 1);
+/** How small the open book shows in his paws, and its height at full size (blender/props/build.py OPEN). */
+export const HELD_SCALE = 0.7;
+export const OPEN_HEIGHT = 0.4;
+/** How far (rad) each half of the book stands off lying flat open: shut, and as he reads it. */
+export const SHUT = Math.PI / 2;
+const READING = 0.31;
+
+/** Opens BookOpen: each half and the leaf on the right turn about the spine, `a` off lying flat. */
+export const openTo = (book: THREE.Object3D, a: number) => {
+  const right = book.getObjectByName("BookOpenRight");
+  const leftHalf = book.getObjectByName("BookOpenLeft");
+  const leaf = book.getObjectByName("BookOpenLeaf");
+  if (right) right.rotation.y = -a;
+  if (leftHalf) leftHalf.rotation.y = a;
+  if (leaf) leaf.rotation.y = -a;
+};
 
 export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | null, still: boolean): Life {
   const pose: LifePose = {
@@ -121,6 +140,8 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     tap: 0,
     lids: 0,
     ears: 0,
+    hold: 0,
+    lie: 0,
     look: null,
   };
   let room = -1;
@@ -136,8 +157,13 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
   let sitTo = 1;
   let lidsTo = 0;
   let earsTo = 0;
+  let holdTo = 0;
+  let lieTo = 0;
+  /** The room whose props wait while he fetches. */
+  let fetching: RoomPhysics | null = null;
+  let carried: THREE.Object3D | null = null;
+  let held: THREE.Object3D | null = null;
   const tasks: Doing[] = [];
-  const readings = new Set<Reading>();
   const gaze = new THREE.Vector3();
 
   const run = (task: Doing) => {
@@ -155,6 +181,8 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     sitTo = 1;
     lidsTo = 0;
     earsTo = 0;
+    holdTo = 0;
+    lieTo = 0;
     // A turn cut short leaves him anywhere round the circle: take the same heading near the front.
     const yaw = Math.atan2(Math.sin(pose.yaw), Math.cos(pose.yaw));
     Object.assign(pose, { yaw: yaw > Math.PI / 2 ? yaw - 2 * Math.PI : yaw, tap: 0, air: 0, lift: 0, leap: 0, look: null });
@@ -190,7 +218,33 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     while (pose.sit < 0.9) yield;
   }
 
+  /** A walk to x (and z), jumping whatever stands in the way: he never shoves things walking. */
   function* walkTo(x: number, z = pose.pos.z): Doing {
+    const w = room >= 0 ? world(room) : null;
+    // One way only: he never turns back halfway.
+    const dir = x >= pose.pos.x ? 1 : -1;
+    const plank = room >= 0 ? plankAt(rooms[room], pose.pos.y) : null;
+    for (let hops = 0; w && hops < 4; hops++) {
+      const b = w.blocker(pose.pos.x + dir * 0.05, x + dir * AHEAD, pose.pos.y);
+      if (!b) break;
+      const near = dir > 0 ? b.min : b.max;
+      const far = dir > 0 ? b.max : b.min;
+      const short = near - dir * (AHEAD + 0.08);
+      const land = far + dir * 0.22;
+      // Where he is going stands under it, or there is no plank past it: he stops short.
+      if ((far - x) * dir > 0 || (plank && (land < plank.left + 0.1 || land > plank.right - 0.1))) {
+        if ((short - pose.pos.x) * dir > 0) yield* plod(short, z);
+        return;
+      }
+      if ((short - pose.pos.x) * dir > 0) yield* plod(short, pose.pos.z);
+      yield* jump(new THREE.Vector3(land, pose.pos.y, z), b.top - pose.pos.y + 0.08);
+      if ((x - pose.pos.x) * dir <= 0) return;
+    }
+    yield* plod(x, z);
+  }
+
+  /** A plain walk, straight there. */
+  function* plod(x: number, z: number): Doing {
     const dx = x - pose.pos.x;
     const dz = z - pose.pos.z;
     const far = Math.hypot(dx, dz);
@@ -248,135 +302,90 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
 
   // ---------------------------------------------------------------- the book
 
-  function* fly(o: THREE.Object3D, p: THREE.Vector3, q: THREE.Quaternion): Doing {
+  function* fly(o: THREE.Object3D, p: THREE.Vector3, q: THREE.Quaternion, scale = o.scale.x): Doing {
     const p0 = o.position.clone();
     const q0 = o.quaternion.clone();
+    const s0 = o.scale.x;
     for (let t = 0; t < 1; ) {
       t = Math.min(1, t + dt / 0.55);
       const u = smooth(0, 1, t);
       o.position.lerpVectors(p0, p, u).y += 0.12 * Math.sin(Math.PI * u);
       o.quaternion.slerpQuaternions(q0, q, u);
+      o.scale.setScalar(s0 + (scale - s0) * u);
       yield;
     }
   }
 
-  function* fold(book: OpenBook, from: number, to: number, seconds: number): Doing {
+  /** Opens the book from `from` to `to`: how far (rad) each half stands off lying flat open. */
+  function* spread(book: THREE.Object3D, from: number, to: number, seconds: number): Doing {
     for (let t = 0; t < 1; ) {
       t = Math.min(1, t + dt / seconds);
-      book.open(from + (to - from) * smooth(0, 1, t));
+      openTo(book, from + (to - from) * smooth(0, 1, t));
       yield;
     }
   }
 
-  function* leaf(book: OpenBook): Doing {
-    for (let t = 0; t < 1; ) {
-      t = Math.min(1, t + dt / 0.8);
-      book.turn(smooth(0, 1, t));
-      yield;
-    }
-    book.turn(0);
-  }
-
-  /** The book comes off the shelf: it flies to lie shut where he will read it, its open copy hidden under it. */
-  const takeDown = (r: Room, w: RoomPhysics, read: Read): Reading => {
-    const x = clamp(r.seat.position.x, r.walk.from, r.walk.to);
-    const book = makeOpenBook(read.size, read.cover);
-    const h = read.size.y;
-    // Its near edge up on his paws, its far edge down on the plank, short of the plank's front.
-    const deep = (h / 2) * Math.cos(LECTERN);
-    book.group.quaternion.copy(TILTED);
-    book.group.position.set(x, r.walk.y + (h / 2) * Math.sin(LECTERN), Math.min(READ_Z + 0.07 + deep, WALL - 0.01 - deep));
-    book.group.updateMatrix();
-    book.group.visible = false;
-    book.open(0);
-    r.content.add(book.group);
-    // Where the prop lies shut over its copy: its middle half a depth from the spine, half a height
-    // down the spine from the middle.
-    const p = new THREE.Vector3();
-    const q = new THREE.Quaternion();
-    new THREE.Matrix4()
-      .compose(new THREE.Vector3(-read.size.z / 2, read.size.x / 2, -h / 2), LYING, ONE)
-      .premultiply(book.group.matrix)
-      .decompose(p, q, new THREE.Vector3());
-    const reading: Reading = { read, room: r, world: w, book, x, flight: null, shown: false };
-    reading.flight = run(
-      (function* () {
-        yield* fly(read.object, p, q);
-        reading.flight = null;
-      })(),
-    );
-    readings.add(reading);
-    return reading;
-  };
-
-  function* putBack(s: Reading): Doing {
-    // A book still in the air turns back from where it is.
-    s.flight?.return();
-    s.flight = null;
-    if (s.shown) {
-      yield* fold(s.book, 1, 0, 0.45);
-      s.book.group.visible = false;
-      s.read.object.visible = true;
-    }
-    yield* fly(s.read.object, s.read.home.p, s.read.home.q);
-    s.world.restore(s.read.object);
-    s.room.content.remove(s.book.group);
-    s.book.dispose();
-    readings.delete(s);
-  }
-
-  function* turnPage(book: OpenBook): Doing {
-    yield* tap(0, TAP_HITS[0]);
-    run(leaf(book));
-    yield* tap(TAP_HITS[0], 1);
+  function* putBack(w: RoomPhysics, read: Read): Doing {
+    yield* fly(read.object, read.home.p, read.home.q, 1);
+    w.restore(read.object);
   }
 
   // ---------------------------------------------------------------- doings
 
-  /** He goes to a book beside his stretch, taps it down, sits behind it facing the camera and reads. */
+  /**
+   * He goes to a book beside his stretch and taps it down, sits facing the camera and it flies into
+   * his paws; there it opens toward him and he reads.
+   */
   function* read(r: Room, w: RoomPhysics, read: Read): Doing {
     const left = read.home.p.x < pose.pos.x;
     yield* walkTo(left ? r.walk.from : r.walk.to);
     yield* sitDown(left ? LEFT : RIGHT);
-    let reading: Reading | null = null;
+    let taken = false;
     try {
       yield* tap(0, TAP_HITS[0]);
-      if (w.take(read.object)) reading = takeDown(r, w, read);
+      taken = w.take(read.object);
       yield* tap(TAP_HITS[0], 1);
-      if (!reading) return;
-      yield* walkTo(reading.x, READ_Z);
+      if (!taken) return;
+      const x = clamp(r.seat.position.x, r.walk.from, r.walk.to);
+      yield* walkTo(x, READ_Z);
       yield* sitDown(FACE_CAMERA);
-      while (reading.flight) yield;
+      holdTo = 1;
+      // Into his paws, shut, its spine to the camera and as small as the open copy he holds.
+      const shrink = (HELD_SCALE * OPEN_HEIGHT) / read.size.y;
+      const at = new THREE.Vector3(x, r.walk.y + PAWS[1], READ_Z + PAWS[0] - (read.size.z * shrink) / 2);
+      yield* fly(read.object, at, read.home.q, shrink);
       read.object.visible = false;
-      reading.book.group.visible = true;
-      reading.shown = true;
-      yield* fold(reading.book, 0, 1, 0.7);
+      held = read.open;
+      openTo(held, SHUT);
+      held.visible = true;
+      yield* spread(held, SHUT, READING, 0.5);
       lidsTo = 0.3;
-      // His eyes run along a line and back to the next one, down a page, then the other; then he
-      // turns the page with a paw.
+      // His eyes run along a line and back to the next one, down the page and up again: aimed past
+      // the pages, low, so his head bows to the book and his eyes just clear its top.
       const length = rand(...READ);
       let line = 0;
-      let side = 0;
       let u = 0;
       for (let t = 0; t < length; t += dt) {
         u += dt / LINE;
         if (u >= 1) {
           u = 0;
-          if (++line === LINES) {
-            line = 0;
-            if (++side === 2) {
-              side = 0;
-              yield* turnPage(reading.book);
-            }
-          }
+          line = (line + 1) % LINES;
         }
-        pose.look = reading.book.spot(side * 0.5 + 0.06 + u * 0.38, 0.15 + line * 0.15, gaze).applyMatrix4(reading.book.group.matrix);
+        pose.look = gaze.set((u - 0.5) * 0.5, OPEN_HEIGHT * (0.6 - line * 0.05), -0.4).applyMatrix4(held.matrix);
         yield;
       }
+      pose.look = null;
+      yield* spread(held, READING, SHUT, 0.4);
     } finally {
       lidsTo = 0;
+      holdTo = 0;
       pose.look = null;
-      if (reading) run(putBack(reading));
+      if (held) {
+        held.visible = false;
+        held = null;
+        read.object.visible = true;
+      }
+      if (taken) run(putBack(w, read));
     }
   }
 
@@ -416,6 +425,24 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     yield* sitDown(r.face);
   }
 
+  /** He lies down where he sits, shuts his eyes and sleeps a long while. */
+  function* sleep(r: Room): Doing {
+    yield* sitDown(r.face);
+    try {
+      lieTo = 1;
+      yield* pause(1.2);
+      lidsTo = 1;
+      yield* pause(rand(...SLEEP));
+      lidsTo = 0;
+      yield* pause(0.6);
+      lieTo = 0;
+      yield* pause(0.8);
+    } finally {
+      lidsTo = 0;
+      lieTo = 0;
+    }
+  }
+
   /** He stands, turns round once on the spot, as cats do before they settle, and sits again. */
   function* circle(r: Room): Doing {
     yield* stand();
@@ -432,8 +459,53 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
   }
 
   function* home(r: Room): Doing {
-    yield* jump(r.seat.position.clone(), 0.1, OUT);
+    if (!(yield* goTo(r, r.seat.position.clone()))) yield* jump(r.seat.position.clone(), 0.1, OUT);
     yield* sitDown(r.face);
+  }
+
+  /** The plank whose top is at height y, from one end to the other; null for the floor or the letters. */
+  const plankAt = (r: Room, y: number) => {
+    for (const { object: o, shapes } of r.fixtures) {
+      const s = shapes[0];
+      if (s?.kind === "box" && Math.abs(o.position.y - y) < 0.06) return { left: o.position.x - s.half[0], right: o.position.x + s.half[0] };
+    }
+    return null;
+  };
+
+  /**
+   * He gets to `spot`, on whatever it lies on, as a cat would: along his level; down, by the end of
+   * his plank and a hop off it; up, from right under it with a leap. Higher than he leaps, he does
+   * not go.
+   */
+  function* goTo(r: Room, spot: THREE.Vector3): Going {
+    const dy = spot.y - pose.pos.y;
+    if (Math.abs(dy) < 0.12) {
+      yield* walkTo(spot.x, spot.z);
+      return true;
+    }
+    if (dy < 0) {
+      const from = plankAt(r, pose.pos.y);
+      const screen = world(room)?.edges();
+      if (from) {
+        let side = spot.x > from.right ? 1 : spot.x < from.left ? -1 : spot.x >= (from.left + from.right) / 2 ? 1 : -1;
+        // He hops off the end with room for him on the screen below it.
+        if (screen && (side > 0 ? from.right + 0.25 > screen.right - ROOM : from.left - 0.25 < screen.left + ROOM)) side = -side;
+        const edge = side > 0 ? from.right : from.left;
+        yield* walkTo(edge - side * 0.12);
+        // Off the end, clearing whatever still stands between him and it.
+        const off = edge + side * 0.25;
+        const b = world(room)?.blocker(pose.pos.x, off, pose.pos.y);
+        yield* jump(new THREE.Vector3(off, spot.y, spot.z), b ? b.top - pose.pos.y + 0.08 : 0.1);
+      } else yield* jump(new THREE.Vector3(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4), spot.y, spot.z), 0.1);
+      yield* walkTo(spot.x, spot.z);
+      return true;
+    }
+    if (dy > LEAP_UP) return false;
+    const to = plankAt(r, spot.y);
+    const x = to ? clamp(spot.x, to.left + 0.12, to.right - 0.12) : spot.x;
+    yield* walkTo(x);
+    yield* jump(new THREE.Vector3(x, spot.y, spot.z), 0.1, OUT);
+    return true;
   }
 
   /** A tap on him: a start, ears flat, then a slow blink at whoever did it. */
@@ -464,6 +536,91 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     yield* pause(0.8);
   }
 
+  /** He watches his toy until it lies on something, for `seconds` at most: in the air it is out of reach. */
+  function* settle(p: THREE.Vector3, seconds: number): Going {
+    let lying = 0;
+    let y = p.y;
+    // His head follows it; when it gets well behind him, he turns round to it.
+    for (let t = 0; t < seconds; t += dt) {
+      if (lying > 0.35) return true;
+      if ((p.x - pose.pos.x) * Math.cos(pose.yaw) < -0.25) {
+        yield* face(p.x >= pose.pos.x ? RIGHT : LEFT);
+        y = p.y;
+      }
+      // Still, up and down, for a while: at the top of a bounce it is still for an instant only.
+      lying = Math.abs(p.y - y) < 0.002 ? lying + dt : 0;
+      y = p.y;
+      yield;
+    }
+    return false;
+  }
+
+  /** He gets beside his toy, short of it, and faces it; false if it lies out of his reach. */
+  function* reach(r: Room, p: THREE.Vector3): Going {
+    const side = p.x >= pose.pos.x ? 1 : -1;
+    if (!(yield* goTo(r, new THREE.Vector3(p.x - side * 0.3, p.y, p.z)))) return false;
+    yield* face(p.x >= pose.pos.x ? RIGHT : LEFT);
+    return true;
+  }
+
+  /**
+   * His toy flew: he watches it land, goes to it, bats it about, picks it up in his mouth and
+   * carries it back to its place on his shelf. Out of his reach, he only watches it.
+   */
+  function* fetch(r: Room, w: RoomPhysics, toy: THREE.Object3D): Doing {
+    const home = w.rest(toy);
+    if (!home) return;
+    const p = toy.position;
+    /** Out of the world: in his mouth, or rolling into its place. */
+    let out = false;
+    pose.look = p;
+    fetching = w;
+    try {
+      yield* stand();
+      if (!(yield* settle(p, 6))) return;
+      // It came down where it was: nothing to fetch.
+      if (p.distanceTo(home.p) < 0.05) return;
+      if (!(yield* reach(r, p))) {
+        yield* pause(1.5);
+        return;
+      }
+      // A bat or two, and after it each time.
+      for (let i = Math.random() < 0.5 ? 1 : 2; i > 0; i--) {
+        const side = p.x >= pose.pos.x ? 1 : -1;
+        yield* tap(0, TAP_HITS[0]);
+        w.poke(toy, p.clone(), new THREE.Vector3(side * 0.5, 0.4, 0));
+        yield* tap(TAP_HITS[0], 1);
+        yield* stand();
+        if (!(yield* settle(p, 4)) || !(yield* reach(r, p))) return;
+      }
+      yield* stand();
+      if (!w.hold(toy)) return;
+      out = true;
+      toy.scale.setScalar(CARRY);
+      carried = toy;
+      // Back up to his stretch, beside the toy's place.
+      const back = new THREE.Vector3(clamp(home.p.x, r.walk.from, r.walk.to), r.walk.y, r.seat.position.z);
+      if (!(yield* goTo(r, back))) yield* jump(back, 0.1, OUT);
+      yield* walkTo(back.x, back.z);
+      yield* face(home.p.x >= pose.pos.x ? RIGHT : LEFT);
+      // He lets it go and it rolls into its place.
+      carried = null;
+      toy.scale.setScalar(1);
+      yield* fly(toy, home.p, home.q);
+      out = false;
+      w.restore(toy);
+      yield* sitDown(r.face);
+    } finally {
+      carried = null;
+      fetching = null;
+      pose.look = null;
+      if (out) {
+        toy.scale.setScalar(1);
+        w.restore(toy);
+      }
+    }
+  }
+
   /** What he does next, never the same twice in a row; off the plank, he first climbs back. */
   const choose = (): Doing => {
     const r = rooms[room];
@@ -471,8 +628,11 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     const ledge = w?.ledge();
     const drop = ledge ? dropTo(r, ledge) : null;
     if (pose.pos.y < r.walk.y - 0.05) return drop ? climb(r, drop) : home(r);
-    const options: Array<[string, number, () => Doing]> = [["circle", 1, () => circle(r)]];
-    if (w && r.reads.length > 0) options.push(["read", 4, () => read(r, w, r.reads[Math.floor(Math.random() * r.reads.length)])]);
+    const options: Array<[string, number, () => Doing]> = [
+      ["circle", 1, () => circle(r)],
+      ["sleep", 6, () => sleep(r)],
+    ];
+    if (w && r.reads.length > 0) options.push(["read", 3, () => read(r, w, r.reads[Math.floor(Math.random() * r.reads.length)])]);
     if (drop) options.push(["stroll", 3, () => stroll(r, drop)]);
     if (r.walk.to - r.walk.from > 0.1) options.push(["pace", 2, () => pace(r)]);
     const open = options.filter(([name]) => name !== last);
@@ -486,6 +646,12 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     pose,
     get room() {
       return room;
+    },
+    get carried() {
+      return carried;
+    },
+    get held() {
+      return held;
     },
     busy: () => busy,
     enter(i, at, yaw) {
@@ -509,8 +675,17 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
       job = startle();
       calm = false;
     },
+    fetch(i, toy) {
+      const w = world(i);
+      if (i !== room || !w || busy || leaving || still) return;
+      end();
+      job = fetch(rooms[i], w, toy);
+      // The pointer that threw it does not call him off it.
+      calm = false;
+    },
     update(step, idle) {
       dt = step;
+      fetching?.wait();
       for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].next().done) tasks.splice(i, 1);
       if (room >= 0) {
         if (stop && !busy) end();
@@ -530,17 +705,13 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
       }
       pose.sit += (sitTo - pose.sit) * Math.min(1, dt * 6);
       pose.lids += (lidsTo - pose.lids) * Math.min(1, dt * 5);
+      pose.hold += (holdTo - pose.hold) * Math.min(1, dt * 5);
+      pose.lie += (lieTo - pose.lie) * Math.min(1, dt * 2);
       pose.ears += (earsTo - pose.ears) * Math.min(1, dt * (earsTo > pose.ears ? 14 : 2.5));
     },
     dispose() {
       end();
       tasks.length = 0;
-      for (const s of readings) {
-        s.room.content.remove(s.book.group);
-        s.book.dispose();
-        s.read.object.visible = true;
-      }
-      readings.clear();
     },
   };
 }

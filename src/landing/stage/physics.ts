@@ -7,7 +7,8 @@ import { TILT, type Room } from "./rooms";
 // the metres of its content: the shelves and the wall hold, the props fall, tip, roll and get pushed,
 // the hanging lamp swings from its cord, the motto's letters give and spring back, and the cat is a
 // body that shoves whatever he walks into. On the letters he does not shove: his weight presses the
-// ones under his paws. A prop that leaves the shelves comes back to its place.
+// ones under his paws. What falls off the shelves lands on the floor, and once the room has been still
+// a while, every prop out of its place glides back to it.
 
 type Rapier = typeof RAPIER;
 
@@ -27,6 +28,22 @@ export type RoomPhysics = {
   owner(mesh: THREE.Object3D): THREE.Object3D | null;
   /** Gives a prop a push: a change of speed, in m/s, at a point, both in the content's frame. */
   poke(prop: THREE.Object3D, at: THREE.Vector3, speed: THREE.Vector3): void;
+  /** The pointer takes hold of a prop at `at` (content frame); false if it cannot. */
+  grab(prop: THREE.Object3D, at: THREE.Vector3): boolean;
+  /** The held prop follows the pointer, now at `at` on the wall's plane. */
+  drag(at: THREE.Vector3): void;
+  /** The pointer lets go: the prop flies off at the speed the pointer had. */
+  release(): void;
+  /** Takes a prop out of the world wherever it lies, for the cat to carry; false if it cannot. */
+  hold(prop: THREE.Object3D): boolean;
+  /** Where the room put a prop. */
+  rest(prop: THREE.Object3D): { p: THREE.Vector3; q: THREE.Quaternion } | null;
+  /** Holds off the tidying for one more frame: something is about to move. */
+  wait(): void;
+  /** The screen's left and right edges, in the content's frame. */
+  edges(): { left: number; right: number };
+  /** The nearest prop standing in the way of a walk at height y from x `from` to `to`: its span and top. */
+  blocker(from: number, to: number, y: number): { min: number; max: number; top: number } | null;
   /**
    * The pointer went from `from` to `to` since the last frame, at velocity `v` (content frame, m/s):
    * if it passed by the hanging lamp's shade, it drags the lamp along.
@@ -54,18 +71,24 @@ const STEP = 1 / 60;
 const MAX_STEPS = 4;
 /** Seconds a prop takes to grow back in its place. */
 const POP = 0.45;
-/** Seconds a prop may lie off the shelves, on the letters or anywhere else, before it goes back. */
-const STRAY = 2.5;
 /** The letters' spring: about 1.6 swings a second, and a damping that lets them wobble. */
 const SPRING = (2 * Math.PI * 1.6) ** 2;
 /** How far (m) the letters under the cat give to his weight; how far his paws reach each side of his feet. */
 export const SINK = 0.015;
 const PAWS = 0.12;
-/** Collision groups: the cat's box passes through the letters, everything else meets both. */
+/**
+ * Collision groups. The letters meet nothing: they lie on the page, in front of the room, and what
+ * falls passes them on its way to the floor below them (a prop resting on them would keep them
+ * sunk, and two that tip into each other would wedge, tilted for good). A tap and the cat's weight
+ * move them. Everything else meets everything.
+ */
 const LETTER = 0x2;
 const CAT = 0x4;
+/** The ceiling holds what is thrown, but not the hanging lamp, which drops in from above the screen. */
+const CEILING = 0x8;
+const PENDANT = 0x10;
 const groups = (member: number, apart: number) => ((member << 16) | (0xffff & ~apart)) >>> 0;
-/** How far from where the room put it a prop may stand and still be taken: metres, and radians. */
+/** How far from where the room put it a prop may stand and still count as in place: metres, and radians. */
 const TAKE_SHIFT = 0.03;
 const TAKE_TURN = 0.2;
 /**
@@ -75,8 +98,24 @@ const TAKE_TURN = 0.2;
 const REACH = 0.3;
 const DRAG = 0.25;
 const SWING = 1;
+/** Seconds the room must stay still before the props out of place go back; seconds a glide takes. */
+const TIDY = 4;
+const GLIDE = 0.8;
+/** How far (m, rad) a prop must have been knocked from its place for the tidying to bring it back. */
+const KNOCKED_SHIFT = 0.08;
+const KNOCKED_TURN = 0.5;
+/** Below these speeds (m/s, rad/s) a prop counts as still. */
+const STILL = 0.05;
+const STILL_TURN = 0.2;
+/** The fastest a let-go prop flies (m/s). */
+const THROW = 7;
+/** The floor stands this far (m) above the bottom of the screen, so what lies on it shows whole. */
+const FLOOR_UP = 0.1;
+/** The room the cat needs to land between two props (m). */
+const GAP = 0.45;
 
 const backOut = (t: number) => 1 + 2.7 * (t - 1) ** 3 + 1.7 * (t - 1) ** 2;
+const smooth = (t: number) => t * t * (3 - 2 * t);
 
 type Prop = {
   object: THREE.Object3D;
@@ -84,10 +123,10 @@ type Prop = {
   home: { p: THREE.Vector3; q: THREE.Quaternion };
   /** 0..1 while it grows back; 1 once it is in place. */
   pop: number;
-  /** Seconds it has lain off the shelves. */
-  stray: number;
   /** Out of the world, moved by the stage. */
   taken: boolean;
+  /** Out of the world, on its way back to its place: from where, and how far along (0..1, below 0 waits). */
+  glide: { p: THREE.Vector3; q: THREE.Quaternion; t: number } | null;
 };
 
 /** A letter of the motto: where it rests, how far its ink reaches each side and up. */
@@ -108,7 +147,9 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       .setTranslation(s.at[0] + dx, s.at[1] + dy, s.at[2] + dz)
       .setDensity(s.density)
       .setFriction(0.7)
-      .setRestitution(0.05);
+      .setRestitution(s.bounce ?? 0.05)
+      // A bouncy prop bounces off anything, however dead what it hits is.
+      .setRestitutionCombineRule(s.bounce ? R.CoefficientCombineRule.Max : R.CoefficientCombineRule.Average);
   };
 
   // The wall every shelf hangs on, and the planks.
@@ -117,8 +158,6 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     const p = object.position;
     for (const s of shapes) world.createCollider(collider(s, p.x, p.y, p.z), ground);
   }
-  // A prop is off the shelves once it is lower than the lowest plank.
-  const lowest = Math.min(...room.fixtures.map((f) => f.object.position.y)) - 0.05;
 
   const dynamic = (object: THREE.Object3D, shapes: Shape[]) => {
     const { position: p, quaternion: q } = object;
@@ -131,6 +170,8 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
         .setCcdEnabled(true),
     );
     for (const s of shapes) world.createCollider(collider(s), body);
+    // A ball's spin runs down, or it would roll on along the floor for good.
+    if (shapes.some((s) => s.kind === "ball")) body.setAngularDamping(1.5);
     return body;
   };
 
@@ -144,8 +185,8 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       body,
       home: { p: object.position.clone(), q: object.quaternion.clone() },
       pop: 1,
-      stray: 0,
       taken: false,
+      glide: null,
     });
   }
 
@@ -157,7 +198,13 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     body.setAngvel({ x: 0, y: 0, z: 0 }, false);
     body.sleep();
     prop.pop = 0;
-    prop.stray = 0;
+  };
+
+  const turned = new THREE.Quaternion();
+  const away = ({ body, home: h }: Prop, shift = TAKE_SHIFT, turn = TAKE_TURN) => {
+    const p = body.translation();
+    const q = body.rotation();
+    return h.p.distanceTo(at.set(p.x, p.y, p.z)) > shift || h.q.angleTo(turned.set(q.x, q.y, q.z, q.w)) > turn;
   };
 
   // The hanging lamp: a body on a ball joint under a point that follows the top of its cord.
@@ -165,6 +212,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
   const lamp = pendant && dynamic(pendant.object, pendant.shapes);
   const pivot = pendant && world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
   lamp?.setAngularDamping(0.5);
+  for (let i = 0; lamp && i < lamp.numColliders(); i++) lamp.collider(i).setCollisionGroups(groups(PENDANT, 0));
   let joint: RAPIER.ImpulseJoint | null = null;
   let lampX = 0;
   const hang = () => {
@@ -184,6 +232,8 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     lamp.setAngvel({ x: 0, y: 0, z: 0 }, false);
     joint = world.createImpulseJoint(R.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: length, z: 0 }), pivot, lamp, true);
   };
+
+  const at = new THREE.Vector3();
 
   // The cat: a box round his body, moved by the stage, never by the world.
   const cat = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setEnabled(false));
@@ -231,7 +281,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       const half = r.width / 2 / kx;
       const halfUp = (bottom - top) / 2 / ky;
       world.createCollider(
-        R.ColliderDesc.cuboid(half * 0.9, halfUp, 0.06).setDensity(300).setRestitution(0.2).setCollisionGroups(groups(LETTER, CAT)),
+        R.ColliderDesc.cuboid(half * 0.9, halfUp, 0.06).setDensity(300).setRestitution(0.2).setCollisionGroups(groups(LETTER, 0xffff)),
         body,
       );
       body.sleep();
@@ -279,22 +329,66 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     }
   };
 
-  // Below this a prop has left the screen: the bottom of the pinned scene, and a little more.
+  // The floor, near the bottom of the pinned scene, a wall at each side of the screen and a ceiling
+  // at its top: what falls or is thrown stays in sight. Below the floor, a little more, a prop has
+  // slipped out of the world.
+  const floor = world.createCollider(R.ColliderDesc.cuboid(30, 0.05, 30).setFriction(0.7), ground);
+  const sides = [0, 1].map(() => world.createCollider(R.ColliderDesc.cuboid(0.05, 30, 30), ground));
+  const ceiling = world.createCollider(R.ColliderDesc.cuboid(30, 0.05, 30).setCollisionGroups(groups(CEILING, PENDANT)), ground);
+  const bounds = { left: -30, right: 30, bottom: -3, top: 30 };
   let fall = -3;
-  const layout = () => {
+  // Measured every frame: the page may still be settling (fonts, the entrance) when the physics
+  // starts, and a floor measured then would stay wrong.
+  const bound = () => {
     const pin = room.anchor.closest<HTMLElement>("[data-pin]") ?? room.anchor;
-    const below = pin.getBoundingClientRect().bottom - room.anchor.getBoundingClientRect().bottom;
-    fall = -below / (room.k * Math.cos(TILT)) - 0.6;
+    const a = room.anchor.getBoundingClientRect();
+    // The pinned scene's bottom, or the window's when the scene runs past it: the floor stays in sight.
+    const below = Math.min(pin.getBoundingClientRect().bottom, innerHeight) - a.bottom;
+    const ky = room.k * Math.cos(TILT);
+    bounds.bottom = -below / ky + FLOOR_UP;
+    bounds.top = (a.bottom - pin.getBoundingClientRect().top) / ky;
+    bounds.left = -a.left / room.k;
+    bounds.right = (innerWidth - a.left) / room.k;
+    floor.setTranslation({ x: 0, y: bounds.bottom - 0.05, z: 0 });
+    ceiling.setTranslation({ x: 0, y: bounds.top + 0.05, z: 0 });
+    sides[0].setTranslation({ x: bounds.left - 0.05, y: 0, z: 0 });
+    sides[1].setTranslation({ x: bounds.right + 0.05, y: 0, z: 0 });
+    fall = bounds.bottom - 0.6;
+  };
+  const layout = () => {
+    bound();
     hang();
     placeLetters();
   };
   layout();
 
   let acc = 0;
+  /** Seconds the props have all stood still, untouched. */
+  let calm = 0;
+  /** The prop in the pointer's hold: where it was grabbed from its middle, and how fast the pointer goes. */
+  let held: { prop: Prop; off: THREE.Vector3; v: THREE.Vector3; at: THREE.Vector3; t: number } | null = null;
   const sync = (dt: number) => {
+    let moving = held !== null;
     for (const prop of props.values()) {
-      const { object, body } = prop;
+      const { object, body, glide } = prop;
       if (prop.taken) continue;
+      if (glide) {
+        glide.t = Math.min(1, glide.t + dt / GLIDE);
+        const u = smooth(Math.max(0, glide.t));
+        // It lifts over what lies between, as high as it has far to go.
+        const arc = Math.min(0.15, glide.p.distanceTo(prop.home.p) * 0.5);
+        object.position.lerpVectors(glide.p, prop.home.p, u).y += arc * Math.sin(Math.PI * u);
+        object.quaternion.slerpQuaternions(glide.q, prop.home.q, u);
+        if (glide.t < 1) continue;
+        prop.glide = null;
+        body.setEnabled(true);
+        home(prop);
+        prop.pop = 1;
+        continue;
+      }
+      const l = body.linvel();
+      const w = body.angvel();
+      if (Math.hypot(l.x, l.y, l.z) > STILL || Math.hypot(w.x, w.y, w.z) > STILL_TURN) moving = true;
       if (prop.pop < 1) {
         prop.pop = Math.min(1, prop.pop + dt / POP);
         object.scale.setScalar(Math.max(0.001, backOut(prop.pop)));
@@ -304,10 +398,18 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       object.position.set(p.x, p.y, p.z);
       object.quaternion.set(q.x, q.y, q.z, q.w);
       if (p.y < fall) home(prop);
-      else if (p.y < lowest && body.isSleeping()) {
-        prop.stray += dt;
-        if (prop.stray > STRAY) home(prop);
-      } else prop.stray = 0;
+    }
+    calm = moving ? 0 : calm + dt;
+    if (calm > TIDY) {
+      calm = 0;
+      // One after another, a beat apart.
+      let wait = 0;
+      for (const prop of props.values()) {
+        if (prop.taken || prop.glide || prop.pop < 1 || !away(prop, KNOCKED_SHIFT, KNOCKED_TURN)) continue;
+        prop.body.setEnabled(false);
+        prop.glide = { p: prop.object.position.clone(), q: prop.object.quaternion.clone(), t: wait };
+        wait -= 0.15;
+      }
     }
     if (lamp && pendant?.on) {
       const p = lamp.translation();
@@ -319,6 +421,8 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
   };
 
   const v = new THREE.Vector3();
+  const box = new THREE.Box3();
+  const inverse = new THREE.Matrix4();
   const shade = new THREE.Vector3();
   const near = new THREE.Vector3();
   const path = new THREE.Line3();
@@ -347,15 +451,97 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     owner(mesh) {
       for (let o: THREE.Object3D | null = mesh; o && o !== room.content; o = o.parent) {
         const prop = props.get(o);
-        if ((prop && !prop.taken) || (pendant?.on && o === pendant.object)) return o;
+        if ((prop && !prop.taken && !prop.glide) || (pendant?.on && o === pendant.object)) return o;
       }
       return null;
     },
     poke(prop, at, speed) {
       const body = prop === pendant?.object ? lamp : props.get(prop)?.body;
       if (!body) return;
+      calm = 0;
       const m = body.mass();
       body.applyImpulseAtPoint({ x: speed.x * m, y: speed.y * m, z: speed.z * m }, at, true);
+    },
+    grab(object, point) {
+      const prop = props.get(object);
+      if (!prop || prop.taken || prop.glide || prop.pop < 1 || held) return false;
+      const p = prop.body.translation();
+      prop.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
+      held = { prop, off: new THREE.Vector3(p.x - point.x, p.y - point.y, 0), v: new THREE.Vector3(), at: point.clone(), t: performance.now() };
+      return true;
+    },
+    drag(point) {
+      if (!held) return;
+      const now = performance.now();
+      const dt = (now - held.t) / 1000;
+      if (dt > 0) {
+        // The pointer's speed, smoothed over the last few moves.
+        const vx = (point.x - held.at.x) / dt;
+        const vy = (point.y - held.at.y) / dt;
+        held.v.set(held.v.x * 0.4 + vx * 0.6, held.v.y * 0.4 + vy * 0.6, 0);
+      }
+      held.at.copy(point);
+      held.t = now;
+      const z = held.prop.body.translation().z;
+      held.prop.body.setNextKinematicTranslation({
+        x: Math.min(bounds.right - 0.1, Math.max(bounds.left + 0.1, point.x + held.off.x)),
+        y: Math.min(bounds.top - 0.25, Math.max(bounds.bottom, point.y + held.off.y)),
+        z,
+      });
+    },
+    release() {
+      if (!held) return;
+      const { prop, v, t } = held;
+      held = null;
+      calm = 0;
+      // A pointer that stopped before letting go drops it.
+      if (performance.now() - t > 100) v.set(0, 0, 0);
+      v.clampLength(0, THROW);
+      prop.body.setBodyType(R.RigidBodyType.Dynamic, true);
+      prop.body.setLinvel({ x: v.x, y: v.y, z: 0 }, true);
+      prop.body.setAngvel({ x: 0, y: 0, z: -v.x * 4 }, true);
+    },
+    hold(object) {
+      const prop = props.get(object);
+      if (!prop || prop.taken || prop.glide || held?.prop === prop) return false;
+      prop.taken = true;
+      prop.body.setEnabled(false);
+      return true;
+    },
+    rest(object) {
+      return props.get(object)?.home ?? null;
+    },
+    wait() {
+      calm = 0;
+    },
+    edges() {
+      return { left: bounds.left, right: bounds.right };
+    },
+    blocker(from, to, y) {
+      const lo = Math.min(from, to);
+      const hi = Math.max(from, to);
+      const dir = from < to ? 1 : -1;
+      inverse.copy(room.content.matrixWorld).invert();
+      // Every prop standing on his level: its box in the content's frame, nearest first along the walk.
+      const spans: Array<{ min: number; max: number; top: number }> = [];
+      for (const prop of props.values()) {
+        if (prop.taken || prop.glide) continue;
+        box.setFromObject(prop.object).applyMatrix4(inverse);
+        if (box.max.y < y + 0.03 || box.min.y > y + 0.35) continue;
+        spans.push({ min: box.min.x, max: box.max.x, top: box.max.y });
+      }
+      spans.sort((a, b) => (dir > 0 ? a.min - b.min : b.max - a.max));
+      const first = spans.findIndex((s) => s.max >= lo && s.min <= hi);
+      if (first < 0) return null;
+      // Props closer together than he is long are one obstacle: he cannot land between them.
+      const block = { ...spans[first] };
+      for (const s of spans.slice(first + 1)) {
+        if (dir > 0 ? s.min > block.max + GAP : s.max < block.min - GAP) break;
+        block.min = Math.min(block.min, s.min);
+        block.max = Math.max(block.max, s.max);
+        block.top = Math.max(block.top, s.top);
+      }
+      return block;
     },
     sweep(from, to, velocity) {
       if (!lamp || !pendant?.on) return;
@@ -381,11 +567,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     take(object) {
       const prop = props.get(object);
       // Awake is fine: the paw that takes it down has just touched it.
-      if (!prop || prop.taken || prop.pop < 1) return false;
-      const p = prop.body.translation();
-      const q = prop.body.rotation();
-      if (prop.home.p.distanceTo(v.set(p.x, p.y, p.z)) > TAKE_SHIFT) return false;
-      if (prop.home.q.angleTo(turn.set(q.x, q.y, q.z, q.w)) > TAKE_TURN) return false;
+      if (!prop || prop.taken || prop.glide || prop.pop < 1 || away(prop)) return false;
       prop.taken = true;
       prop.body.setEnabled(false);
       return true;
@@ -411,6 +593,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       };
     },
     step(dt) {
+      bound();
       acc = Math.min(acc + dt, STEP * MAX_STEPS);
       while (acc >= STEP) {
         if (pivot && pendant?.on) pivot.setNextKinematicTranslation({ x: lampX, y: pendant.top + pendant.lift, z: 0 });

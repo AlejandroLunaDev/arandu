@@ -3,7 +3,7 @@ import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { tokenColor } from "./palette";
 
 // Arandu, from public/models/arandu.glb (built by blender/arandu): feet at the origin, facing +X,
-// metres. The clips (sit, walk, jump, tap) key the body bones only; this file drives the face bones:
+// metres. The clips (sit, walk, jump, tap, read, lie) key the body bones only; this file drives the face bones:
 // the head and eyes follow the pointer, the lids blink, the ears twitch now and then.
 
 export type CatPose = {
@@ -21,6 +21,10 @@ export type CatPose = {
   lids: number;
   /** How flat his ears lie, 0..1. */
   ears: number;
+  /** How far he has a book up in his paws, 0..1: the read clip takes over from the sit clip. */
+  hold: number;
+  /** How far he lies down, 0..1: the lie clip takes over from the sit clip, and his head rests. */
+  lie: number;
   /** A world point to look at, or null to look around on his own. */
   look: THREE.Vector3 | null;
 };
@@ -33,6 +37,10 @@ export type Cat = {
   root: THREE.Group;
   /** Turn the cat about Y through this group. */
   yaw: THREE.Group;
+  /** A point at his mouth, on his head: what he carries goes there. */
+  mouth: THREE.Object3D;
+  /** Between his paws in the read clip, turned so an open book there faces him. */
+  paws: THREE.Object3D;
   update(pose: CatPose, dt: number, time: number): void;
   dispose(): void;
 };
@@ -46,6 +54,10 @@ type Rig = {
   clip?: THREE.Quaternion;
 };
 
+/** Between his paws in the read clip, at the foot of the book's spine (m, model frame): ahead and up. */
+export const PAWS: [number, number] = [0.26, 0.15];
+/** Where his mouth is from his head bone, at rest, in the model's frame (m): ahead and down. */
+const MOUTH = new THREE.Vector3(0.09, -0.04, 0);
 const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const smooth = (a: number, b: number, v: number) => {
@@ -115,6 +127,17 @@ export function makeCat(gltf: GLTF): Cat {
     };
   }
 
+  // His mouth: ahead of the head bone and below it, at rest, in metres of the model.
+  const mouth = new THREE.Object3D();
+  mouth.position.copy(rig.head.bone.worldToLocal(rig.head.pos.clone().add(MOUTH)));
+  rig.head.bone.add(mouth);
+
+  // The book's pages face +Z in its own frame: turned to -X, toward him.
+  const paws = new THREE.Object3D();
+  paws.position.set(PAWS[0], PAWS[1], 0);
+  paws.rotation.y = -Math.PI / 2;
+  model.add(paws);
+
   const root = new THREE.Group();
   const yaw = new THREE.Group();
   root.add(yaw);
@@ -161,11 +184,15 @@ export function makeCat(gltf: GLTF): Cat {
   return {
     root,
     yaw,
+    mouth,
+    paws,
     update(p, dt, time) {
       for (const r of Object.values(rig)) if (r.clip) r.bone.quaternion.copy(r.clip);
       // The tap clip takes over from the others while it runs, eased in and out at its ends.
       const tap = p.tap > 0 && p.tap < 1 ? smooth(0, 0.1, p.tap) * (1 - smooth(0.9, 1, p.tap)) : 0;
-      act.sit?.setEffectiveWeight(p.sit * (1 - tap));
+      act.sit?.setEffectiveWeight(p.sit * (1 - tap) * (1 - p.hold) * (1 - p.lie));
+      act.read?.setEffectiveWeight(p.sit * (1 - tap) * p.hold);
+      act.lie?.setEffectiveWeight(p.sit * (1 - tap) * p.lie);
       act.walk?.setEffectiveWeight((1 - p.sit) * (1 - p.air) * (1 - tap));
       act.jump?.setEffectiveWeight(p.air * (1 - tap));
       act.tap?.setEffectiveWeight(tap);
@@ -183,8 +210,11 @@ export function makeCat(gltf: GLTF): Cat {
         yawTo = clamp(Math.atan2(-local.z, local.x), -1, 1);
         pitchTo = clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), -0.4, 0.5);
       }
-      yawTo *= p.sit;
-      pitchTo *= p.sit;
+      // He looks around sitting; something he watches, he follows standing too, but not mid-jump.
+      // Lying down, his head rests on his paws.
+      const follow = (p.look ? 1 - p.air : p.sit) * (1 - p.lie);
+      yawTo *= follow;
+      pitchTo *= follow;
       const k = Math.min(1, dt * 5);
       look.yaw += (yawTo - look.yaw) * k;
       look.pitch += (pitchTo - look.pitch) * k;

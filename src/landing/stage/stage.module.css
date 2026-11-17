@@ -11,3 +11,79 @@
   width: 100%;
   height: 100%;
 }
+
+/* The cat's speech bubble: its bottom middle sits on the point run-stage gives it, over his head. */
+.say {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 15rem;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  text-wrap: balance;
+  transform: translate(-50%, calc(-100% - var(--space-2))) scale(0.9);
+  transform-origin: bottom center;
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.say[data-on] {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - var(--space-3)));
+}
+
+/* Its tail, toward him. */
+.say::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  translate: -50% -50%;
+  rotate: 45deg;
+  background: inherit;
+  border: inherit;
+  border-top: 0;
+  border-left: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .say {
+    transition: opacity 0.2s ease;
+  }
+}
+
+/* A heart or a z rising from his head and fading: run-stage puts it there and removes it. */
+.stage [data-float] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--text-muted);
+  animation: rise 2.6s ease-out forwards;
+}
+
+.stage [data-float="heart"] {
+  color: var(--primary);
+  animation-duration: 1.4s;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--space-4)), calc(-1 * var(--space-8))) scale(1.2);
+  }
+}

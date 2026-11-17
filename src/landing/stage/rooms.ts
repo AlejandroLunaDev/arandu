@@ -24,12 +24,12 @@ export type Pendant = Solid & { top: number; lift: number; on: boolean };
 /** The free stretch of plank around the seat: the cat's feet may go from `from` to `to`, at height `y`. */
 export type Walk = { y: number; from: number; to: number };
 
-/** A book the cat may take down to read: its prop, where it stands, its size and the token of its cover. */
+/** A book the cat may take down to read: its prop, where it stands, its size and its copy that opens. */
 export type Read = {
   object: THREE.Object3D;
   home: { p: THREE.Vector3; q: THREE.Quaternion };
   size: THREE.Vector3;
-  cover: string;
+  open: THREE.Object3D;
 };
 
 export type Room = {
@@ -52,8 +52,6 @@ export type Room = {
   walk: Walk;
   /** The books next to that stretch, which he may take down to read. */
   reads: Read[];
-  /** The bulb of the room's main lamp: the stage hangs a warm light there. */
-  light: THREE.Object3D;
   /** The cat's turn about Y while he sits here. */
   face: number;
   /** Pixels per metre. */
@@ -96,7 +94,7 @@ function put(parent: THREE.Object3D, o: THREE.Object3D, x: number, y: number, z 
 /** Stands books side by side from x, left to right; returns them and the x where the row ends. */
 function standBooks(kit: Kit, parent: THREE.Object3D, x: number, y: number, books: Shelved[]) {
   let cx = x;
-  const row: Read[] = [];
+  const row: Omit<Read, "open">[] = [];
   for (const [name, look, career, lean] of books) {
     const s = kit.size(name);
     const b = kit.book(name, look, career);
@@ -114,7 +112,7 @@ function standBooks(kit: Kit, parent: THREE.Object3D, x: number, y: number, book
       cx += s.x + GAP;
     }
     // Where it stands, kept apart from the prop that the physics will move.
-    row.push({ object: b, home: { p: b.position.clone(), q: b.quaternion.clone() }, size: s, cover: look.cover });
+    row.push({ object: b, home: { p: b.position.clone(), q: b.quaternion.clone() }, size: s });
   }
   return { end: cx, books: row };
 }
@@ -197,7 +195,6 @@ function base(anchor: HTMLElement, face: number) {
     seat: new THREE.Object3D(),
     walk: { y: 0, from: 0, to: 0 },
     reads: [],
-    light: group,
     face,
     k: readK(anchor),
     layout() {
@@ -219,7 +216,7 @@ function base(anchor: HTMLElement, face: number) {
 function collect(room: Room, kit: Kit) {
   for (const object of room.content.children) {
     const name = object.userData.prop as PropName | undefined;
-    if (!name || name === "LampPendant") continue;
+    if (!name || name === "LampPendant" || name === "BookOpen") continue;
     (name.startsWith("Shelf") ? room.fixtures : room.props).push({ object, shapes: kit.shapes(name) });
   }
 }
@@ -264,7 +261,7 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     ["BookShort", LOOK.c3, "Design"],
     ["BookPaperback", LOOK.i7, "História"],
   ]);
-  const mushroom = put(content, kit.make("LampMushroom"), UX + 0.33, UY);
+  put(content, kit.make("LampMushroom"), UX + 0.33, UY);
 
   // The pendant lamp hangs on a short cord from above the top of the screen. Where the copy sits
   // above the room (one column), its cord would cross the copy: there the anchor's --room-pendant is
@@ -277,15 +274,18 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
 
   room.seat = seat;
   room.walk = walkway(content, seat);
-  // The books on either side of his stretch.
-  room.reads = [left.books[left.books.length - 1], right.books[0]];
+  // The books on either side of his stretch, each with a copy that opens, hidden until he reads it.
+  room.reads = [left.books[left.books.length - 1], right.books[0]].map((b) => {
+    const open = kit.open(b.object);
+    open.visible = false;
+    content.add(open);
+    return { ...b, open };
+  });
   room.pendant = pendant;
   room.letters = [...room.scene.querySelectorAll<HTMLElement>("[data-letter]")];
   room.layout = () => {
     room.k = readK(anchor);
     pendant.on = lamp.visible = getComputedStyle(anchor).getPropertyValue("--room-pendant").trim() !== "0";
-    const glow = pendant.on ? lamp : mushroom;
-    room.light = glow.getObjectByName(pendant.on ? "LampPendantLight" : "LampMushroomLight") ?? glow;
     // How far the top of the pinned scene is above the shelf; the cord reaches a little past it.
     const pin = anchor.closest<HTMLElement>("[data-pin]") ?? anchor;
     const above = (anchor.getBoundingClientRect().bottom - pin.getBoundingClientRect().top) / room.k;
@@ -302,34 +302,6 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     lamp.position.y = lampY + pendant.lift;
   };
   room.layout();
-  collect(room, kit);
-  return room;
-}
-
-/** "O Arandu te conhece": two shelves on the wall beside the phone; the cat waits on the lower one. */
-export function knowYouRoom(anchor: HTMLElement, kit: Kit): Room {
-  const room = base(anchor, FACE.right);
-  const { content } = room;
-
-  // The middle shelf, its middle at (0.66, 0.9), and the top one at (0.66, 1.9).
-  const X = 0.66;
-  put(content, kit.make("ShelfMedium"), X, 0.9);
-  const row = standBooks(kit, content, X - 0.49, 0.9, [
-    ["BookThick", LOOK.a8, "Arquitetura"],
-    ["BookSlim", LOOK.c3, "Nutrição"],
-  ]);
-  const seat = seatAt(content, row.end + 0.27, 0.9);
-  const lamp = put(content, kit.make("LampClassic"), X + 0.34, 0.9);
-
-  put(content, kit.make("ShelfSmall"), X, 1.9);
-  put(content, kit.make("LampDesk"), X - 0.18, 1.9);
-  put(content, kit.book("BookTall", LOOK.v4, "Direito"), X + 0.07, 1.9);
-  put(content, kit.make("Ball"), X + 0.19, 1.9, 0.04);
-
-  room.seat = seat;
-  room.walk = walkway(content, seat);
-  room.reads = [row.books[row.books.length - 1]];
-  room.light = lamp.getObjectByName("LampClassicLight") ?? lamp;
   collect(room, kit);
   return room;
 }
