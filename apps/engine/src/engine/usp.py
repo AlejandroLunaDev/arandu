@@ -14,16 +14,16 @@ ENCODING = "iso-8859-1"  # declared by every JupiterWeb page
 
 def parse_courses(doc):
     """Return (grade url, course name, shift, city) for every course on one unit's list page."""
-    html = doc.read().decode(ENCODING)
-    campuses = {c.split(" - ")[0].strip() for c in re.findall(r"Campus:\s*([^<]+)", html)}
-    if len(campuses) != 1:
-        raise ValueError(f"expected one campus on the course list, found {sorted(campuses)}")
-    city = campuses.pop()
-    courses = [
-        (urljoin(BASE, row[0][1]), row[0][0], row[1][0] if len(row) > 1 else None, city)
-        for row in rows(html)
-        if row and row[0][1] and "listarGradeCurricular" in row[0][1]
-    ]
+    city = None
+    courses = []
+    for row in rows(doc.read().decode(ENCODING)):
+        first = row[0][0] if row else ""
+        if first.startswith("Campus:"):
+            city = first.removeprefix("Campus:").split(" - ")[0].strip()  # 'São Paulo - Cidade Universitária ...'
+        elif row and row[0][1] and "listarGradeCurricular" in row[0][1]:
+            if city is None:
+                raise ValueError(f"course {first!r} is listed before any campus")
+            courses.append((urljoin(BASE, row[0][1]), first, row[1][0] if len(row) > 1 else None, city))
     if not courses:
         raise ValueError("no course found on the course list")
     return courses

@@ -6,6 +6,7 @@ from engine import curricula, usp
 
 FIXTURES = Path(__file__).parent / "fixtures" / "usp"
 LIST = (FIXTURES / "usp_course_list_45.html").read_bytes()
+PSICO = (FIXTURES / "usp_course_list_47.html").read_bytes()
 GRADE = (FIXTURES / "usp_grade_45052.html").read_bytes()
 BASE = "https://uspdigital.usp.br/jupiterweb/"
 
@@ -30,10 +31,28 @@ class ParseCoursesTest(unittest.TestCase):
         self.assertEqual(sorted(c[2] for c in same), ["integral", "noturno"])
         self.assertEqual(len({c[0] for c in same}), 2)
 
-    def test_two_campuses_raise(self):
-        two = LIST.replace(b"Campus:", b"Campus: Ribeir\xe3o Preto - X</span></td></tr><tr><td>Campus:", 1)
-        with self.assertRaisesRegex(ValueError, "one campus"):
-            usp.parse_courses(io.BytesIO(two))
+    def test_each_course_takes_the_city_of_the_campus_row_above_it(self):
+        text = PSICO.decode("iso-8859-1")
+        two = text + text.replace("São Paulo - Cidade", "Ribeirão Preto - Campus", 1)
+        cities = [c[3] for c in usp.parse_courses(doc(two))]
+        self.assertEqual(cities, ["São Paulo"] * 3 + ["Ribeirão Preto"] * 3)
+
+    def test_course_before_any_campus_raises(self):
+        no_campus = PSICO.decode("iso-8859-1").replace("Campus:", "Local:")
+        with self.assertRaisesRegex(ValueError, "before any campus"):
+            usp.parse_courses(doc(no_campus))
+
+    def test_unit_with_several_degrees_of_one_course(self):
+        courses = usp.parse_courses(io.BytesIO(PSICO))
+        self.assertEqual(
+            [(c[1], c[2], c[3]) for c in courses],
+            [
+                ("Psicologia - Bacharelado", "integral", "São Paulo"),
+                ("Psicologia - Licenciatura", "integral", "São Paulo"),
+                ("Psicologia - Psicólogo", "integral", "São Paulo"),
+            ],
+        )
+        self.assertEqual(courses[0][0], BASE + "listarGradeCurricular?codcg=47&codcur=47012&codhab=100&tipo=N")
 
     def test_no_courses_raise(self):
         with self.assertRaisesRegex(ValueError, "no course"):

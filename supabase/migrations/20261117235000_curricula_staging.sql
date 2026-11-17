@@ -25,17 +25,23 @@ language sql immutable set search_path = '' as $$
 $$;
 
 -- The census course of one staged page: same institution, city, degree (when the page names it) and name.
+-- The degree is read only where the page writes it: 'Bacharelado em X' or 'X - Bacharelado'.
 -- Only a unique match links; anything else stays unlinked, because a guessed link would be invented data.
 create function staging.curriculum_course_id(p_source_id bigint) returns bigint
 language sql stable set search_path = '' as $$
-  with page as (
-    select
-      cc.institution_inep_code,
-      staging.name_key(cc.city) as city,
-      substring(staging.name_key(cc.name) from '^(bacharelado|licenciatura) em ') as degree,
-      regexp_replace(staging.name_key(cc.name), '^(bacharelado|licenciatura) em ', '') as name
+  with staged as (
+    select cc.institution_inep_code, staging.name_key(cc.city) as city, staging.name_key(cc.name) as name
     from staging.curriculum_courses cc
     where cc.source_id = p_source_id
+  ), page as (
+    select
+      institution_inep_code,
+      city,
+      coalesce(substring(name from '^(bacharelado|licenciatura) em '), substring(name from ' - (bacharelado|licenciatura)$'))
+        as degree,
+      regexp_replace(regexp_replace(name, '^(bacharelado|licenciatura) em ', ''), ' - (bacharelado|licenciatura)$', '')
+        as name
+    from staged
   ), matches as (
     select c.id
     from page p
@@ -95,14 +101,12 @@ revoke execute on function staging.name_key(text) from public, anon, authenticat
 revoke execute on function staging.curriculum_course_id(bigint) from public, anon, authenticated;
 revoke execute on function staging.normalize_curriculum(bigint) from public, anon, authenticated;
 
--- shortcut: only IME's course list is registered; other USP units need their codcg codes, which JupiterWeb
--- lists only through its JavaScript (DWR) API. Add their list pages here once those codes are fetched.
-insert into public.sources (adapter, url, label, refresh_interval) values (
-  'usp_courses',
-  'https://uspdigital.usp.br/jupiterweb/jupCursoLista?codcg=45&tipo=N',
-  'USP JupiterWeb, cursos do IME',
-  interval '1 year'
-);
+-- The 47 USP units with entry courses, as JupiterWeb's own DWR method pubListarColegiado returned them on
+-- 2026-11-12 (owner's research). shortcut: a unit created later is not picked up; re-read that list yearly.
+insert into public.sources (adapter, url, label, refresh_interval)
+select 'usp_courses', 'https://uspdigital.usp.br/jupiterweb/jupCursoLista?codcg=' || unit || '&tipo=N',
+  'USP JupiterWeb, cursos da unidade ' || unit, interval '1 year'
+from unnest(array[1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 17, 18, 21, 22, 23, 24, 25, 27, 39, 41, 42, 43, 44, 45, 46, 47, 48, 55, 58, 59, 60, 66, 74, 75, 76, 81, 86, 87, 88, 89, 90, 97, 98, 99]) as unit;
 
 insert into public.sources (adapter, url, label, refresh_interval) values (
   'mackenzie_courses',
