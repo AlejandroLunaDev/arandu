@@ -4,7 +4,7 @@ Run it inside Blender, for example through the Blender MCP:
     import runpy; runpy.run_path("<repo>/blender/arandu/export.py", run_name="__main__")
 
 The GLB keeps the "_fur" and "_comb" vertex attributes the web fur shells read, one skin and the
-clips sit, walk, jump and tap. Geometry is Draco-compressed: load it with DRACOLoader.
+clips sit, walk, jump, tap, read and lie. Geometry is Draco-compressed: load it with DRACOLoader.
 """
 
 import os

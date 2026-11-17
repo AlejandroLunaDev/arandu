@@ -15,7 +15,8 @@ Every lamp carries an empty named <lamp>Light where the bulb is, for the web's p
 are built switched off: the web lights them by giving "LampBulb" and "LampShadeInner" an emissive
 color.
 
-The books (see BOOKS) are blanks in several proportions that the web dresses through canvas
+BookOpen (see book_open) is a book in parts that open about its spine, with faces for the web to
+draw pages on. The books (see BOOKS) are blanks in several proportions that the web dresses through canvas
 textures. Each one stands with its spine to the front. "BookCover" maps each cover to the full 0-1
 UV square, the spine at u = 0 on the front (+X) cover; "BookSpine" maps the spine with u across
 it, left to right seen from the front, and v up.
@@ -51,6 +52,9 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "BookCover": (srgb("#6B3FA0"), 0.6, 0.0),  # violet-600
     "BookSpine": (srgb("#6B3FA0"), 0.6, 0.0),
     "BookPages": (srgb("#E8E0CF"), 0.85, 0.0),  # cream-200
+    "BookPage": (srgb("#FBF8F1"), 0.85, 0.0),  # cream-50: an open page, which the web draws on
+    "BookLeafFront": (srgb("#FBF8F1"), 0.85, 0.0),
+    "BookLeafBack": (srgb("#FBF8F1"), 0.85, 0.0),
     "ShelfWood": (srgb("#3A3645"), 0.7, 0.0),  # ink-700
     "ShelfBracket": (srgb("#6F6880"), 0.45, 0.5),  # ink-500
     "LampShade": (srgb("#DDD3C0"), 0.8, 0.0),  # cream-300
@@ -322,6 +326,81 @@ def book(coll, name):
     return p.build(name, coll, uv=True)
 
 
+OPEN = (0.40, 0.28, 0.03, 0.007, 0.008)  # height, page width, pages per half, board thickness, overhang
+
+
+def slab(x0, x1, y0, y1, z0, z1, front, back, rest, u_front=None, u_back=None):
+    """An axis-aligned box. front (-Y) and back (+Y) get their own material and, if given, UVs that
+    map them whole: u runs left to right as seen from that side, v up."""
+    verts, faces = prism([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], z0, z1)
+    blank = [(0.995, 0.005)] * 4
+    mats = [front, rest, back, rest, rest, rest]
+    uvs = [u_front or blank, blank, u_back or blank, blank, [blank[0]] * 4, [blank[0]] * 4]
+    return verts, faces, mats, uvs
+
+
+WHOLE = [(0, 0), (1, 0), (1, 1), (0, 1)]  # a face mapped onto the full image, corners in prism order
+
+
+def book_open(coll):
+    """A book that opens, for the web to fly off a shelf, open and leaf through.
+
+    BookOpen is the spine, a half cylinder round the hinge, its origin at the hinge's foot. Its
+    children turn about the hinge (Z) from there: BookOpenLeft and BookOpenRight, each a board and
+    a block of pages, lie flat open at rotation 0 with their pages to the front (-Y); turning
+    BookOpenRight -90 degrees and BookOpenLeft +90 shuts the book. BookOpenLeaf, one page lying on
+    the right one, turns -180 degrees onto the left. Every page face ("BookPage", "BookLeafFront",
+    "BookLeafBack") and the boards' outsides ("BookCover") map the full 0-1 UV square, u left to
+    right as seen from that side; the spine ("BookSpine") maps u across it seen from behind.
+    """
+    H, D, B, C, O = OPEN
+    R = B + C
+    lift = 0.004  # the spine's flat face sits behind the pages, so the gutter never shows it
+
+    a0 = math.asin(lift / R)
+    curve = arc(R, 0, 0, a0, math.pi - a0, 14)
+    verts, faces = prism(curve, 0.0, H)
+    n = len(curve)
+    mats, uvs = [], []
+    for i in range(n):
+        if i < n - 1:
+            u0, u1 = i / (n - 1), (i + 1) / (n - 1)
+            mats.append("BookSpine")
+            uvs.append([(u0, 0), (u1, 0), (u1, 1), (u0, 1)])
+        else:
+            mats.append("BookCover")
+            uvs.append([(0.995, 0.005)] * 4)
+    mats += ["BookCover", "BookCover"]
+    uvs += [[(0.995, 0.005)] * n] * 2
+    spine = Part()
+    spine.add(verts, faces, mats, uvs)
+    root = spine.build("BookOpen", coll, uv=True)
+
+    def half(name, side):
+        x0, x1 = (0.0, D) if side > 0 else (-D, 0.0)
+        p = Part()
+        # The board behind, its outside seen from the back.
+        p.add(*slab(x0, x1, B, R, 0.0, H, "BookCover", "BookCover", "BookCover", u_back=WHOLE))
+        # The pages in front of it, the open page facing the front.
+        px0, px1 = (0.003, D - O) if side > 0 else (-D + O, -0.003)
+        p.add(*slab(px0, px1, 0.0, B, O, H - O, "BookPage", "BookPages", "BookPages", u_front=WHOLE))
+        obj = p.build(name, coll, uv=True)
+        obj.parent = root
+        return obj
+
+    half("BookOpenLeft", -1)
+    half("BookOpenRight", 1)
+    # One page, thin, its turning axis through its middle so it lies on either side alike.
+    t = 0.0007
+    leaf = Part()
+    leaf.add(*slab(0.003, D - O, -t, t, O, H - O, "BookLeafFront", "BookLeafBack", "BookPages",
+                   u_front=WHOLE, u_back=WHOLE))
+    obj = leaf.build("BookOpenLeaf", coll, uv=True)
+    obj.parent = root
+    obj.location = (0, -2 * t, 0)
+    return root
+
+
 SHELVES = {"ShelfLarge": 1.6, "ShelfMedium": 1.0, "ShelfSmall": 0.55}  # name: length. All share one depth,
 # deep enough for the tallest book and the plant pot.
 
@@ -548,6 +627,7 @@ def ball(coll):
 
 LAYOUT = {  # where each prop stands in the Blender scene; the export puts every one at the origin
     **{name: (-2.35 + 0.15 * i, 0, 0) for i, name in enumerate(BOOKS)},
+    "BookOpen": (-3.0, 0, 0),
     "Ball": (-1.2, 0, 0),
     "YarnBall": (-0.9, 0, 0),
     "PlantPot": (-0.45, 0, 0.6),
@@ -582,7 +662,7 @@ def build():
     if bpy.context.object and bpy.context.object.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
     coll = reset_collection()
-    props = [book(coll, name) for name in BOOKS]
+    props = [book(coll, name) for name in BOOKS] + [book_open(coll)]
     props += [shelf(coll, name) for name in SHELVES]
     props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball)]
     for obj in props:

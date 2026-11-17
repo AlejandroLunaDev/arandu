@@ -1,4 +1,4 @@
-"""Key Arandu's clips on the armature that build.py made: sit, walk, jump and tap.
+"""Key Arandu's clips on the armature that build.py made: sit, walk, jump, tap and read.
 
 Run it inside Blender after build.py, for example through the Blender MCP:
     import runpy; runpy.run_path("<repo>/blender/arandu/animate.py", run_name="__main__")
@@ -6,7 +6,7 @@ Run it inside Blender after build.py, for example through the Blender MCP:
 Every clip is one action at 30 fps, keyed on every frame with linear interpolation, so the web
 plays exactly what is keyed here. Clips key only the body bones (root, spine, legs, tail): the page
 owns the face bones (head, ears, eyes, pupils, lids) for gaze, blinks, moods and the head look-at.
-sit and walk loop (their last frame repeats the first); jump and tap start and end in a rest pose.
+sit, walk and read loop (their last frame repeats the first); jump and tap start and end in a rest pose.
 
 Poses are written in the armature's axes: x forward, y the cat's left, z up. A negative turn about
 y lifts the nose or swings a leg forward. The tail is posed by aiming its five bones at points.
@@ -216,6 +216,34 @@ PAW_HOVER = merge(LOOK_DOWN, {
     "upperArmR": [("y", -45)], "foreArmR": [("y", 30)], "pawR": [("y", 25)], "plant": ["FL"],
 })
 
+# Read: sitting up straighter, both front paws up before the chest holding a book by its sides,
+# head bowed to it. The book itself is a prop the page puts between the paws.
+READ = merge(SIT, {
+    "hips": [("y", -16)], "spine": [("y", -8)], "chest": [("y", -6)],
+    "neck": [("y", 34)],
+    "upperArmL": [("y", -105), ("x", 12)], "upperArmR": [("y", -105), ("x", -12)],
+    "foreArmL": [("y", 95)], "foreArmR": [("y", 95)],
+    "pawL": [("y", 25)], "pawR": [("y", 25)],
+    "plant": [],
+})
+
+# Lie: a loaf, belly on the floor, front paws flat before him, hind legs folded under, tail curled
+# round his right side, head lowered and tipped onto his paws. He sleeps in it.
+LIE = {
+    "at": (0, 0, -0.055),
+    "hips": [("y", 4)], "spine": [("y", 3)], "chest": [("y", 2)],
+    "thighL": [("y", -62)], "thighR": [("y", -62)],
+    "shinL": [("y", 125)], "shinR": [("y", 125)],
+    "footL": [("y", -60)], "footR": [("y", -60)],
+    "upperArmL": [("y", -72)], "upperArmR": [("y", -72)],
+    "neck": [("y", 30), ("z", 10)], "head": [("x", 12)],
+    "plant": ["FL", "FR"],
+    "tail": [(-0.24, -0.03, 0.05), (-0.27, -0.09, 0.05), (-0.245, -0.15, 0.05),
+             (-0.18, -0.175, 0.05), (-0.095, -0.17, 0.05)],
+}
+# A sleeper's breath: slow and deep.
+BREATH_DEEP = {"spine": [("y", -2.4)], "chest": [("y", -3.2)]}
+
 
 # ---------------------------------------------------------------- clips
 
@@ -330,7 +358,25 @@ def tap(arm):
     ])
 
 
-CLIPS = {"sit": sit, "walk": walk, "jump": jump, "tap": tap}
+def read(arm):
+    return keyed(arm, [
+        (0, READ, "smooth"),
+        (24, merge(READ, TIP_UP), "smooth"),
+        (34, merge(READ, BREATH_IN, TIP_FLICK), "smooth"),
+        (46, merge(READ, BREATH_IN), "smooth"),
+        (90, READ, "smooth"),
+    ])
+
+
+def lie(arm):
+    return keyed(arm, [
+        (0, LIE, "smooth"),
+        (60, merge(LIE, BREATH_DEEP), "smooth"),
+        (120, LIE, "smooth"),
+    ])
+
+
+CLIPS = {"sit": sit, "walk": walk, "jump": jump, "tap": tap, "read": read, "lie": lie}
 
 
 def bake(arm, name, frames):
