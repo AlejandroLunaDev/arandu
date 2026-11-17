@@ -48,6 +48,16 @@ npm run db:types      # regenerate packages/db-types from the local database
 
 Copy `.env.example` to `.env` for the Supabase project values; `.env` is never committed.
 
+Before each merge (there is no CI), run `npm run check`: build, typecheck, lint and tests of every workspace, the landing's tokens check and the database tests.
+
+### Deploy
+
+| Surface | Where | How |
+|---|---|---|
+| `apps/web` | Vercel | Import the repo with Root Directory `apps/web`; keep "skip unaffected projects" on |
+| `apps/api` | Render (Virginia) | Create a Blueprint from `render.yaml` |
+| Database | Supabase (`us-east-1`) | Before merging a migration: `npx supabase db push --remote="postgresql://postgres.<ref>:<password>@<pooler host>:5432/postgres"` |
+
 ### Landing (`apps/web`)
 
 - `src/app` holds the routes only; code is grouped by business area (`src/landing`, `src/design-system`).

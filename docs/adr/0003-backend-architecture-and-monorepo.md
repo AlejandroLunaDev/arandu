@@ -41,13 +41,14 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 ### Schema and migrations
 
 - `supabase/migrations` is the only place the schema changes. Neither Nest nor Python runs ORM migrations.
-- Migrations run once per deploy, as their own deploy step, never when a service starts.
+- Migrations are applied once, from the root, before the pull request that adds them is merged, never when a service starts. Render's free plan has no pre-deploy command, so this is a manual step until a paid plan is chosen.
 - There is no CI, to save cost. Pull requests are gated by review, and lint, typecheck and tests run locally before each merge.
 
 ### Deploy
 
 - The landing (`apps/web`) stays on Vercel (ADR-0001).
-- The API and the engine run on Render, one service each, built from their own Dockerfiles, in the Virginia region.
+- The API and the engine run on Render, one service each, built from their own Dockerfiles, in the Virginia region. `render.yaml` at the root declares them; each service rebuilds only when its own paths change.
+- Vercel builds `apps/web` (its Root Directory) and skips the build when a commit does not touch the landing or a package it uses.
 - The Supabase project lives in `us-east-1` (N. Virginia), next to Render's Virginia region and Vercel's default function region. Render has no South American region.
 - Services reach the database through Supabase's session pooler (IPv4, port 5432). The direct database host is IPv6-only, and Render services connect out over IPv4 only.
 - Docker also pins the engine's system dependencies (Chromium, Tesseract), so the engine runs the same locally and on Render.
@@ -65,6 +66,6 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 
 ## Open points
 
-- The Render plan, and how a migration step runs before each deploy there: not verified.
+- The Render plan. Free web services sleep after 15 minutes idle; cron jobs (the engine) cost at least $1 a month; a pre-deploy migration step needs a paid plan.
 - The product front-end platform: web PWA or mobile.
 - Measured latency between the Render, Vercel and Supabase regions: not checked.
