@@ -6,7 +6,7 @@
 
 ## Context
 
-The landing will open a book on the shelf for one profession and show real data on the São Paulo institutions that offer it (ADR-0004). Later, the product app reuses that data and adds AI, reports and accounts. Whether the app is a web PWA or mobile is not decided yet.
+The landing will open a book on the shelf for one profession and show real data on the São Paulo institutions that offer it (ADR-0004). Later, the product app reuses that data and adds AI, reports and accounts. Whether the app is a web PWA or mobile is open (owner, 2026-11-17); the product docs' "responsive web" line predates that.
 
 That needs three things the repository does not have: a database, an engine that keeps public data up to date, and an API. Today the repository holds only the Next.js landing, at the root, on npm.
 
@@ -33,7 +33,7 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 | Piece | Decision |
 |---|---|
 | Database | Supabase Postgres. pgvector for the RAG is a later step |
-| API | NestJS is the only door for the web and the app. Neither reads Supabase directly. Responses are validated against `packages/contracts` |
+| API | NestJS is the only door for the web and the app. Neither reads Supabase directly. Responses are typed by `packages/contracts` and validated at runtime with Nest DTOs |
 | Engine | Python, run on a schedule. Python is chosen for parsing PDFs (pdfplumber), OCR (Tesseract) and pages that need JavaScript (Playwright) |
 | How they talk | Only through the database. The engine writes; the API reads. Neither calls the other |
 | Data processing | The Python standard library, plus SQL in Postgres. The engine loads raw rows into staging tables, and normalization is versioned SQL. pandas is allowed in exploration notebooks only, not in the engine |
@@ -41,11 +41,13 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 ### Schema and migrations
 
 - `supabase/migrations` is the only place the schema changes. Neither Nest nor Python runs ORM migrations.
-- Migrations run once per deploy, as their own pipeline step, never when a service starts.
+- Migrations run once per deploy, as their own deploy step, never when a service starts.
+- There is no CI, to save cost. Pull requests are gated by review, and lint, typecheck and tests run locally before each merge.
 
 ### Deploy
 
-- Render, one service per app, each built from its own Dockerfile, in the Virginia region.
+- The landing (`apps/web`) stays on Vercel (ADR-0001).
+- The API and the engine run on Render, one service each, built from their own Dockerfiles, in the Virginia region.
 - The Supabase project lives in `us-east-1` (N. Virginia), next to Render's Virginia region and Vercel's default function region. Render has no South American region.
 - Services reach the database through Supabase's session pooler (IPv4, port 5432). The direct database host is IPv6-only, and Render services connect out over IPv4 only.
 - Docker also pins the engine's system dependencies (Chromium, Tesseract), so the engine runs the same locally and on Render.

@@ -10,13 +10,15 @@ The landing's shelves hold books. Each book is a profession: a degree course, a 
 
 The owner's rule: **no invented data, ever.** A fact that is not in a source is not shown.
 
-The research behind the sources is in the product docs (`04-sp-data-mapping-summary.md` and `data-mapping/`, 2026-11-12). The scope is São Paulo state only.
+The research behind the sources is in the owner's research notes of 2026-11-12 (`04-sp-data-mapping-summary.md` and `data-mapping/`). They are kept outside this repository for now. The scope is São Paulo state only.
+
+Institution logos are shown: the owner decided this on 2026-11-13 (product docs, commit `0f487fb` on `squad/diseno`). Earlier lines in the product docs that rule logos out are superseded.
 
 ## Decisions
 
 ### The book contract
 
-`GET` one book returns this shape (types live in `packages/contracts`):
+`GET` one book returns this shape. The types live in `packages/contracts`; the API validates each response at runtime with its DTOs.
 
 ```json
 {
@@ -27,7 +29,7 @@ The research behind the sources is in the product docs (`04-sp-data-mapping-summ
         "name": "Universidade Federal de São Paulo",
         "shortName": "Unifesp",
         "kind": "public",
-        "logo": { "url": "...", "sourceUrl": "..." },
+        "logo": { "url": "...", "license": "Public domain", "sourceUrl": "..." },
         "photo": { "url": "...", "credit": "...", "license": "CC BY-SA 4.0", "sourceUrl": "..." }
       },
       "course": {
@@ -44,7 +46,15 @@ The research behind the sources is in the product docs (`04-sp-data-mapping-summ
           "scale": "enem",
           "source": { "label": "...", "url": "...", "retrievedAt": "..." },
           "cutoffs": [
-            { "edition": "1-2024", "quota": "AC", "quotaLabel": "Ampla concorrência", "score": 752.40 }
+            {
+              "edition": "1-2024",
+              "metric": "final_cutoff",
+              "callNumber": null,
+              "scholarship": null,
+              "quota": "AC",
+              "quotaLabel": "Ampla concorrência",
+              "score": 752.40
+            }
           ]
         }
       ],
@@ -59,17 +69,21 @@ The research behind the sources is in the product docs (`04-sp-data-mapping-summ
 
 | Rule | Detail |
 |---|---|
-| Missing data | `logo`, `photo` and `curriculum` may be `null`; `admission` may be empty. The UI hides what is missing. There are no fallback values |
+| Missing data | `institution.shortName`, `logo`, `photo`, `course.degree`, `course.shift`, `course.durationYears`, `campus.name` and `curriculum` may be `null`; `admission` may be empty. The UI hides what is missing. There are no fallback values |
 | Sources | Every fact carries its source URL and retrieval date |
 | Scores | `score` is a number; the UI formats it (`752,40`). Cut-offs are ordered oldest edition first |
 | Scales | `scale` is `enem`, `fuvest` or `prouni`. Scores of different scales are never compared. A ProUni score is a scholarship cut-off and is labelled that way |
+| Metrics | `metric` is `final_cutoff`, `first_call_min` or `phase1_min`. Fuvest's `phase1_min` is in points out of 90; the others are out of 1000. A `first_call_min` is labelled as the first call's minimum, never as the cut-off, because later calls lower it. Scores of different metrics are never compared |
+| Calls and scholarships | `callNumber` is set for Fuvest and ENEM-USP lists, otherwise `null`. `scholarship` is `integral` or `parcial` for ProUni, otherwise `null` |
 | Curriculum | The database keeps subjects per term; the book groups them by year |
-| Photos and logos | From Wikimedia Commons, with real author and licence, or `null` |
+| Photos and logos | From Wikimedia Commons, with licence and source, or `null`. A photo also carries its author |
 | Rotation | The API lists the professions with enough real data; the web picks which to show |
 
 ### First ingestion scope
 
-The professions already on the shelf: Psicologia, Medicina, Engenharia, Letras, Filosofia, Economia, Biologia, História, Design.
+The professions already on the shelf: Psicologia, Medicina, Engenharia, Letras, Filosofia, Economia, Biologia, História, Design, Música.
+
+This replaces the product docs' first draft, which had the engine cover every course of the 8 demo institutions, curricula included (owner's decision, 2026-11-17).
 
 | Data | Source | Covers |
 |---|---|---|
@@ -80,7 +94,7 @@ The professions already on the shelf: Psicologia, Medicina, Engenharia, Letras, 
 | Photos and logos | Wikimedia Commons | Where a file exists |
 
 **Out of this scope:**
-- Institutions that block collection: Unicamp, Unesp, FMU, Cruzeiro do Sul, UNICID, Anhanguera. They need permission or a data partnership.
+- Collecting from institutions that block it: Unicamp, Unesp, FMU, Cruzeiro do Sul, UNICID, Anhanguera. Their courses still appear in the books, because they come from the INEP census; their cut-offs and curricula need permission or a data partnership.
 - SISU 2025 and 2026, which need a gov.br login.
 - The other curricula (UFABC, UFSCar, IFSP, São Judas and Anhembi), for a later batch.
 
