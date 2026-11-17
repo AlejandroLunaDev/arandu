@@ -103,3 +103,17 @@ insert into public.sources (adapter, url, label, refresh_interval) values (
   'USP JupiterWeb, cursos do IME',
   interval '1 year'
 );
+
+insert into public.sources (adapter, url, label, refresh_interval) values (
+  'mackenzie_courses',
+  'https://www.mackenzie.br/graduacao',
+  'Mackenzie, cursos de graduação',
+  interval '1 year'
+);
+
+insert into public.sources (adapter, url, label, refresh_interval) values (
+  'fiap_courses',
+  'https://www.fiap.com.br/graduacao/',
+  'FIAP, cursos de graduação',
+  interval '1 year'
+);

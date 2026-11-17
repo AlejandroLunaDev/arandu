@@ -6,10 +6,18 @@ import tempfile
 
 import psycopg
 
-from engine import fetch, inep_census, usp
+from engine import fetch, fiap, inep_census, mackenzie, usp
 
-# Curriculum lists run before their pages: usp_courses registers the pages usp_curriculum reads.
-ADAPTERS = {"inep_census": inep_census, "usp_courses": usp.courses, "usp_curriculum": usp.curriculum}
+# Curriculum lists run before their pages: <x>_courses registers the pages <x>_curriculum reads.
+ADAPTERS = {
+    "inep_census": inep_census,
+    "usp_courses": usp.courses,
+    "usp_curriculum": usp.curriculum,
+    "mackenzie_courses": mackenzie.courses,
+    "mackenzie_curriculum": mackenzie.curriculum,
+    "fiap_courses": fiap.courses,
+    "fiap_curriculum": fiap.curriculum,
+}
 
 
 def run(conn, name):
