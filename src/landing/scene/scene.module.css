@@ -2,13 +2,9 @@
   position: relative;
 }
 
-/* Scroll lengths: the pinned stretch is the height minus one viewport. */
+/* The hero is the whole page for now: one viewport, nothing pinned past it. */
 .hero {
-  height: 150vh;
-}
-
-.step {
-  height: 160vh;
+  height: auto;
 }
 
 .pin {

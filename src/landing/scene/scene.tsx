@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import styles from "./scene.module.css";
 
 type SceneProps = {
-  /** How long the scene stays pinned while the page scrolls: the hero is shorter than a step. */
-  length: "hero" | "step";
+  /** How long the scene stays pinned while the page scrolls. */
+  length: "hero";
   /** Puts the art on the left of the copy on wide screens. */
   flip?: boolean;
   id?: string;

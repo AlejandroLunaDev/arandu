@@ -30,18 +30,11 @@ export function Hero() {
               <span className={`${styles.reka} text-primary`}>Reka</span>
             </h1>
             <p data-reveal className="type-body-lg text-pretty text-text-muted">
-              Um app de orientação vocacional com inteligência artificial, onde o aluno do ensino médio vive
+              Um app de <strong className="text-text">orientação vocacional</strong> com inteligência artificial, onde o aluno do ensino médio vive
               uma carreira antes de escolher.
             </p>
             <div data-reveal className="flex flex-wrap items-center gap-2">
-              <a className="ar-btn ar-btn--primary" href="#como">
-                <svg className="ar-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14" />
-                  <path d="m6 13 6 6 6-6" />
-                </svg>
-                Como funciona
-              </a>
-              <a className="ar-btn ar-btn--ghost" href={GITHUB_URL}>
+              <a className="ar-btn ar-btn--primary" href={GITHUB_URL}>
                 Ver no GitHub
               </a>
             </div>
