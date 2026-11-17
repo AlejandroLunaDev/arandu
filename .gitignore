@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Variable names only, no values
+!.env.example
 
 # vercel
 .vercel
@@ -43,3 +45,34 @@ next-env.d.ts
 # local agent tools
 /.atl/
 /.playwright-mcp/
+
+# --- Data layer (ADR-0003) ---
+
+# Secrets
+*.key
+
+# Monorepo: dependencies and build output inside apps/ and packages/
+node_modules/
+.turbo/
+dist/
+coverage/
+
+# Python (apps/engine)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Engine downloads: raw source documents and samples hold institution content, so they stay local
+apps/engine/data/
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
+
+# OS
+Thumbs.db
