@@ -33,6 +33,13 @@
   --phone-width: 240px;
 }
 
+/* What the app is, read at a glance: a step up from the pitch, in the brand's color. */
+.key {
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--primary);
+}
+
 .pitch {
   display: flex;
   flex-direction: column;

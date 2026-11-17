@@ -9,7 +9,7 @@ const lexend = Lexend({ variable: "--font-lexend", subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Arandu Reka · Orientação vocacional com inteligência artificial",
   description:
-    "Um app de orientação vocacional com inteligência artificial, onde o aluno do ensino médio vive uma carreira antes de escolher.",
+    "Um app de orientação vocacional com inteligência artificial, onde quem quer entrar na universidade vive uma carreira antes de escolher.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

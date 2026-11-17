@@ -30,7 +30,7 @@ export function Hero() {
               <span className={`${styles.reka} text-primary`}>Reka</span>
             </h1>
             <p data-reveal className="type-body-lg text-pretty text-text-muted">
-              Um app de <strong className="text-text">orientação vocacional</strong> com inteligência artificial, onde o aluno do ensino médio vive
+              Um app de <strong className={styles.key}>orientação vocacional</strong> com inteligência artificial, onde quem quer entrar na universidade vive
               uma carreira antes de escolher.
             </p>
             <div data-reveal className="flex flex-wrap items-center gap-2">
