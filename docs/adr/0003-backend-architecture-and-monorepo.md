@@ -8,7 +8,7 @@
 
 The landing will open a book on the shelf for one profession and show real data on the São Paulo institutions that offer it (ADR-0004). Later, the product app reuses that data and adds AI, reports and accounts. Whether the app is a web PWA or mobile is open (owner, 2026-11-17); the product docs' "responsive web" line predates that.
 
-That needs three things the repository does not have: a database, an engine that keeps public data up to date, and an API. Today the repository holds only the Next.js landing, at the root, on npm.
+That needs three things the repository does not have: a database, an engine that keeps public data up to date, and an API. When this was decided, the repository held only the Next.js landing, at the root, on npm.
 
 ## Decisions
 
