@@ -19,7 +19,7 @@ Builds what ADR-0003 and ADR-0004 decide. Each step ends in a reviewable pull re
    4. Curricula: USP, Unifesp, Mackenzie, FIAP.
    5. Commons: photos and logos.
 4. **API.** `GET /professions` (the shelf) and `GET /professions/:slug` (one book), typed by `packages/contracts`.
-5. **Deploy.** Dockerfiles for the API and the engine, their Render services, a migration step per deploy, the engine schedule. The landing stays on Vercel.
+5. **Deploy.** The API on Render (`render.yaml`), the landing on Vercel, the engine's Dockerfile for manual runs. Migrations are applied from the root before merging.
 6. **Landing.** The web squad opens the books against the API.
 
 ## Done when

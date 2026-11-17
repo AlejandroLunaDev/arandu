@@ -34,7 +34,7 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 |---|---|
 | Database | Supabase Postgres. pgvector for the RAG is a later step |
 | API | NestJS is the only door for the web and the app. Neither reads Supabase directly. Responses are typed by `packages/contracts` and validated at runtime with Nest DTOs |
-| Engine | Python, run on a schedule. Python is chosen for parsing PDFs (pdfplumber), OCR (Tesseract) and pages that need JavaScript (Playwright) |
+| Engine | Python, run by hand during the hackathon (see Deploy). Python is chosen for parsing PDFs (pdfplumber), OCR (Tesseract) and pages that need JavaScript (Playwright) |
 | How they talk | Only through the database. The engine writes; the API reads. Neither calls the other |
 | Data processing | The Python standard library, plus SQL in Postgres. The engine loads raw rows into staging tables, and normalization is versioned SQL. pandas is allowed in exploration notebooks only, not in the engine |
 
@@ -47,11 +47,13 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 ### Deploy
 
 - The landing (`apps/web`) stays on Vercel (ADR-0001).
-- The API and the engine run on Render, one service each, built from their own Dockerfiles, in the Virginia region. `render.yaml` at the root declares them; each service rebuilds only when its own paths change.
+- The API runs on Render, built from its Dockerfile, in the Virginia region. `render.yaml` at the root declares it; it rebuilds only when its own paths change.
+- During the hackathon the team runs the engine by hand, from its Docker image, when a source publishes a new edition (owner, 2026-11-17). Its sources change once a year or once per edition, and a Render cron job has no free plan. A scheduled run is decided after the hackathon.
+- UptimeRobot pings the API every 5 minutes so the free instance does not sleep. Render's free plan gives 750 instance hours a month per workspace: enough for one always-on service, not two.
 - Vercel builds `apps/web` (its Root Directory) and skips the build when a commit does not touch the landing or a package it uses.
 - The Supabase project lives in `us-east-1` (N. Virginia), next to Render's Virginia region and Vercel's default function region. Render has no South American region.
 - Services reach the database through Supabase's session pooler (IPv4, port 5432). The direct database host is IPv6-only, and Render services connect out over IPv4 only.
-- Docker also pins the engine's system dependencies (Chromium, Tesseract), so the engine runs the same locally and on Render.
+- Docker also pins the engine's system dependencies (Chromium, Tesseract), so the engine runs the same on every machine.
 
 ### Secrets
 
@@ -66,6 +68,6 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 
 ## Open points
 
-- The Render plan. Free web services sleep after 15 minutes idle; cron jobs (the engine) cost at least $1 a month; a pre-deploy migration step needs a paid plan.
+- The Render plan. Free web services sleep after 15 minutes idle; a cron job costs at least $1 a month; a pre-deploy migration step needs a paid plan.
 - The product front-end platform: web PWA or mobile.
 - Measured latency between the Render, Vercel and Supabase regions: not checked.

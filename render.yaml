@@ -1,5 +1,5 @@
 # Render Blueprint (ADR-0003): the API runs on Render; the landing deploys on Vercel.
-# The engine joins as a cron service once it has an adapter (cron has no free plan).
+# The engine is run by hand during the hackathon, so it has no service here (ADR-0003).
 services:
   - type: web
     name: arandu-api
