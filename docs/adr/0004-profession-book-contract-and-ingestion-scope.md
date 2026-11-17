@@ -100,13 +100,18 @@ The professions already on the shelf: Psicologia, Medicina, Engenharia, Letras, 
 
 ## Consequences
 
-- The hero phone shows mock figures. They are replaced with real data, and its source label names the real source (the MEC Power BI, not "dados abertos do SISU").
+- The hero phone shows mock figures. They are replaced with real data, and its source label links the exact URL the figures come from.
 - Most offerings show no curriculum in this first batch.
 - The 2024 census may list courses that are no longer offered; it has no status column.
 
 ## Open points
 
-- The terms of use of the Power BI, fuvest.br and each institution site: not checked yet. Nothing runs at volume before they are.
+- Terms of use, checked on 2026-11-17 (research, not legal advice). Nothing read forbids taking facts with a citation:
+  - MEC, INEP and gov.br pages are CC BY-ND 3.0, and Decreto 8.777/2016 makes data the federal Executive publishes free to use.
+  - The Power BI report warns that heavy use locks it for a while, so the engine queries it slowly. Microsoft's Power BI terms of service could not be read (HTTP 403).
+  - USP forbids reproducing its portal content without written authorization; JupiterWeb and Fuvest publish no terms. Only facts are taken.
+  - Mackenzie and FIAP publish no terms page. Unifesp's pages returned HTTP 403, so its terms are unread.
+  - Wikimedia allows reuse under each file's licence, crediting the author, and requires bots to send a User-Agent with contact details.
 - How courses map to a profession. The proposal is INEP's CINE label (`NO_CINE_ROTULO`), not yet tested against the shelf's names.
 - The order of offerings inside a book. It must be neutral: no institution pays for placement.
 - How many institutions have a usable photo and logo on Commons.

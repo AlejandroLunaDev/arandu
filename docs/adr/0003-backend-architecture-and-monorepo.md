@@ -45,7 +45,9 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 
 ### Deploy
 
-- Render, one service per app, each built from its own Dockerfile.
+- Render, one service per app, each built from its own Dockerfile, in the Virginia region.
+- The Supabase project lives in `us-east-1` (N. Virginia), next to Render's Virginia region and Vercel's default function region. Render has no South American region.
+- Services reach the database through Supabase's session pooler (IPv4, port 5432). The direct database host is IPv6-only, and Render services connect out over IPv4 only.
 - Docker also pins the engine's system dependencies (Chromium, Tesseract), so the engine runs the same locally and on Render.
 
 ### Secrets
@@ -63,4 +65,4 @@ The repository becomes a Turborepo monorepo on npm workspaces.
 
 - The Render plan, and how a migration step runs before each deploy there: not verified.
 - The product front-end platform: web PWA or mobile.
-- The Supabase project and its credentials: not created yet. The owner creates them.
+- Measured latency between the Render, Vercel and Supabase regions: not checked.

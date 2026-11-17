@@ -4,8 +4,8 @@ Builds what ADR-0003 and ADR-0004 decide. Each step ends in a reviewable pull re
 
 ## Gates (the owner's go-ahead)
 
-- [ ] The Supabase project and its credentials exist.
-- [ ] The terms of use of each source are checked.
+- [x] The Supabase project and its credentials exist (`us-east-1`).
+- [x] The terms of use of each source are checked (ADR-0004, open points).
 - [ ] A live run against real sites is approved.
 
 ## Steps
