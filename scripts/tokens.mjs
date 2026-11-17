@@ -4,9 +4,9 @@
 //   node scripts/tokens.mjs           writes tokens.css
 //   node scripts/tokens.mjs --check   fails when tokens.css is out of date
 //
-// The CSS keeps the design system's variable names (--bg, --text, --primary...), dark by default
-// and light under [data-theme="light"]. It also writes the Tailwind theme: Tailwind's default
-// colors, fonts, type scale, spacing, radii and shadows are switched off, so only token utilities
+// The CSS keeps the design system's variable names (--bg, --text, --primary...), dark by default,
+// light under [data-theme="light"] and lamp under [data-theme="lamp"]. It also writes the Tailwind
+// theme: Tailwind's default colors, fonts, type scale, spacing, radii and shadows are switched off, so only token utilities
 // exist (bg-surface, text-muted, p-3, rounded-card, type-h1...).
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -41,6 +41,11 @@ export function generate(tokens) {
     "",
     '[data-theme="light"] {',
     ...colors.filter((t) => typeof t.value !== "string").map((t) => `  --${t.name}: ${t.value.light.toLowerCase()};`),
+    "}",
+    "",
+    // The lamp theme only overrides the tokens the design system gives a lamp value; the rest stay dark.
+    '[data-theme="lamp"] {',
+    ...colors.filter((t) => t.value.lamp).map((t) => `  --${t.name}: ${t.value.lamp.toLowerCase()};`),
     "}",
     "",
     "@theme {",

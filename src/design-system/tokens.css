@@ -81,8 +81,12 @@
   --text: #09090d;
   --text-muted: #57525f;
   --primary: #6b3fa0;
+  --primary-fill: #6b3fa0;
   --primary-fill-hover: #573383;
   --primary-tint: #f4effa;
+  --on-primary: #f1ebdd;
+  --accent: #d99a32;
+  --on-accent: #09090d;
   --accent-text: #8a5a12;
   --success: #1b7045;
   --warning: #a24f12;
@@ -99,6 +103,32 @@
   --chart-seq-4: #6b3fa0;
   --chart-seq-5: #573383;
   --chart-seq-6: #432765;
+  --ink-950: #09090d;
+  --ink-900: #15131b;
+  --ink-850: #1f1c27;
+  --ink-800: #2e2a38;
+}
+
+[data-theme="lamp"] {
+  --bg: #120d07;
+  --surface: #1e160c;
+  --surface-raised: #2a1f11;
+  --border: #3d2e19;
+  --border-strong: #8a6b3f;
+  --text: #f8e6c4;
+  --text-muted: #c9ab7c;
+  --primary: #e0a845;
+  --primary-fill: #8a5a12;
+  --primary-fill-hover: #a06c1a;
+  --primary-tint: #2a1d0c;
+  --on-primary: #f8e6c4;
+  --accent: #b597dd;
+  --on-accent: #120d07;
+  --accent-text: #c9b0e8;
+  --ink-950: #120d07;
+  --ink-900: #1e160c;
+  --ink-850: #2a1f11;
+  --ink-800: #3d2e19;
 }
 
 @theme {
