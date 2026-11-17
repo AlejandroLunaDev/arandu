@@ -33,6 +33,10 @@
     transform 0.2s ease;
 }
 
+.say [data-untyped] {
+  visibility: hidden;
+}
+
 .say[data-on] {
   opacity: 1;
   transform: translate(-50%, calc(-100% - var(--space-3)));

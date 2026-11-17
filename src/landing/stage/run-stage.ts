@@ -31,17 +31,20 @@ const SHADE_GLOW = 0.8;
 const CONTROLS = "a, button, input, textarea, select, label, iframe";
 /** What he asks the reader, one at a time: the first after SAY_FIRST seconds, then one every SAY_EVERY, for SAY_FOR. */
 const SAYS = [
-  "Oi! Já sabe o que quer fazer depois da escola?",
-  "Não sabe que carreira escolher? Te ajudo a descobrir.",
+  "Oi! Já sabe que carreira quer seguir?",
+  "Não sabe que curso escolher? Te ajudo a descobrir.",
   "Me conta do que você gosta e a gente acha uma carreira.",
   "Quer viver um pedacinho de uma carreira antes de escolher?",
   "Que tal conhecer o dia a dia de uma profissão?",
-  "Escolher uma profissão não precisa ser no escuro.",
+  "Vai fazer o ENEM? Bora achar o curso certo pra você.",
+  "Nunca é tarde pra escolher uma carreira.",
   "Ainda na dúvida? A gente descobre junto.",
 ];
 const SAY_FIRST = 8;
 const SAY_EVERY: [number, number] = [25, 40];
 const SAY_FOR = 10;
+/** Seconds per letter as his words type into the bubble: he says them, they do not just appear. */
+const TYPE = 0.045;
 /** Seconds he purrs after a tap on his head; seconds between two z's while he sleeps. */
 const PURR = 2.4;
 const SNORE = 1.2;
@@ -458,6 +461,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const look = new THREE.Vector3();
   let pS = progress();
   let yawNow = rooms[0].face;
+  let toUser = 0;
   let stride = 0;
   let prevX: number | null = null;
   const sweepFrom = new THREE.Vector3();
@@ -510,6 +514,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   let sayAt = last / 1000 + SAY_FIRST;
   let sayUntil = 0;
   let said = -1;
+  let sayFrom = 0;
+  let typed = -1;
+  // The bubble holds the whole line from the start, the letters still to come hidden, so it never
+  // grows as he talks.
+  const said1 = document.createElement("span");
+  const said2 = document.createElement("span");
+  said2.dataset.untyped = "";
+  bubble?.replaceChildren(said1, said2);
 
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
@@ -561,7 +573,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       r.content.localToWorld(shadowAt.copy(p.pos).setY(p.pos.y - p.lift));
       k = r.k;
       lift = p.lift;
-      yawNow = p.yaw;
+      // While he talks he turns to face you.
+      toUser += ((sayUntil > 0 ? 1 : 0) - toUser) * Math.min(1, dt * 3);
+      yawNow = p.yaw + Math.atan2(Math.sin(-Math.PI / 2 - p.yaw), Math.cos(-Math.PI / 2 - p.yaw)) * toUser;
       stride += p.stride - lifeStride;
       lifeStride = p.stride;
       ({ sit: sitTo, air, leap } = p);
@@ -601,9 +615,11 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     cat.root.rotation.x = TILT;
     cat.yaw.rotation.y = yawNow;
 
-    // What he looks at: his book while he reads, else the pointer while it moves, else around.
+    // What he looks at: his book while he reads, you while he talks, else the pointer while it
+    // moves, else around.
     let gaze: THREE.Vector3 | null = null;
     if (own && p.look) gaze = rooms[life.room].content.localToWorld(look.copy(p.look));
+    else if (sayUntil > 0) gaze = look.set(catAt.x, catAt.y + 0.3 * k, 2000);
     else if (pointer.on && sitNow > 0.5 && t - lastMove < GAZE) gaze = look.set(pointer.x - W / 2, H / 2 - pointer.y, 700);
     cat.update({ sit: sitNow, leap, air, stride, tap: p.tap, lids: purring ? Math.max(p.lids, 0.6) : p.lids, ears: p.ears, hold: p.hold, lie: p.lie, look: gaze }, dt, t);
     // What he carries sits in his mouth, where the pose just put it: its origin is at its bottom.
@@ -653,17 +669,31 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // His bubble: it opens while he sits still in a room, over his head, inside the viewport.
     if (bubble) {
       const sitting = own && sitNow > 0.9 && !life.busy() && life.pose.lie < 0.1 && !book;
-      if (sayUntil > 0 && (t > sayUntil || !sitting)) {
+      const line = SAYS[said] ?? "";
+      const pace = reduce ? 0 : TYPE;
+      // Once he has started a line he finishes it, even if he gets up meanwhile.
+      const done = t - sayFrom >= line.length * pace;
+      if (sayUntil > 0 && (t > sayUntil || (!sitting && done))) {
         delete bubble.dataset.on;
         sayUntil = 0;
         sayAt = t + SAY_EVERY[0] + Math.random() * (SAY_EVERY[1] - SAY_EVERY[0]);
       } else if (sayUntil === 0 && sitting && t > sayAt) {
         said = (said + 1 + Math.floor(Math.random() * (SAYS.length - 1))) % SAYS.length;
-        bubble.textContent = SAYS[said];
+        said1.textContent = "";
+        said2.textContent = SAYS[said];
+        typed = 0;
+        sayFrom = t;
         bubble.dataset.on = "";
-        sayUntil = t + SAY_FOR;
+        sayUntil = t + SAYS[said].length * (reduce ? 0 : TYPE) + SAY_FOR;
       }
       if (sayUntil > 0) {
+        const text = SAYS[said];
+        const n = pace > 0 ? Math.min(text.length, Math.floor((t - sayFrom) / pace)) : text.length;
+        if (n !== typed) {
+          typed = n;
+          said1.textContent = text.slice(0, n);
+          said2.textContent = text.slice(n);
+        }
         const half = bubble.offsetWidth / 2 + 8;
         bubble.style.translate = `${clamp(catAt.x + W / 2, half, W - half).toFixed(1)}px ${(H / 2 - catAt.y - 0.5 * k).toFixed(1)}px`;
       }
