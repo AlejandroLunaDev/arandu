@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(20);
 
 -- Valid rows (ids looked up, since identity sequences survive rollbacks).
 select lives_ok($$insert into sources (adapter, url, label) values ('inep_census', 'https://example.test/inep', 'INEP')$$, 'valid source');
@@ -26,6 +26,22 @@ select throws_ok($$insert into curriculum_subjects (course_id, year, term, name,
 select throws_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, quota_code, quota_label, score, source_id)
   values ((select id from courses where inep_code = 10), 'sisu', 'final_cutoff', 2024, 'AC', 'x', 1001, (select id from sources limit 1))$$, '23514', null, 'score above 1000');
 select throws_ok($$insert into professions (slug, name) values ('Bad Slug', 'x')$$, '23514', null, 'invalid slug');
+
+-- Scholarship on cut-offs and logo licence.
+select lives_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, edition_term, quota_code, quota_label, score, scholarship, source_id)
+  values ((select id from courses where inep_code = 10), 'prouni', 'final_cutoff', 2025, 1, 'AC', 'Ampla concorrência', 700, 'integral', (select id from sources limit 1))$$, 'prouni cut-off with scholarship');
+select throws_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, edition_term, quota_code, quota_label, score, scholarship, source_id)
+  values ((select id from courses where inep_code = 10), 'prouni', 'final_cutoff', 2025, 1, 'AC', 'x', 700, null, (select id from sources limit 1))$$, '23514', null, 'prouni cut-off without scholarship');
+select throws_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, edition_term, quota_code, quota_label, score, scholarship, source_id)
+  values ((select id from courses where inep_code = 10), 'sisu', 'final_cutoff', 2025, 1, 'AC', 'x', 700, 'parcial', (select id from sources limit 1))$$, '23514', null, 'sisu cut-off with scholarship');
+insert into admission_cutoffs (course_id, route, metric, edition_year, edition_term, quota_code, quota_label, score, scholarship, source_id)
+  values ((select id from courses where inep_code = 10), 'prouni', 'final_cutoff', 2023, 1, 'AC', 'x', 700, 'integral', (select id from sources limit 1));
+select lives_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, edition_term, quota_code, quota_label, score, scholarship, source_id)
+  values ((select id from courses where inep_code = 10), 'prouni', 'final_cutoff', 2023, 1, 'AC', 'x', 650, 'parcial', (select id from sources limit 1))$$, 'same prouni cut-off with another scholarship');
+select throws_ok($$insert into institutions (inep_code, name, kind, source_id, logo_url, logo_source_url)
+  values (4, 'X', 'public', (select id from sources limit 1), 'http://l', 'http://s')$$, '23514', null, 'logo without licence');
+select lives_ok($$insert into institutions (inep_code, name, kind, source_id, logo_url, logo_source_url, logo_license)
+  values (5, 'X', 'public', (select id from sources limit 1), 'http://l', 'http://s', 'CC BY 4.0')$$, 'logo with licence');
 
 -- RLS.
 select is(
