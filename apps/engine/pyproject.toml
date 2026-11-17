@@ -3,7 +3,7 @@ name = "engine"
 version = "0.1.0"
 description = "Arandu Reka ingestion engine: fetches public São Paulo higher-education data into Supabase (ADR-0003, ADR-0004)."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["psycopg[binary]==3.3.9"]
 
 [build-system]
 requires = ["hatchling"]
