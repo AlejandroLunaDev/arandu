@@ -1,0 +1,10 @@
+[project]
+name = "engine"
+version = "0.1.0"
+description = "Arandu Reka ingestion engine: fetches public São Paulo higher-education data into Supabase (ADR-0003, ADR-0004)."
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

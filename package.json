@@ -1,34 +1,22 @@
 {
   "name": "arandu-reka",
-  "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.19.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "tokens": "node scripts/tokens.mjs",
-    "tokens:check": "node scripts/tokens.mjs --check",
-    "test": "node --test"
-  },
-  "dependencies": {
-    "@dimforge/rapier3d-compat": "^0.21.0",
-    "gsap": "^3.15.1",
-    "next": "16.4.6",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "three": "^0.187.0"
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:types": "npm run gen --workspace @arandu/db-types",
+    "check": "turbo run build typecheck lint test && npm run test:e2e --workspace @arandu/api && npm run tokens:check --workspace @arandu/web && supabase test db"
   },
   "devDependencies": {
-    "@tailwindcss/turbopack": "4.3.3",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/three": "^0.187.0",
-    "@typescript-eslint/parser": "^8.72.2",
-    "eslint": "^9",
-    "eslint-config-next": "16.4.6",
-    "tailwindcss": "4.3.3",
-    "typescript": "^5"
+    "supabase": "3.2.0",
+    "turbo": "2.11.11"
   }
 }

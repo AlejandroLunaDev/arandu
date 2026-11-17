@@ -10,8 +10,8 @@ Builds what ADR-0003 and ADR-0004 decide. Each step ends in a reviewable pull re
 
 ## Steps
 
-1. **Monorepo skeleton.** Turborepo, `apps/web` (the landing moved, coordinated with the web squad), empty `apps/api`, `apps/engine`, `packages/contracts`, `packages/db-types`.
-2. **Schema.** A local Supabase plus migrations: institutions, campuses, courses, professions, admission cut-offs, curriculum terms and subjects, sources, runs, fetched documents, staging tables.
+1. **Monorepo skeleton** (done). Turborepo, `apps/web` (the landing moved, coordinated with the web squad), empty `apps/api`, `apps/engine`, `packages/contracts`, `packages/db-types`.
+2. **Schema** (catalog done). A local Supabase plus migrations: sources, scrape runs, professions, institutions, courses (with their campus), admission cut-offs, curriculum subjects (with their term). Staging tables arrive with the first adapter.
 3. **Engine, one adapter at a time**, each with fixture tests:
    1. INEP census: offerings and professions.
    2. Power BI: SISU and ProUni cut-offs.
@@ -19,7 +19,7 @@ Builds what ADR-0003 and ADR-0004 decide. Each step ends in a reviewable pull re
    4. Curricula: USP, Unifesp, Mackenzie, FIAP.
    5. Commons: photos and logos.
 4. **API.** `GET /professions` (the shelf) and `GET /professions/:slug` (one book), typed by `packages/contracts`.
-5. **Deploy.** Dockerfiles for the API and the engine, their Render services, a migration step per deploy, the engine schedule. The landing stays on Vercel.
+5. **Deploy.** The API on Render (`render.yaml`), the landing on Vercel, the engine's Dockerfile for manual runs. Migrations are applied from the root before merging.
 6. **Landing.** The web squad opens the books against the API.
 
 ## Done when
