@@ -20,3 +20,11 @@ services:
       # Asked for only when the Blueprint is first created, so it is declared before the API reads it.
       - key: DATABASE_URL
         sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # https://<project-ref>.supabase.co: its Auth signs the tokens the API checks.
+      - key: SUPABASE_URL
+        sync: false
+      # The web app's origins, comma-separated (the Vercel URL).
+      - key: CORS_ORIGINS
+        sync: false

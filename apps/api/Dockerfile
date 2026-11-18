@@ -21,6 +21,8 @@ RUN npm ci --workspace @arandu/api --omit=dev
 
 FROM node:24-alpine
 ENV NODE_ENV=production
+# Render's free instance has 512 MB: a heap cap below it makes V8 collect garbage before the host kills the process.
+ENV NODE_OPTIONS=--max-old-space-size=384
 WORKDIR /repo
 COPY --from=runtime-deps /repo/node_modules node_modules
 COPY --from=build /repo/apps/api/package.json apps/api/
