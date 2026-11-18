@@ -107,14 +107,16 @@ def load_discipline(conn, source_id, parsed):
              where (disciplines.name, disciplines.topics, disciplines.bibliography, disciplines.source_id)
                is distinct from (excluded.name, excluded.topics, excluded.bibliography, excluded.source_id)""",
         (code, name, topics, bibliography, source_id, INEP_CODE)).rowcount
+    grade = f"%codcur={course[1]}&codhab={course[2]}&%"
     linked = conn.execute(
-        """update public.curriculum_subjects s set discipline_id = d.id
-           from public.disciplines d, public.institutions i, public.sources g
-           where i.inep_code = %s and d.institution_id = i.id and d.code = %s
-             and g.adapter = 'usp_curriculum' and g.url like %s and s.source_id = g.id
-             and staging.name_key(s.name) = staging.name_key(d.name)""",
-        (INEP_CODE, code, f"%codcur={course[1]}&codhab={course[2]}&%")).rowcount
-    if not linked:
+        "select coalesce(sum(staging.link_disciplines(id)), 0) from public.sources"
+        " where adapter = 'usp_curriculum' and url like %s", (grade,)).fetchone()[0]
+    if not conn.execute(
+            """select exists (select 1 from public.curriculum_subjects s
+                 join public.sources g on g.id = s.source_id join public.disciplines d on d.id = s.discipline_id
+                 join public.institutions i on i.id = d.institution_id
+               where g.adapter = 'usp_curriculum' and g.url like %s and i.inep_code = %s and d.code = %s)""",
+            (grade, INEP_CODE, code)).fetchone()[0]:
         raise ValueError(f"{code} {name!r} matches no subject of the grade codcur={course[1]} codhab={course[2]}")
     return written + linked
 

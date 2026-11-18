@@ -265,7 +265,7 @@ class LoadDisciplineLocalDbTest(unittest.TestCase):
         self.course_with_subject(8801)
         source = self.source("usp_discipline", self.URL.format(8801))
         self.assertEqual(usp.load_discipline(self.conn, source, self.parsed), 2)  # 1 upsert + 1 link
-        self.assertEqual(usp.load_discipline(self.conn, source, self.parsed), 1)  # the link is re-set, the row is not
+        self.assertEqual(usp.load_discipline(self.conn, source, self.parsed), 0)  # neither the row nor the link changes
         self.assertEqual(self.conn.execute("select count(*) from public.disciplines where code = 'TST1'").fetchone()[0], 1)
 
     def test_raises_when_no_subject_matches(self):

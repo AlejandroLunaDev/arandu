@@ -7,14 +7,14 @@ export type Database = {
           Tables: {
             "admission_cutoffs": {
                   Row: {
-                    "call_number": number | null,"course_id": number,"edition_term": number | null,"edition_year": number,"id": number,"metric": string,"quota_code": string,"quota_label": string,"route": string,"scholarship": string | null,"score": number,"source_id": number
+                    "call_number": number | null,"course_id": number,"edition_term": number | null,"edition_year": number,"id": number,"metric": string,"quota_code": string,"quota_label": string,"route": string,"scholarship": string | null,"score": number,"shift": string | null,"source_id": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "call_number"?: number | null,"course_id": number,"edition_term"?: number | null,"edition_year": number,"id"?: never,"metric": string,"quota_code": string,"quota_label": string,"route": string,"scholarship"?: string | null,"score": number,"source_id": number
+                    "call_number"?: number | null,"course_id": number,"edition_term"?: number | null,"edition_year": number,"id"?: never,"metric": string,"quota_code": string,"quota_label": string,"route": string,"scholarship"?: string | null,"score": number,"shift"?: string | null,"source_id": number
                   }
                   Update: {
-                    "call_number"?: number | null,"course_id"?: number,"edition_term"?: number | null,"edition_year"?: number,"id"?: never,"metric"?: string,"quota_code"?: string,"quota_label"?: string,"route"?: string,"scholarship"?: string | null,"score"?: number,"source_id"?: number
+                    "call_number"?: number | null,"course_id"?: number,"edition_term"?: number | null,"edition_year"?: number,"id"?: never,"metric"?: string,"quota_code"?: string,"quota_label"?: string,"route"?: string,"scholarship"?: string | null,"score"?: number,"shift"?: string | null,"source_id"?: number
                   }
                   Relationships: [
                     {
@@ -29,6 +29,60 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "sources"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"arandu_memories": {
+                  Row: {
+                    "profile": Json | null,"summary": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "profile"?: Json | null,"summary"?: string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "profile"?: Json | null,"summary"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"arandu_messages": {
+                  Row: {
+                    "content": string,"created_at": string,"id": number,"role": string,"session_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "content": string,"created_at"?: string,"id"?: never,"role": string,"session_id": string
+                  }
+                  Update: {
+                    "content"?: string,"created_at"?: string,"id"?: never,"role"?: string,"session_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "arandu_messages_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "arandu_sessions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"arandu_sessions": {
+                  Row: {
+                    "id": string,"kind": string,"profession_slug": string | null,"started_at": string,"summarized_at": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: string,"kind": string,"profession_slug"?: string | null,"started_at"?: string,"summarized_at"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "id"?: string,"kind"?: string,"profession_slug"?: string | null,"started_at"?: string,"summarized_at"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "arandu_sessions_profession_slug_fkey"
+      columns: ["profession_slug"]
+isOneToOne: false
+      referencedRelation: "professions"
+      referencedColumns: ["slug"]
     }
                   ]
                 },"cine_areas": {
@@ -53,17 +107,23 @@ isOneToOne: false
                   ]
                 },"courses": {
                   Row: {
-                    "campus_name": string | null,"city": string,"degree": string | null,"duration_years": number | null,"id": number,"inep_code": number,"institution_id": number,"name": string,"profession_id": number | null,"shift": string | null,"source_id": number
+                    "campus_name": string | null,"campus_source_id": number | null,"city": string,"degree": string | null,"duration_years": number | null,"id": number,"inep_code": number,"institution_id": number,"name": string,"profession_id": number | null,"shift": string | null,"source_id": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "campus_name"?: string | null,"city": string,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code": number,"institution_id": number,"name": string,"profession_id"?: number | null,"shift"?: string | null,"source_id": number
+                    "campus_name"?: string | null,"campus_source_id"?: number | null,"city": string,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code": number,"institution_id": number,"name": string,"profession_id"?: number | null,"shift"?: string | null,"source_id": number
                   }
                   Update: {
-                    "campus_name"?: string | null,"city"?: string,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code"?: number,"institution_id"?: number,"name"?: string,"profession_id"?: number | null,"shift"?: string | null,"source_id"?: number
+                    "campus_name"?: string | null,"campus_source_id"?: number | null,"city"?: string,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code"?: number,"institution_id"?: number,"name"?: string,"profession_id"?: number | null,"shift"?: string | null,"source_id"?: number
                   }
                   Relationships: [
                     {
+      foreignKeyName: "courses_campus_source_id_fkey"
+      columns: ["campus_source_id"]
+isOneToOne: false
+      referencedRelation: "sources"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "courses_institution_id_fkey"
       columns: ["institution_id"]
 isOneToOne: false
@@ -85,14 +145,14 @@ isOneToOne: false
                   ]
                 },"curriculum_subjects": {
                   Row: {
-                    "course_id": number,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"shift": string | null,"source_id": number,"term": number | null,"term_to": number | null,"year": number | null
+                    "course_id": number,"discipline_id": number | null,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"shift": string | null,"source_id": number,"term": number | null,"term_to": number | null,"year": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "course_id": number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"shift"?: string | null,"source_id": number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
+                    "course_id": number,"discipline_id"?: number | null,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"shift"?: string | null,"source_id": number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Update: {
-                    "course_id"?: number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"shift"?: string | null,"source_id"?: number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
+                    "course_id"?: number,"discipline_id"?: number | null,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"shift"?: string | null,"source_id"?: number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Relationships: [
                     {
@@ -102,7 +162,39 @@ isOneToOne: false
       referencedRelation: "courses"
       referencedColumns: ["id"]
     },{
+      foreignKeyName: "curriculum_subjects_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "curriculum_subjects_source_id_fkey"
+      columns: ["source_id"]
+isOneToOne: false
+      referencedRelation: "sources"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"disciplines": {
+                  Row: {
+                    "bibliography": (string)[] | null,"code": string,"id": number,"institution_id": number,"name": string,"source_id": number,"topics": (string)[] | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "bibliography"?: (string)[] | null,"code": string,"id"?: never,"institution_id": number,"name": string,"source_id": number,"topics"?: (string)[] | null
+                  }
+                  Update: {
+                    "bibliography"?: (string)[] | null,"code"?: string,"id"?: never,"institution_id"?: number,"name"?: string,"source_id"?: number,"topics"?: (string)[] | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "disciplines_institution_id_fkey"
+      columns: ["institution_id"]
+isOneToOne: false
+      referencedRelation: "institutions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "disciplines_source_id_fkey"
       columns: ["source_id"]
 isOneToOne: false
       referencedRelation: "sources"
