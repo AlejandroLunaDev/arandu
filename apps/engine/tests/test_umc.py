@@ -2,6 +2,8 @@ import io
 import unittest
 from pathlib import Path
 
+import psycopg
+
 from engine import umc
 
 FIXTURES = Path(__file__).parent / "fixtures" / "umc"
@@ -58,3 +60,26 @@ class ParseCurriculumTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
+
+class LoadCurriculumLocalDbTest(unittest.TestCase):
+    """The mocked tests cannot see the staging table's real conflict key, so run against the local stack."""
+
+    def setUp(self):
+        try:
+            self.conn = psycopg.connect(LOCAL_DB, connect_timeout=2)
+        except psycopg.OperationalError as error:
+            self.skipTest(f"local Supabase is not reachable: {error}")
+        self.addCleanup(self.conn.close)  # never committed: closing rolls everything back
+
+    def test_loading_the_same_page_twice_writes_nothing_the_second_time(self):
+        source_id = self.conn.execute(
+            "insert into sources (adapter, url, label) values ('umc_curriculum', 'https://example.test/umc-regression', 'UMC test') returning id"
+        ).fetchone()[0]
+        parsed = ("Sistemas de Informação", "Mogi das Cruzes", [(None, None, "Algoritmos", None, None)])
+
+        self.assertGreater(umc.load_curriculum(self.conn, source_id, parsed), 0)
+        self.assertEqual(umc.load_curriculum(self.conn, source_id, parsed), 0)

@@ -57,7 +57,7 @@ def load_curriculum(conn, source_id, parsed):
     name, city, subjects = parsed
     written = conn.execute(
         """insert into staging.curriculum_courses (source_id, institution_inep_code, name, city) values (%s, %s, %s, %s)
-           on conflict (source_id) do update
+           on conflict (source_id, city) do update
              set institution_inep_code = excluded.institution_inep_code, name = excluded.name, city = excluded.city
              where (curriculum_courses.institution_inep_code, curriculum_courses.name, curriculum_courses.city)
                is distinct from (excluded.institution_inep_code, excluded.name, excluded.city)""",
