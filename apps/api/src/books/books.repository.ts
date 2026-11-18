@@ -165,10 +165,10 @@ export class BooksRepository {
   }
 
   /**
-   * Up to 3 institutions, one offering each and never repeated (owner's decision): fewer when fewer qualify. An
+   * Up to 3 institutions, one offering each and never repeated (owner's decision): fewer when fewer qualify. Only
+   * institutions with a real photo (owner's decision), filtered before the cap so the next one fills the slot. An
    * offering has a real first-year grade, FIAP's even without one. Neutral order, no institution pays for its place:
-   * the sample's own course first, then FIAP, then institutions with a real image, then alphabetical by institution
-   * and city. An institution's offering is its sample course, else one with a grade, else by city. A course with two
+   * the sample's own course first, then FIAP, then alphabetical by institution and city. An institution's offering is its sample course, else one with a grade, else by city. A course with two
    * grades (one per shift) shows the one holding the sample subjects, else the first.
    */
   private offerings(slug: string): Promise<OfferingRow[]> {
@@ -194,17 +194,19 @@ export class BooksRepository {
       ),
       ranked as (
         select cg.*, c.institution_id, c.city, i.name, i.inep_code = ${FIAP} as fiap,
-          (i.logo_url is not null or i.photo_url is not null) as image,
           row_number() over (partition by c.institution_id order by cg.sample desc, cg.source_id is null, c.city, cg.course_id
           ) as nth
         from course_grade cg
         join public.courses c on c.id = cg.course_id
         join public.institutions i on i.id = c.institution_id
+        -- The same fields the photo object needs: a book never shows a university without its own photo.
+        where i.photo_url is not null and i.photo_credit is not null and i.photo_license is not null
+          and i.photo_source_url is not null
       ),
       picked as (
         select * from ranked
         where nth = 1
-        order by sample desc, fiap desc, image desc, name, city, course_id
+        order by sample desc, fiap desc, name, city, course_id
         -- shortcut: the cap applies before the fetch-date joins, so an unfetched source can leave fewer than 3 (none
         -- today); filter sources here if the engine ever writes facts before stamping their fetch date.
         limit $2
@@ -217,7 +219,7 @@ export class BooksRepository {
       join public.courses c on c.id = k.course_id
       join public.institutions i on i.id = c.institution_id
       join public.sources s on s.id = c.source_id and s.last_fetched_at is not null
-      order by k.sample desc, k.fiap desc, k.image desc, k.name, k.city, k.course_id`,
+      order by k.sample desc, k.fiap desc, k.name, k.city, k.course_id`,
       [slug, BOOK_OFFERINGS],
     );
   }

@@ -37,6 +37,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     short?: string;
     kind?: string;
     logo?: boolean;
+    /** Defaults to true: the book shows only institutions with a full photo. */
     photo?: boolean;
   }
   const institution = async (
@@ -45,14 +46,15 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     base: string,
     o: InstitutionOptions = {},
   ) => {
+    const photo = o.photo ?? true;
     const [row] = await sql<{ id: string }[]>`
       insert into public.institutions (inep_code, name, short_name, kind, source_id, logo_url, logo_license,
         logo_source_url, photo_url, photo_credit, photo_license, photo_source_url)
       values (${inep}, ${name}, ${o.short ?? null}, ${o.kind ?? 'public'}, ${base},
         ${o.logo ? `https://img.test/${name}.png` : null}, ${o.logo ? 'CC0' : null},
         ${o.logo ? `https://commons.test/${name}` : null},
-        ${o.photo ? `https://img.test/${name}.jpg` : null}, ${o.photo ? 'Ana Foto' : null},
-        ${o.photo ? 'CC BY' : null}, ${o.photo ? `https://commons.test/photo-${name}` : null})
+        ${photo ? `https://img.test/${name}.jpg` : null}, ${photo ? 'Ana Foto' : null},
+        ${photo ? 'CC BY' : null}, ${photo ? `https://commons.test/photo-${name}` : null})
       on conflict (inep_code) do nothing
       returning id::text`;
     if (row) {
@@ -162,10 +164,12 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     const beta = await institution(9990003, 'Beta Univ', base, {
       logo: true,
     });
-    const carl = await institution(9990004, 'Carl Univ', base);
-    const echo = await institution(9990005, 'Echo Univ', base, {
-      photo: true,
+    const carl = await institution(9990004, 'Carl Univ', base, {
       kind: 'special',
+    });
+    const echo = await institution(9990005, 'Echo Univ', base);
+    const bare = await institution(9990007, 'Aaa Bare Univ', base, {
+      photo: false,
     });
     const fiap = await institution(FIAP, 'FIAP', base);
 
@@ -197,7 +201,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       return id;
     };
 
-    // Ordering and picking: the sample's course, then FIAP, then images, then names. 3 of 6 institutions.
+    // Ordering and picking: the sample's course, then FIAP, then names. 3 of 5 institutions.
     const main = await profession('t-main', 'Test Main');
     await sampleCourse(main, 'zeta1', {
       city: 'Sao Paulo',
@@ -215,12 +219,23 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     await candidate(main, echo, 'echo1');
     await course(main, fiap, base, 'fiap1');
 
-    const order = await profession('t-order', 'Test Order');
-    await sampleCourse(order);
-    await candidate(order, alpha, 'alpha');
-    await candidate(order, beta, 'beta-logo');
-    await candidate(order, carl, 'carl');
-    await candidate(order, echo, 'echo-photo');
+    // A university without a full photo is not shown; the filter runs before the cap, so the next one fills in.
+    const photo = await profession('t-photo', 'Test Photo');
+    await sampleCourse(photo);
+    await candidate(photo, bare, 'bare-no-photo');
+    await candidate(photo, beta, 'beta-logo');
+    await candidate(photo, carl, 'carl');
+    await candidate(photo, echo, 'echo');
+
+    // Every institution of the profession lacks a photo: no offerings, but the sample still comes.
+    const noPhoto = await profession('t-no-photo', 'Test No Photo');
+    const bareSample = await course(noPhoto, bare, base, 'bare-sample');
+    await subjects(bareSample, base, [
+      firstTerm(
+        'Bare subject',
+        await discipline(bare, 'Bare disc', ['B'], base),
+      ),
+    ]);
 
     const byName = await profession('t-name', 'Test Name');
     await sampleCourse(byName);
@@ -489,7 +504,8 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-grade',
         't-main',
         't-name',
-        't-order',
+        't-no-photo',
+        't-photo',
         't-pool-term-null',
         't-sample',
         't-sample-cap',
@@ -544,20 +560,56 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   });
 
   describe('offerings', () => {
-    it('caps at BOOK_OFFERINGS and puts the sample course, then FIAP, then an institution with an image first', async () => {
+    it('caps at BOOK_OFFERINGS and puts the sample course, then FIAP, then institutions by name', async () => {
       const result = await book('t-main');
 
       expect(BOOK_OFFERINGS).toBe(3);
-      expect(names(result)).toEqual(['zeta1', 'fiap1', 'beta1']);
+      expect(names(result)).toEqual(['zeta1', 'fiap1', 'alpha1']);
     });
 
-    it('ranks institutions with a logo or photo before plain ones, then by name', async () => {
-      expect(names(await book('t-order'))).toEqual([
-        'sample',
-        'beta-logo',
-        'echo-photo',
-      ]);
+    it('orders by institution name after the sample course, ignoring logos', async () => {
       expect(names(await book('t-name'))).toEqual(['sample', 'alpha', 'carl']);
+    });
+
+    it('leaves out an institution without a photo and lets the next one with a photo fill the cap', async () => {
+      const result = await book('t-photo');
+
+      // Without the filter this would be sample, bare-no-photo, beta-logo.
+      expect(names(result)).toEqual(['sample', 'beta-logo', 'carl']);
+      expect(result?.offerings.map((o) => o.institution.photo)).not.toContain(
+        null,
+      );
+    });
+
+    it('does not pin or show FIAP without a photo, and the next institution takes its place', async () => {
+      const [saved] = await sql<
+        {
+          photo_url: string;
+          photo_credit: string;
+          photo_license: string;
+          photo_source_url: string;
+        }[]
+      >`select photo_url, photo_credit, photo_license, photo_source_url from public.institutions
+        where inep_code = ${FIAP}`;
+      await sql`update public.institutions set photo_url = null, photo_credit = null, photo_license = null,
+        photo_source_url = null where inep_code = ${FIAP}`;
+      try {
+        expect(names(await book('t-main'))).toEqual([
+          'zeta1',
+          'alpha1',
+          'beta1',
+        ]);
+        expect(names(await book('t-fiap-empty'))).toEqual(['sample']);
+      } finally {
+        await sql`update public.institutions set ${sql(saved)} where inep_code = ${FIAP}`;
+      }
+    });
+
+    it('answers a book with offerings [] and its sample when no institution of the profession has a photo', async () => {
+      const result = await book('t-no-photo');
+
+      expect(result?.offerings).toEqual([]);
+      expect(result?.sample.map((s) => s.name)).toEqual(['Bare disc']);
     });
 
     it('never repeats an institution: its second campus is left out, by city', async () => {
@@ -610,7 +662,12 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
           shortName: 'ZU',
           kind: 'public',
           logo: null,
-          photo: null,
+          photo: {
+            url: 'https://img.test/Zeta Univ.jpg',
+            credit: 'Ana Foto',
+            license: 'CC BY',
+            sourceUrl: 'https://commons.test/photo-Zeta Univ',
+          },
         },
         course: {
           name: 'zeta1',
@@ -637,23 +694,21 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
 
     it('gives a logo or photo only with its full attribution, and null otherwise', async () => {
-      const [, , beta] = (await book('t-main'))?.offerings ?? [];
-      const echo = (await book('t-order'))?.offerings[2];
+      const [, beta, carl] = (await book('t-photo'))?.offerings ?? [];
 
       expect(beta.institution.logo).toEqual({
         url: 'https://img.test/Beta Univ.png',
         license: 'CC0',
         sourceUrl: 'https://commons.test/Beta Univ',
       });
-      expect(beta.institution.photo).toBeNull();
-      expect(echo?.institution.logo).toBeNull();
-      expect(echo?.institution.photo).toEqual({
-        url: 'https://img.test/Echo Univ.jpg',
+      expect(carl.institution.logo).toBeNull();
+      expect(carl.institution.photo).toEqual({
+        url: 'https://img.test/Carl Univ.jpg',
         credit: 'Ana Foto',
         license: 'CC BY',
-        sourceUrl: 'https://commons.test/photo-Echo Univ',
+        sourceUrl: 'https://commons.test/photo-Carl Univ',
       });
-      expect(echo?.institution.kind).toBe('special');
+      expect(carl.institution.kind).toBe('special');
     });
 
     it('has no admission cut-offs in any offering', async () => {
