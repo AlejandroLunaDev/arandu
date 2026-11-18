@@ -63,4 +63,10 @@ def load(conn, source_id, parsed):
             with cur.copy(f"copy staging.{table} ({', '.join(columns).lower()}) from stdin") as copy:
                 for row in rows:
                     copy.write_row(row)
-    return conn.execute("select staging.normalize_inep_census(%s)", (source_id,)).fetchone()[0]
+    changed = conn.execute("select staging.normalize_inep_census(%s)", (source_id,)).fetchone()[0]
+    # Curricula link to census courses, so re-link every staged page: unchanged pages are not re-read by their adapter.
+    relinked = conn.execute(
+        "select coalesce(sum(staging.normalize_curriculum(source_id)), 0)"
+        " from (select distinct source_id from staging.curriculum_courses) pages"
+    ).fetchone()[0]
+    return changed + relinked

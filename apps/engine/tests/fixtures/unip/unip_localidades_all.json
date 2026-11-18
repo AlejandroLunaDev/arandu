@@ -1,0 +1,37 @@
+[
+ {
+  "cidade": "SÃO PAULO",
+  "uf": "SP",
+  "ensino": "PRESENCIAL; EAD"
+ },
+ {
+  "cidade": "SÃO PAULO",
+  "uf": "SP",
+  "ensino": "PRESENCIAL; EAD"
+ },
+ {
+  "cidade": "CAMPINAS",
+  "uf": "SP",
+  "ensino": "PRESENCIAL; EAD"
+ },
+ {
+  "cidade": "SANTOS",
+  "uf": "SP",
+  "ensino": "PRESENCIAL; EAD"
+ },
+ {
+  "cidade": "BAURU",
+  "uf": "SP",
+  "ensino": "EAD"
+ },
+ {
+  "cidade": "BRASÍLIA",
+  "uf": "DF",
+  "ensino": "PRESENCIAL; EAD"
+ },
+ {
+  "cidade": "GOIÂNIA",
+  "uf": "GO",
+  "ensino": "PRESENCIAL; EAD"
+ }
+]
