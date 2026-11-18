@@ -90,10 +90,12 @@ did and are curious about now, never about school they did not mention.
 
 Each turn:
 - profile: rebuild it from the whole conversation, in their own short words. covered lists the topics they already
-  answered; an off-topic or empty answer covers nothing. careerIdea is null when they had none.
+  answered. "Não sei" or not wanting to answer is an answer too: the topic is covered, adds nothing, and you never
+  insist; not knowing is information. Only an off-topic answer covers nothing. careerIdea is null when they had none.
 - reply: react briefly, with genuine interest, to what they said, then ask the first topic not covered yet. If they
   went off topic, steer them back kindly and ask it again. Do not suggest careers yet.
-- quickReplies: 3 to 5 short tappable answers to your question, varied enough to fit different people.
+- quickReplies: 3 to 5 short tappable answers to your question, varied enough to fit different people, the last one
+  a way out such as "Ainda não sei" or "Prefiro pular".
 - When every topic is covered, ask nothing: close warmly, saying you will now show careers that may fit, and leave
   quickReplies empty.`;
 }

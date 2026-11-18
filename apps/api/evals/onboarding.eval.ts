@@ -129,6 +129,39 @@ const turnCases: TurnCase[] = [
     ],
   },
   {
+    id: 'skips-admired',
+    messages: [
+      welcome,
+      user(personas.teen),
+      arandu(
+        'Que bom que você quer pensar nisso! Quais matérias você mais gosta?',
+      ),
+      user('Biologia e artes.'),
+      arandu('E o que é mais difícil ou chato para você?'),
+      user('Matemática.'),
+      arandu('O que você gosta de fazer quando ninguém te pede nada?'),
+      user('Desenhar.'),
+      arandu(
+        'Você prefere lidar com pessoas ou com coisas, com dados ou com ideias?',
+      ),
+      user('Com coisas e ideias.'),
+      arandu('Tem alguém, real ou de uma história, que você admira?'),
+      user('Não sei, prefiro não responder essa.'),
+    ],
+    covers: [
+      'situation',
+      'likedSubjects',
+      'hardSubjects',
+      'interests',
+      'workStyle',
+      'admired',
+    ],
+    doesNotCover: ['careerIdea'],
+    judge: [
+      'Accepts not answering without insisting or asking again whom they admire, and moves on to whether they had a career in mind.',
+    ],
+  },
+  {
     id: 'last-answer-closes',
     messages: [
       welcome,
