@@ -1,4 +1,4 @@
-import type { Book, BookSummary } from '@arandu/contracts';
+import type { Book, BookSummary, OwnBook } from '@arandu/contracts';
 import {
   Controller,
   Get,
@@ -10,6 +10,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { Public } from '../auth/public.decorator.js';
 import { BooksRepository } from './books.repository.js';
+
+const OWN_BOOKS: readonly OwnBook['book'][] = ['produto', 'solucao'];
 
 const slug = z
   .string()
@@ -33,6 +35,15 @@ export class BooksController {
   @Header('Cache-Control', CACHE)
   list(): Promise<BookSummary[]> {
     return this.books.list();
+  }
+
+  /** Two segments, so it never meets :slug. Before it anyway: Nest matches routes in order. */
+  @Get('own/:book')
+  @Header('Cache-Control', CACHE)
+  ownBook(@Param('book') book: string): Promise<OwnBook> {
+    if (!OWN_BOOKS.includes(book as OwnBook['book']))
+      throw new NotFoundException(`No own book "${book}"`);
+    return this.books.ownBook(book as OwnBook['book']);
   }
 
   @Get(':slug')

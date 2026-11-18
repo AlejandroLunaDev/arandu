@@ -105,6 +105,22 @@ export interface BookSummary {
   offeringCount: number;
 }
 
+/** One page of the landing's own books: a figure and what it means. */
+export interface StoryFact {
+  /** "1 em 4", "7.370.879", or a heading. */
+  figure: string;
+  text: string;
+  /** Null for Arandu's own statement. `url` is null for a count of Arandu's own database, which has no one page. */
+  source: { label: string; url: string | null } | null;
+}
+
+/** GET /books/own/:book: the landing's own books, "Solução" (the problem) and "Produto" (what Arandu brings). */
+export interface OwnBook {
+  book: "produto" | "solucao";
+  /** In page order. */
+  facts: StoryFact[];
+}
+
 /** One turn of the conversation with Arandu. */
 export interface ChatMessage {
   role: "user" | "assistant";

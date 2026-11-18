@@ -33,11 +33,15 @@ describe('Books HTTP', () => {
   const repository = {
     list: vi.fn(),
     book: vi.fn(),
+    ownBook: vi.fn(),
   };
 
   beforeEach(async () => {
     repository.list.mockReset().mockResolvedValue([]);
     repository.book.mockReset().mockResolvedValue(book);
+    repository.ownBook
+      .mockReset()
+      .mockImplementation(async (b: string) => ({ book: b, facts: [] }));
     const moduleRef = await Test.createTestingModule({
       // The same limits, guard order and pipe as AppModule, with no sign-in at all.
       imports: [RateLimitModule, BooksModule],
@@ -128,11 +132,46 @@ describe('Books HTTP', () => {
     });
   });
 
+  describe('GET /books/own/:book', () => {
+    it.each(['produto', 'solucao'])(
+      'delegates %s to the repository',
+      async (b) => {
+        const res = await get(`/books/own/${b}`).expect(200);
+
+        expect(res.body).toEqual({ book: b, facts: [] });
+        expect(repository.ownBook).toHaveBeenCalledWith(b);
+      },
+    );
+
+    it('does not reach the :slug handler', async () => {
+      await get('/books/own/produto').expect(200);
+
+      expect(repository.book).not.toHaveBeenCalled();
+    });
+
+    it('is cached for six hours', async () => {
+      const res = await get('/books/own/solucao').expect(200);
+
+      expect(res.headers['cache-control']).toBe('public, max-age=21600');
+    });
+
+    it.each(['outro', 'direito', 'Produto', 'produto-2'])(
+      'answers 404 for the unknown book %s without querying',
+      async (b) => {
+        const res = await get(`/books/own/${b}`).expect(404);
+
+        expect(res.body.message).toBe(`No own book "${b}"`);
+        expect(repository.ownBook).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('rate limit', () => {
     it('does not limit the shelf (25 calls in a row) while another route still gets 429', async () => {
       for (let i = 0; i < 25; i++) {
         await get('/books').expect(200);
         await get('/books/direito').expect(200);
+        await get('/books/own/produto').expect(200);
       }
 
       for (let i = 0; i < 20; i++) await get('/ping').expect(200);

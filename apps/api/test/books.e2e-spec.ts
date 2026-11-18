@@ -26,6 +26,9 @@ describe('Books (e2e)', () => {
       .overrideProvider(BooksRepository)
       .useValue({
         list: vi.fn().mockResolvedValue([]),
+        ownBook: vi
+          .fn()
+          .mockImplementation(async (b: string) => ({ book: b, facts: [] })),
         book: vi
           .fn()
           .mockImplementation(async (slug: string) =>
@@ -55,6 +58,16 @@ describe('Books (e2e)', () => {
   it('GET /books/:slug answers 404 and 400 without a token', async () => {
     await request(app.getHttpServer()).get('/books/outro').expect(404);
     await request(app.getHttpServer()).get('/books/Invalid_Slug').expect(400);
+  });
+
+  it('GET /books/own/:book is public and cached, 404 for an unknown book', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/books/own/produto')
+      .expect(200);
+
+    expect(res.body).toEqual({ book: 'produto', facts: [] });
+    expect(res.headers['cache-control']).toBe('public, max-age=21600');
+    await request(app.getHttpServer()).get('/books/own/xyz').expect(404);
   });
 
   it('is not rate limited: 25 calls in a row from one IP never get 429', async () => {

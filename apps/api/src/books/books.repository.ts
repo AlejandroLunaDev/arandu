@@ -2,6 +2,7 @@ import type {
   Book,
   BookSummary,
   Offering,
+  OwnBook,
   SampleSubject,
   Source,
 } from '@arandu/contracts';
@@ -246,5 +247,32 @@ export class BooksRepository {
       institution,
       source: source(row),
     }));
+  }
+
+  /** A landing's own book, its facts in page order. Only an https link is served: the page renders it as a link. */
+  async ownBook(book: OwnBook['book']): Promise<OwnBook> {
+    const rows = await this.sql<
+      {
+        figure: string;
+        text: string;
+        source_label: string | null;
+        source_url: string | null;
+      }[]
+    >`select figure, text, source_label, source_url from public.story_facts where book = ${book} order by position`;
+    return {
+      book,
+      facts: rows.map((row) => ({
+        figure: row.figure,
+        text: row.text,
+        source: row.source_label
+          ? {
+              label: row.source_label,
+              url: row.source_url?.startsWith('https://')
+                ? row.source_url
+                : null,
+            }
+          : null,
+      })),
+    };
   }
 }
