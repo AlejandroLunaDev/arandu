@@ -6,7 +6,7 @@ import tempfile
 
 import psycopg
 
-from engine import anima, fetch, fiap, ifsp, inep_census, mackenzie, mec_powerbi, ufabc, ufscar, umc, unifesp, unip, usp
+from engine import anima, enem_usp, fetch, fiap, ifsp, inep_census, mackenzie, mec_powerbi, ufabc, ufscar, umc, unifesp, unip, usp
 
 # Run order for 'all': each list adapter comes before the level it registers (<x>_courses before <x>_curriculum).
 ADAPTERS = {
@@ -14,6 +14,7 @@ ADAPTERS = {
     "mec_powerbi": mec_powerbi,  # names each course's campus, which Ânima's unit matrices link through
     "usp_courses": usp.courses,
     "usp_curriculum": usp.curriculum,
+    "enem_usp": enem_usp,  # links through the Júpiter pages usp_curriculum registers
     "mackenzie_courses": mackenzie.courses,
     "mackenzie_curriculum": mackenzie.curriculum,
     "fiap_courses": fiap.courses,

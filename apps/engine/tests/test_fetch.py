@@ -98,6 +98,16 @@ class FetchTest(unittest.TestCase):
             fetch.download("http://x/q", BytesIO())
         self.assertEqual(urlopen.call_args.args[0].get_method(), "GET")
 
+    def test_requests_use_the_tls_context_with_certifi_roots(self):
+        response = mock.MagicMock(status=200, length=0, read=mock.Mock(side_effect=[b""]),
+                                  __enter__=lambda self: self, __exit__=lambda *a: None)
+        with mock.patch.object(fetch, "allowed", return_value=True),                 mock.patch.object(fetch.urllib.request, "urlopen", return_value=response) as urlopen:
+            fetch.download("https://x/q", BytesIO())
+        self.assertIs(urlopen.call_args.kwargs["context"], fetch._TLS)
+        names = {v for cert in fetch._TLS.get_ca_certs() for rdn in cert["subject"] for k, v in rdn if k == "commonName"}
+        self.assertIn("Actalis Authentication Root CA", names)  # fuvest.br's root, which Windows loads only on demand
+        self.assertGreater(len(fetch._TLS.get_ca_certs()), len(fetch.ssl.create_default_context().get_ca_certs()))
+
     def test_missing_robots_txt_means_allowed(self):
         base, _ = self.serve({"/robots.txt": [(404, b"")]})
         self.assertTrue(fetch.allowed(f"{base}/f.zip"))

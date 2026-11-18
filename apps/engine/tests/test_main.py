@@ -150,7 +150,7 @@ class MainTest(unittest.TestCase):
                               ("unip_courses", "unip_units"), ("unip_units", "unip_curriculum"), ("ufabc_courses", "ufabc_course_page"),
                               ("ufabc_course_page", "ufabc_curriculum"), ("ufscar_courses", "ufscar_course"),
                               ("ufscar_course", "ufscar_campus"), ("ufscar_campus", "ufscar_curriculum"),
-                              ("umc_courses", "umc_curriculum"), ("ifsp_courses", "ifsp_curriculum")):
+                              ("umc_courses", "umc_curriculum"), ("ifsp_courses", "ifsp_curriculum"), ("usp_curriculum", "enem_usp")):
             self.assertLess(order[first], order[second], f"{first} must run before {second}")
 
 

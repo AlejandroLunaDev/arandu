@@ -2,17 +2,24 @@
 
 import hashlib
 import http.client
+import ssl
 import time
 import urllib.error
 import urllib.request
 import urllib.robotparser
 from urllib.parse import urlsplit
 
+import certifi
+
 USER_AGENT = "AranduRekaEngine/0.1 (+https://github.com/AlejandroLunaDev/arandu-reka)"
 MIN_INTERVAL = 1.5  # seconds between requests to one host
 RETRY_STATUSES = {429, 503}
 MAX_ATTEMPTS = 5
 TRANSIENT = (urllib.error.URLError, ConnectionError, TimeoutError)  # resets and timeouts: worth another try
+
+# The system's roots plus Mozilla's: Windows loads some roots only on demand, so Python misses them (fuvest.br's Actalis).
+_TLS = ssl.create_default_context()
+_TLS.load_verify_locations(certifi.where())
 
 _last_request: dict[str, float] = {}
 _robots: dict[str, urllib.robotparser.RobotFileParser | bool] = {}  # per host, read once per run
@@ -27,7 +34,7 @@ def _open(url, data=None, headers=None):
         _last_request[host] = time.monotonic()
         try:
             request = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
-            return urllib.request.urlopen(request, timeout=60)
+            return urllib.request.urlopen(request, timeout=60, context=_TLS)
         except urllib.error.HTTPError as error:
             if error.code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS - 1:
                 raise
