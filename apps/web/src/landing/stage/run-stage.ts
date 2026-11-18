@@ -1,7 +1,9 @@
+import type { BookSummary } from "@arandu/contracts";
 import { gsap } from "gsap";
 import * as THREE from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { BOOK_EVENT, getBook, listBooks, openHeight, SHUT_EVENT, TURN, TURN_EVENT, type OpenedBook } from "../book/book-data";
 import { makeCat } from "./cat";
 import { CARRY, HELD_SCALE, makeLife, OPEN_HEIGHT, openTo, SHUT } from "./cat-life";
 import { tokenColor } from "./palette";
@@ -48,6 +50,8 @@ const TYPE = 0.045;
 /** Seconds he purrs after a tap on his head; seconds between two z's while he sleeps. */
 const PURR = 2.4;
 const SNORE = 1.2;
+/** Seconds between two books on the shelf changing title. */
+const ROTATE = 9;
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -316,15 +320,15 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const push = new THREE.Vector3();
   const onDown = (e: PointerEvent) => {
     lastInput = performance.now() / 1000;
+    const target = e.target instanceof Element ? e.target : null;
     if (book) {
-      shutBook();
+      if (!target?.closest("[data-pages]")) shutBook();
       return;
     }
     if (e.pointerType === "mouse") {
       lastMove = lastInput;
       Object.assign(pointer, { x: e.clientX, y: e.clientY, on: true });
     }
-    const target = e.target instanceof Element ? e.target : null;
     if (!target?.closest(CONTROLS) && overCat(e.clientX, e.clientY)) {
       // On his head the tap is a stroke: he purrs. Anywhere else it startles him.
       const head = headOnScreen();
@@ -384,41 +388,56 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const TAP_GAP = 300;
   /** How far (rad) each half stands off lying flat once it is open: a book held, not one pressed flat. */
   const LEAN = 0.06;
+  /** How far (rad) the open book tips back, its top away from you: a turning leaf rises into view. */
+  const TIP = 0.3;
+  const X = new THREE.Vector3(1, 0, 0);
   const Y = new THREE.Vector3(0, 1, 0);
   let taps: { prop: THREE.Object3D; n: number; timer: number } | null = null;
   let book: gsap.core.Timeline | null = null;
+  /** The open copy on screen, and its leaf's turn under way. */
+  let shown: THREE.Object3D | null = null;
+  let leafTurn: gsap.core.Tween | null = null;
   const openBook = (i: number, prop: THREE.Object3D) => {
     if (book || !worlds[i].take(prop)) return;
     const open = kit.open(prop);
     const box = new THREE.Box3().setFromObject(prop);
     const from = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
     const s0 = (box.max.y - box.min.y) / OPEN_HEIGHT;
-    // Open, it spreads 1.4 times as wide as it is tall: half the screen's height, never past its width.
-    const height = Math.min(H * 0.5, (W * 0.7) / 1.4);
+    // Open, it spreads 1.4 times as wide as it is tall; its pages (book-pages.tsx) take the same size.
+    const height = openHeight(W, H);
     const s1 = height / OPEN_HEIGHT;
     // Its origin is the foot of the spine: shut, the cover reaches right of it; open, it is the middle.
     const shutAt = new THREE.Vector3(-0.14 * s1, -height / 2, 600);
     const openAt = new THREE.Vector3(0, -height / 2, 600);
     const spine = new THREE.Quaternion().setFromAxisAngle(Y, Math.PI);
     const cover = new THREE.Quaternion().setFromAxisAngle(Y, Math.PI / 2);
-    const pages = new THREE.Quaternion();
+    const pages = new THREE.Quaternion().setFromAxisAngle(X, -TIP);
     const s = { fly: 0, open: 0 };
     const apply = () => {
       open.position.lerpVectors(from, shutAt, s.fly).lerp(openAt, s.open);
       open.position.y += 0.15 * height * Math.sin(Math.PI * s.fly);
       open.quaternion.slerpQuaternions(spine, cover, s.fly).slerp(pages, s.open);
       open.scale.setScalar(s0 + (s1 - s0) * s.fly);
+      // Tipped back, it would look shorter: stretched as much, its pages stay the size of their print.
+      open.scale.y /= Math.cos(TIP * s.open);
       openTo(open, SHUT + (LEAN - SHUT) * s.open);
     };
     prop.visible = false;
     scene.add(open);
+    shown = open;
     apply();
     const pace = reduce ? 0.01 : 1;
     book = gsap
       .timeline({
         onUpdate: apply,
+        onComplete: () => {
+          const title = String(prop.userData.career ?? "");
+          const opened: OpenedBook = { title, slug: prop.userData.slug ?? null, research: !!prop.userData.research };
+          dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: opened }));
+        },
         onReverseComplete: () => {
           scene.remove(open);
+          shown = null;
           prop.visible = true;
           worlds[i].restore(prop);
           book = null;
@@ -427,8 +446,70 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       .to(s, { fly: 1, duration: 0.7 * pace, ease: "power2.inOut" })
       .to(s, { open: 1, duration: 0.6 * pace, ease: "power2.out" });
   };
-  const shutBook = () => book?.reverse();
+  const shutBook = () => {
+    if (!book) return;
+    dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: null }));
+    leafTurn?.kill();
+    book.reverse();
+  };
+  // The page asks for a turn: the leaf lifts off the right half and lies down on the left, or back.
+  // Done, it is back on the right, unseen: both halves are blank paper under the page's print.
+  const onTurn = (e: Event) => {
+    const leaf = shown?.getObjectByName("BookOpenLeaf");
+    if (!leaf || !book || book.reversed() || book.progress() < 1) return;
+    const forward = (e as CustomEvent<number>).detail > 0;
+    const flat = -LEAN;
+    const over = LEAN - Math.PI;
+    leafTurn?.kill();
+    leafTurn = gsap.fromTo(
+      leaf.rotation,
+      { y: forward ? flat : over },
+      { y: forward ? over : flat, duration: TURN * (reduce ? 0.01 : 1), ease: "power2.inOut", onComplete: () => void (leaf.rotation.y = flat) },
+    );
+  };
+  addEventListener(TURN_EVENT, onTurn);
   addEventListener("pointerdown", onDown);
+  addEventListener(SHUT_EVENT, shutBook);
+
+  // The shelf's titles are professions from the API that have something to show. A title the API
+  // lists keeps its book; the rest take one of its professions, and every ROTATE seconds one book
+  // on its shelf changes to another. The research book never changes; one in a paw or open waits.
+  const shelved = rooms.flatMap((r) => r.props.map((p) => p.object)).filter((o) => o.userData.career && !o.userData.research);
+  const title = (o: THREE.Object3D, b: BookSummary) => {
+    kit.retitle(o, b.profession.name);
+    o.userData.slug = b.profession.slug;
+    // Fetched now, so the book opens with its pages already filled.
+    getBook(b.profession.slug).catch(() => {});
+    for (const r of rooms) for (const read of r.reads) if (read.object === o) kit.wear(read.open, o);
+  };
+  let rotation = 0;
+  listBooks()
+    .then((pool) => {
+      if (!live || pool.length === 0) return;
+      const named = new Map(pool.map((b) => [b.profession.name, b]));
+      const spare = () => {
+        const on = new Set(shelved.map((o) => o.userData.slug));
+        const free = pool.filter((b) => !on.has(b.profession.slug));
+        return free[Math.floor(Math.random() * free.length)];
+      };
+      for (const o of shelved) {
+        const same = named.get(o.userData.career);
+        if (!same) continue;
+        o.userData.slug = same.profession.slug;
+        getBook(same.profession.slug).catch(() => {});
+      }
+      for (const o of shelved) {
+        const next = !o.userData.slug && spare();
+        if (next) title(o, next);
+      }
+      rotation = window.setInterval(() => {
+        const ready = shelved.filter((o) => o.visible && o !== life.held);
+        const o = ready[Math.floor(Math.random() * ready.length)];
+        const next = o && spare();
+        if (next) title(o, next);
+      }, ROTATE * 1000);
+    })
+    .catch((error: unknown) => console.warn("The shelf keeps its own titles:", error));
 
   // The yarn in the pointer's hold follows it; let go, it flies, and he goes after it.
   let holding: { i: number; prop: THREE.Object3D } | null = null;
@@ -719,6 +800,11 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     removeEventListener("pointerdown", onDown);
     book?.kill();
     clearTimeout(taps?.timer);
+    clearInterval(rotation);
+    removeEventListener(SHUT_EVENT, shutBook);
+    removeEventListener(TURN_EVENT, onTurn);
+    leafTurn?.kill();
+    dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: null }));
     removeEventListener("pointermove", onDrag);
     removeEventListener("pointerup", onUp);
     removeEventListener("pointercancel", onUp);

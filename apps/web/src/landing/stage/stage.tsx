@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { BookPages } from "../book/book-pages";
 import styles from "./stage.module.css";
 
 // The 3D layer over the landing. three.js loads in its own chunk, after the page is up, so the
@@ -27,10 +28,14 @@ export function Stage() {
     };
   }, []);
 
-  // The cat's speech bubble: run-stage fills it, opens it and keeps it over his head.
+  // The cat's speech bubble: run-stage fills it, opens it and keeps it over his head. The open book's
+  // pages sit outside the hidden layer: they are read and their buttons are pressed.
   return (
-    <div ref={host} className={styles.stage} aria-hidden="true">
-      <p data-say className={`${styles.say} type-small`} />
-    </div>
+    <>
+      <div ref={host} className={styles.stage} aria-hidden="true">
+        <p data-say className={`${styles.say} type-small`} />
+      </div>
+      <BookPages />
+    </>
   );
 }

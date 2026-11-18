@@ -71,8 +71,12 @@ export type Kit = {
   make(name: PropName): THREE.Object3D;
   /** A book with a degree course for title, written down its spine and across its covers. */
   book(name: BookName, look: BookLook, career: string): THREE.Object3D;
+  /** Gives a dressed book a new title, on the same cover; its old print is freed. */
+  retitle(book: THREE.Object3D, career: string): void;
   /** A book that opens (BookOpen), in the cover and spine of a dressed book. */
   open(book: THREE.Object3D): THREE.Object3D;
+  /** Puts an open copy back in the cover and spine its dressed book wears now. */
+  wear(open: THREE.Object3D, book: THREE.Object3D): void;
   /** Width (x), height (y) and depth (z) of a prop, in metres. */
   size(name: PropName): THREE.Vector3;
   /** The colliders of a prop. A shelf's is its plank alone. */
@@ -183,6 +187,7 @@ export function makeKit(gltf: GLTF): Kit {
     map.flipY = false;
     map.anisotropy = 4;
     const material = new THREE.MeshStandardMaterial({ map, roughness: 0.6 });
+    material.userData.print = true;
     owned.push(map, material);
     return material;
   };
@@ -229,33 +234,62 @@ export function makeKit(gltf: GLTF): Kit {
     return { spine, covers };
   };
 
-  const book = (name: BookName, look: BookLook, career: string) => {
-    const o = make(name);
-    const d = dress(name, look, career);
+  const clothe = (o: THREE.Object3D, d: { spine: THREE.Material; covers: THREE.Material }) =>
     o.traverse((m) => {
       if (!(m instanceof THREE.Mesh)) return;
       if (m.material.name === "BookCover") m.material = d.covers;
       if (m.material.name === "BookSpine") m.material = d.spine;
     });
+
+  const book = (name: BookName, look: BookLook, career: string) => {
+    const o = make(name);
+    clothe(o, dress(name, look, career));
+    Object.assign(o.userData, { look, career });
     return o;
   };
 
-  const open = (dressed: THREE.Object3D) => {
+  const free = (m: THREE.Material) => {
+    const map = (m as THREE.MeshStandardMaterial).map;
+    for (const x of [m, map]) {
+      const at = x ? owned.indexOf(x) : -1;
+      if (at < 0) continue;
+      owned.splice(at, 1);
+      x?.dispose();
+    }
+  };
+
+  const retitle = (o: THREE.Object3D, career: string) => {
+    const old = new Set<THREE.Material>();
+    o.traverse((m) => {
+      if (m instanceof THREE.Mesh && m.material.userData.print) old.add(m.material);
+    });
+    clothe(o, dress(o.userData.prop as BookName, o.userData.look as BookLook, career));
+    o.userData.career = career;
+    old.forEach(free);
+  };
+
+  const wear = (open: THREE.Object3D, dressed: THREE.Object3D) => {
     const worn = new Map<string, THREE.Material>();
     dressed.traverse((m) => {
       if (m instanceof THREE.Mesh) worn.set(m.material.name, m.material);
     });
-    const o = make("BookOpen");
-    o.traverse((m) => {
+    open.traverse((m) => {
       if (m instanceof THREE.Mesh) m.material = worn.get(m.material.name) ?? m.material;
     });
+  };
+
+  const open = (dressed: THREE.Object3D) => {
+    const o = make("BookOpen");
+    wear(o, dressed);
     return o;
   };
 
   return {
     make,
     book,
+    retitle,
     open,
+    wear,
     size,
     shapes,
     tick(t) {

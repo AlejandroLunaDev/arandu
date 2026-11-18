@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RESEARCH } from "../book/book-data";
 import type { BookLook, BookName, Kit, PropName, Shape } from "./props";
 
 // Each scene's room is composed here in metres and drawn over the page. A room follows one element
@@ -259,8 +260,11 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
   pileBooks(kit, content, UX - 0.21, UY, [
     ["BookThick", LOOK.v6, "Biologia"],
     ["BookShort", LOOK.c3, "Design"],
-    ["BookPaperback", LOOK.i7, "História"],
+    ["BookPaperback", LOOK.i7, RESEARCH],
   ]);
+  // The book on why Arandu exists stays on the shelf for good: the others take turns (run-stage).
+  const research = content.children.find((o) => o.userData.career === RESEARCH);
+  if (research) research.userData.research = true;
   put(content, kit.make("LampMushroom"), UX + 0.33, UY);
 
   // The pendant lamp hangs on a short cord from above the top of the screen. Where the copy sits
