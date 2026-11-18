@@ -17,13 +17,22 @@
   padding: 1px 1px 11px;
   color: var(--text);
   outline: none;
-  animation: show 0.3s ease-out;
+  /* Up as soon as the book is tapped, unseen and untouched until run-stage has it open. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out;
 }
 
-@keyframes show {
-  from {
-    opacity: 0;
-  }
+:global(html[data-book="open"]) .book {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The pages laid out once more, off screen, to be drawn into the 3D book's pictures (book-pages.tsx). */
+.book[data-proof] {
+  translate: -400vw 0;
+  scale: 1;
+  transition: none;
 }
 
 .page {
@@ -33,7 +42,7 @@
 }
 
 /* While the leaf turns over them, the pages' print is gone. */
-.book[data-turning] .page {
+.book[data-turning] > .page {
   opacity: 0;
 }
 
@@ -244,25 +253,61 @@
 /* In the book's bottom margin: back under the left page's corner, on under the right page's. */
 .turn {
   position: absolute;
-  inset: auto var(--pad) 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  inset: 0;
   color: var(--text-muted);
   pointer-events: none;
 }
 
-.turn button {
+.count {
+  position: absolute;
+  right: 48px;
+  bottom: 20px;
+}
+
+/* A page's corner, folded up: the back of the leaf over the corner it uncovers. It lifts more under the pointer. */
+.corner {
+  position: absolute;
+  right: 1px;
+  bottom: 11px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-top-left-radius: 4px;
+  background: linear-gradient(to top left, transparent 50%, var(--surface-raised) 50%);
+  filter: drop-shadow(-1px -1px 2px var(--ink-950));
+  cursor: pointer;
   pointer-events: auto;
+  transition:
+    width 0.2s ease,
+    height 0.2s ease;
 }
 
-.on {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.back {
+  right: auto;
+  left: 1px;
+  border-top-left-radius: 0;
+  border-top-right-radius: 4px;
+  background: linear-gradient(to top right, transparent 50%, var(--surface-raised) 50%);
+  filter: drop-shadow(1px -1px 2px var(--ink-950));
 }
 
-.turn button,
+.corner:hover,
+.corner:focus-visible {
+  width: 36px;
+  height: 36px;
+}
+
+.corner:disabled {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .corner {
+    transition: none;
+  }
+}
+
 .shut {
   display: grid;
   place-items: center;
@@ -275,11 +320,7 @@
   cursor: pointer;
 }
 
-.turn button:disabled {
-  visibility: hidden;
-}
-
-.turn button:focus-visible,
+.corner:focus-visible,
 .shut:focus-visible,
 .src a:focus-visible,
 .credit:focus-visible,
@@ -293,6 +334,13 @@
   top: -12px;
   right: -12px;
   background: var(--surface-raised);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shut:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 @media (max-width: 639px) {
@@ -315,10 +363,22 @@
 
 @media (prefers-reduced-motion: reduce) {
   .book {
-    animation: none;
+    transition: none;
   }
 
   .page {
     transition: none;
+  }
+}
+
+/* Under a finger the corners are bigger to hit, and a sideways swipe is the book's, not the page's. */
+@media (pointer: coarse) {
+  .book {
+    touch-action: pan-y;
+  }
+
+  .corner {
+    width: 36px;
+    height: 36px;
   }
 }

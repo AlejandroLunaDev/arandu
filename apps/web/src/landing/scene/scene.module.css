@@ -57,15 +57,48 @@
   text-align: center;
 }
 
-/* The hero lays out its own copy, and its room keeps its own width. */
+/*
+ * The hero is Arandu's room at night, whatever the page's theme: one column, the room as large as the
+ * space under the nav and over the motto allows, its floor's color behind it. Its copy is the TV's
+ * title card (see hero), which leaves the flow once the stage lays it over the TV.
+ */
+.hero {
+  background: var(--ink-900);
+}
+
+/* Above the stage, so its copy and motto show over the room's wall; clicks pass through to the nav and the room. */
+.hero .pin {
+  z-index: 6;
+  pointer-events: none;
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+}
+
 .hero .copy {
   max-width: none;
 }
 
-@media (width >= 768px) {
-  .hero .pin {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
+/* Close in on the shelves or the notebook, the motto steps aside for the way back to the room. */
+.hero .foot {
+  transition: opacity 0.3s ease;
+}
+
+:global(html[data-zoom]) .hero .foot {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hero .copy,
+.hero .foot {
+  pointer-events: auto;
+}
+
+.hero .art {
+  container-type: size;
+  align-items: flex-end;
+  justify-content: center;
 }
 
 /*

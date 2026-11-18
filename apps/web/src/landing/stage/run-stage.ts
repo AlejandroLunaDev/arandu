@@ -3,34 +3,82 @@ import { gsap } from "gsap";
 import * as THREE from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { BOOK_EVENT, getBook, listBooks, openHeight, SHUT_EVENT, TURN, TURN_EVENT, type OpenedBook } from "../book/book-data";
+import {
+  BOOK_EVENT,
+  getBook,
+  listBooks,
+  openHeight,
+  pictures,
+  preload,
+  PRINT_EVENT,
+  SHUT_EVENT,
+  TURN,
+  TURN_EVENT,
+  UNZOOM_EVENT,
+  type OpenedBook,
+  type PagePrint,
+} from "../book/book-data";
 import { makeCat } from "./cat";
 import { CARRY, HELD_SCALE, makeLife, OPEN_HEIGHT, openTo, SHUT } from "./cat-life";
 import { tokenColor } from "./palette";
 import { loadRapier, roomPhysics, type RoomPhysics } from "./physics";
-import { makeKit, type Kit } from "./props";
+import { FRAME_PHOTOS, makeKit, type Kit } from "./props";
 import { heroRoom, TILT, type Room } from "./rooms";
 
 // The landing's 3D layer: one fixed canvas over the page that never takes clicks. Each scene with a
 // [data-room] anchor gets its room of shelves, and Arandu follows the scroll from room to room. While
 // a scene is pinned he sits and watches the pointer; while the next scene comes in he walks or leaps
 // to its seat. Left alone a while, he stops watching and lives his own life (see cat-life.ts). The
-// props have real gravity once the physics is in (see physics.ts): a tap knocks them, the pointer
-// swings the hanging lamp, the cat shoves them. A tap on the little lamp switches it, a tap on the
-// hanging lamp switches the page to its lamp theme and back; the yarn can be picked up and thrown,
-// and he fetches it. Now and then, sitting, he asks the reader something. If WebGL or the models fail,
+// props have real gravity once the physics is in (see physics.ts): a tap knocks them, the cat shoves
+// them. A tap on the little lamp switches it; the yarn can be picked up and thrown, and he fetches it.
+// The hero's room is lit for the night: the lamp, the neon, the fairy lights and the TV glow. Now and then, sitting, he asks the reader something. If WebGL or the models fail,
 // <html> gets the "no3d" class and the page shows its drawn cats instead.
 
 const BUILD: Record<string, (anchor: HTMLElement, kit: Kit) => Room> = {
   hero: heroRoom,
 };
 
+/** How bright the room's ambient lights are at night: the sky, the key light and the back light. */
+const NIGHT = { sky: 0.7, key: 0.9, back: 0.6 };
+/** The night outside a window off the room's left: a cool spot from there, low, toward the floor and the sofa. */
+const WINDOW = { color: "violet-200", power: 2.2, from: [-1.4, 1.2, 1.6], to: [3.2, 0, 0.6], angle: 0.55 } as const;
+/** A warm light from above on the right, on the side table and Arandu's own books on it (rooms.ts). */
+const TABLE_LIGHT = { color: "amber-200", power: 4, from: [8.2, 2.8, 2], to: [6.65, 0.8, 0.4], angle: 0.32 } as const;
+/**
+ * The lights the glowing props cast: their token color, power and reach (m), set `out` metres in
+ * front of each mark the prop holds that matches `at`, or of the prop itself.
+ */
+const GLOWS: Record<string, { color: string; power: number; reach: number; out: number; at?: RegExp }> = {
+  NeonSign: { color: "error", power: 1.4, reach: 1.8, out: 0.3 },
+  StringLights: { color: "amber-300", power: 0.9, reach: 1.5, out: 0.2, at: /^StringLightsLight\d$/ },
+  Tv: { color: "violet-400", power: 0.8, reach: 2.2, out: 0.4 },
+};
+/** The neon sign: how much brighter and bigger it gets under the pointer, and how often it flickers for attention (s). */
+const NEON_HOT = { glow: 0.7, grow: 0.04 };
+const NEON_FLICKER = 7;
+/** Seconds the neon flickers hard while the cat points it out. */
+const NEON_BURST = 0.84;
+/** Seconds the camera takes to close in on the shelves or back; the least zoom worth it. */
+const ZOOM_TIME = 0.9;
+/** Seconds before an opening book lies flat that its pages' print starts to come up. */
+const PRINT_EARLY = 0.2;
+/** The TV's brand screen: a canvas at the screen's 16:9, the cat's head (px) in its middle. */
+const BRAND = { width: 640, height: 360, head: 120 };
+const ZOOM_LEAST = 1.2;
+/** The room's scale (px a metre) the steam's wisps are sized for (stage.module.css). */
+const STEAM_K = 190;
+/** The width (px) the hero's title card is laid out at (hero.module.css): the TV scales it to its screen. */
+const TV_CARD = 640;
 /** Seconds he keeps watching a pointer that has stopped moving. */
 const GAZE = 4;
 /** How bright a lit lamp's cap glows. */
 const SHADE_GLOW = 0.8;
 /** What a tap goes to, not to the stage. */
 const CONTROLS = "a, button, input, textarea, select, label, iframe";
+/** How tall (m) a prop must be for a tap to knock it at full strength; smaller ones get a gentler push. */
+const POKE_TALL = 0.32;
+/** What the pointer picks up and throws, and the cat fetches: his yarn and the crumpled sheets. */
+const TOYS = new Set(["YarnBall", "PaperBall", "PaperBallSmall", "PaperBallLarge"]);
 /** What he asks the reader, one at a time: the first after SAY_FIRST seconds, then one every SAY_EVERY, for SAY_FOR. */
 const SAYS = [
   "Oi! Já sabe que carreira quer seguir?",
@@ -42,6 +90,8 @@ const SAYS = [
   "Nunca é tarde pra escolher uma carreira.",
   "Ainda na dúvida? A gente descobre junto.",
 ];
+/** His first line, while nobody has tapped the neon sign yet and it can close in on the shelves: he points it out. */
+const HINT = "Toca no letreiro pra ver os livros de perto.";
 const SAY_FIRST = 8;
 const SAY_EVERY: [number, number] = [25, 40];
 const SAY_FOR = 10;
@@ -134,12 +184,18 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   // Pixel units: one unit is one CSS pixel, the origin at the middle of the viewport.
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -4000, 4000);
   camera.position.z = 2000;
+  // The camera can close in on the shelves (zoom, position): screen points go through these.
+  const worldX = (sx: number) => (sx - W / 2) / camera.zoom + camera.position.x;
+  const worldY = (sy: number) => (H / 2 - sy) / camera.zoom + camera.position.y;
+  const screenX = (x: number) => (x - camera.position.x) * camera.zoom + W / 2;
+  const screenY = (y: number) => H / 2 - (y - camera.position.y) * camera.zoom;
 
-  scene.add(new THREE.HemisphereLight(tokenColor("cream-100"), tokenColor("ink-800"), 1.3));
-  const key = new THREE.DirectionalLight(tokenColor("cream-50"), 2.4);
+  // Night: a dim violet sky over the room and a soft key light, so the glowing things carry it.
+  scene.add(new THREE.HemisphereLight(tokenColor("violet-300"), tokenColor("ink-900"), NIGHT.sky));
+  const key = new THREE.DirectionalLight(tokenColor("cream-50"), NIGHT.key);
   key.position.set(1.2, 1.6, 0.9);
   scene.add(key);
-  const back = new THREE.DirectionalLight(tokenColor("cream-200"), 1.6);
+  const back = new THREE.DirectionalLight(tokenColor("violet-200"), NIGHT.back);
   back.position.set(-1.5, 0.8, -1);
   scene.add(back);
 
@@ -171,10 +227,40 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
         const light = new THREE.PointLight(tokenColor("amber-300"), 1.4, 1, 0);
         scene.add(light);
         const bulb = lamp.getObjectByName(`${lamp.userData.prop}Light`) ?? lamp;
-        const pendant = lamp.userData.prop === "LampPendant";
-        return { r, lamp, bulb, light, reach: pendant ? 2.2 : 1.2, power: pendant ? 1.4 : 2.4 };
+        return { r, lamp, bulb, light, reach: 1.2, power: 2.4 };
       }),
   );
+  // The other things that light the room: a light a little out from each, on the wall behind it.
+  const glowLights = rooms.flatMap((r) =>
+    r.content.children.flatMap((o) => {
+      const spec = GLOWS[String(o.userData.prop ?? "")];
+      if (!spec) return [];
+      const marks: THREE.Object3D[] = [];
+      o.traverse((m) => void (spec.at?.test(m.name) && marks.push(m)));
+      return (marks.length ? marks : [o]).map((mark) => {
+        const at = new THREE.Object3D();
+        at.position.z = spec.out;
+        mark.add(at);
+        const light = new THREE.PointLight(tokenColor(spec.color), spec.power, 1, 0);
+        scene.add(light);
+        return { r, at, light, reach: spec.reach };
+      });
+    }),
+  );
+
+  // Only the room with a floor (the desktop hero) has a window off its left, and its side table a light on the right.
+  const windowRoom = rooms.find((r) => r.ground !== null);
+  const beams = ([WINDOW, TABLE_LIGHT] as const).map((spec) => {
+    const from = new THREE.Object3D();
+    const light = new THREE.SpotLight(tokenColor(spec.color), spec.power, 0, spec.angle, 1, 0);
+    if (windowRoom) {
+      from.position.fromArray(spec.from);
+      light.target.position.fromArray(spec.to);
+      windowRoom.content.add(from, light.target);
+      scene.add(light);
+    }
+    return { from, light };
+  });
 
   const cat = makeCat(catGltf);
   scene.add(cat.root);
@@ -244,7 +330,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const onInput = (e: Event) => {
     lastInput = performance.now() / 1000;
     life.stir();
-    if (e instanceof KeyboardEvent && e.key === "Escape") shutBook();
+    if (e instanceof KeyboardEvent && e.key === "Escape") {
+      if (book) shutBook();
+      else zoom(null);
+    }
   };
   addEventListener("scroll", onInput, { passive: true });
   addEventListener("keydown", onInput);
@@ -268,7 +357,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const overCat = (sx: number, sy: number) => {
     if (life.room < 0) return false;
     catInverse.copy(cat.yaw.matrixWorld).invert();
-    catRay.origin.set(sx - W / 2, H / 2 - sy, 1000).applyMatrix4(catInverse);
+    catRay.origin.set(worldX(sx), worldY(sy), 1000).applyMatrix4(catInverse);
     catRay.direction.set(0, 0, -1).transformDirection(catInverse);
     return catRay.intersectsBox(catBox);
   };
@@ -280,7 +369,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (worlds.length === 0) return null;
     ndc.set((sx / W) * 2 - 1, 1 - (sy / H) * 2);
     raycaster.setFromCamera(ndc, camera);
-    for (const hit of raycaster.intersectObjects(rooms.map((r) => r.content), true)) {
+    for (const hit of raycaster.intersectObjects(
+      rooms.map((r) => r.content),
+      true,
+    )) {
       for (let i = 0; i < rooms.length; i++) {
         const prop = worlds[i].owner(hit.object);
         if (prop) return { i, prop, point: hit.point };
@@ -312,12 +404,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (!on) dark.add(lamp);
     glow(lamp, on);
   };
-  for (const { lamp } of lamps) if (lamp.userData.prop !== "LampPendant") glow(lamp, true);
+  for (const { lamp } of lamps) glow(lamp, true);
 
   // A tap on the cat startles him. A tap knocks a prop away from where it lands, a little up: on its
   // left side it sends it right. A tap on a letter of the motto flicks it.
   const at = new THREE.Vector3();
   const push = new THREE.Vector3();
+  const pokeBox = new THREE.Box3();
+  const pokeSize = new THREE.Vector3();
   const onDown = (e: PointerEvent) => {
     lastInput = performance.now() / 1000;
     const target = e.target instanceof Element ? e.target : null;
@@ -345,19 +439,37 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       return;
     }
     if (target?.closest(CONTROLS)) return;
+    // A tap on the TV's card closes in on it, where its text reads; once there, a tap off it backs out.
+    const onCard = !!target?.closest("[data-tv]");
+    if (zoomed === "notebook" || zoomed === "tv" || zoomed === "frames") {
+      if (!(zoomed === "tv" && onCard)) zoom(null);
+      return;
+    }
+    if (onCard || overTv(e.clientX, e.clientY)) {
+      zoom("tv");
+      return;
+    }
+    if (overNeon(e.clientX, e.clientY)) {
+      hinted = true;
+      zoom("shelves");
+      return;
+    }
+    if (overNotebook(e.clientX, e.clientY)) {
+      zoom("notebook");
+      return;
+    }
+    if (overFrame(e.clientX, e.clientY)) {
+      zoom("frames");
+      return;
+    }
     const hit = pick(e.clientX, e.clientY);
     if (!hit) return;
     const name = String(hit.prop.userData.prop ?? "");
-    if (name === "LampPendant") {
-      const html = document.documentElement;
-      html.dataset.theme = html.dataset.theme === "lamp" ? "dark" : "lamp";
-      return;
-    }
     if (name.startsWith("Lamp")) {
       switchLamp(hit.prop);
       return;
     }
-    if (name === "YarnBall" && toRoom(rooms[hit.i], e.clientX, e.clientY, at) && worlds[hit.i].grab(hit.prop, at)) {
+    if (TOYS.has(name) && toRoom(rooms[hit.i], e.clientX, e.clientY, at) && worlds[hit.i].grab(hit.prop, at)) {
       // No text selection while it is held.
       e.preventDefault();
       holding = { i: hit.i, prop: hit.prop };
@@ -365,7 +477,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       return;
     }
     const local = rooms[hit.i].content.worldToLocal(at.copy(hit.point));
-    push.set(local.x < hit.prop.position.x ? 1.3 : -1.3, 0.9, -0.2);
+    // A small thing (a pencil cup, a trophy) tips over at a tap; it does not fly off like a book.
+    const tall = Math.min(1, pokeBox.setFromObject(hit.prop).getSize(pokeSize).y / rooms[hit.i].k / POKE_TALL);
+    push.set(local.x < hit.prop.position.x ? 1.3 : -1.3, 0.9, -0.2).multiplyScalar(tall);
     if (name.startsWith("Book")) {
       const { i, prop } = hit;
       const n = taps?.prop === prop ? taps.n + 1 : 1;
@@ -397,6 +511,54 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   /** The open copy on screen, and its leaf's turn under way. */
   let shown: THREE.Object3D | null = null;
   let leafTurn: gsap.core.Tween | null = null;
+  // The open book's page faces show the pictures of its pages (book-pages.tsx draws them while it flies
+  // in), unlit as the print over them is: opening, turning and shutting, the pages are never blank.
+  // Until a page's picture is in, its face stays blank paper.
+  type Face = { mesh: THREE.Mesh; paper: THREE.Material; print: THREE.MeshBasicMaterial };
+  const faces = new Map<"left" | "right" | "front" | "back", Face>();
+  let prints: THREE.Texture[] = [];
+  /** The spread the book is open at, and the pages its faces show: left, right, the leaf's front and back. */
+  let spread = 0;
+  let dressed = [0, 1, 1, 2];
+  const dress = (...pages: number[]) => {
+    dressed = pages;
+    (["left", "right", "front", "back"] as const).forEach((side, k) => {
+      const face = faces.get(side);
+      if (!face) return;
+      const map = prints[pages[k]] ?? null;
+      if (face.print.map !== map) face.print.needsUpdate = true;
+      face.print.map = map;
+      face.mesh.material = map ? face.print : face.paper;
+    });
+  };
+  const restDress = () => dress(2 * spread, 2 * spread + 1, 2 * spread + 1, 2 * spread + 2);
+  const within = (o: THREE.Object3D, name: string): boolean => o.name === name || (!!o.parent && within(o.parent, name));
+  const paper = (open: THREE.Object3D) => {
+    open.traverse((m) => {
+      if (!(m instanceof THREE.Mesh)) return;
+      const name = (m.material as THREE.Material).name;
+      const half = within(m, "BookOpenLeft") ? "left" : "right";
+      const side = name === "BookLeafFront" ? "front" : name === "BookLeafBack" ? "back" : name === "BookPage" ? half : null;
+      if (side) faces.set(side, { mesh: m, paper: m.material as THREE.Material, print: new THREE.MeshBasicMaterial({ toneMapped: false }) });
+    });
+  };
+  const unpaper = () => {
+    prints.forEach((t) => t.dispose());
+    faces.forEach((f) => f.print.dispose());
+    prints = [];
+    faces.clear();
+  };
+  const onPrint = (e: Event) => {
+    const { page, image } = (e as CustomEvent<PagePrint>).detail;
+    if (!book || book.reversed()) return;
+    const t = new THREE.CanvasTexture(image);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.flipY = false;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    prints[page]?.dispose();
+    prints[page] = t;
+    dress(...dressed);
+  };
   const openBook = (i: number, prop: THREE.Object3D) => {
     if (book || !worlds[i].take(prop)) return;
     const open = kit.open(prop);
@@ -405,10 +567,11 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     const s0 = (box.max.y - box.min.y) / OPEN_HEIGHT;
     // Open, it spreads 1.4 times as wide as it is tall; its pages (book-pages.tsx) take the same size.
     const height = openHeight(W, H);
-    const s1 = height / OPEN_HEIGHT;
+    const s1 = height / OPEN_HEIGHT / camera.zoom;
     // Its origin is the foot of the spine: shut, the cover reaches right of it; open, it is the middle.
-    const shutAt = new THREE.Vector3(-0.14 * s1, -height / 2, 600);
-    const openAt = new THREE.Vector3(0, -height / 2, 600);
+    const mid = { x: camera.position.x, y: camera.position.y - height / 2 / camera.zoom };
+    const shutAt = new THREE.Vector3(mid.x - 0.14 * s1, mid.y, 600);
+    const openAt = new THREE.Vector3(mid.x, mid.y, 600);
     const spine = new THREE.Quaternion().setFromAxisAngle(Y, Math.PI);
     const cover = new THREE.Quaternion().setFromAxisAngle(Y, Math.PI / 2);
     const pages = new THREE.Quaternion().setFromAxisAngle(X, -TIP);
@@ -425,56 +588,102 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     prop.visible = false;
     scene.add(open);
     shown = open;
+    unpaper();
+    paper(open);
+    spread = 0;
+    restDress();
+    // The page's overlays (the TV's card, the steam) step aside for the whole flight, and the book's
+    // pictures start loading now, so its pages are full when it lands open.
+    document.documentElement.dataset.book = "";
+    tvPower(false);
+    const slug = prop.userData.slug as string | undefined;
+    if (slug)
+      getBook(slug).then(
+        (b) => preload(pictures(b)),
+        () => {},
+      );
+    // The page lays out its print now, unseen, and draws its pictures while the book flies in.
+    const opened: OpenedBook = {
+      title: String(prop.userData.career ?? ""),
+      slug: slug ?? null,
+      research: !!prop.userData.research,
+      product: !!prop.userData.product,
+    };
+    dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: opened }));
     apply();
     const pace = reduce ? 0.01 : 1;
     book = gsap
       .timeline({
         onUpdate: apply,
-        onComplete: () => {
-          const title = String(prop.userData.career ?? "");
-          const opened: OpenedBook = { title, slug: prop.userData.slug ?? null, research: !!prop.userData.research };
-          dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: opened }));
-        },
         onReverseComplete: () => {
           scene.remove(open);
           shown = null;
           prop.visible = true;
           worlds[i].restore(prop);
           book = null;
+          unpaper();
+          delete document.documentElement.dataset.book;
+          tvPower(true);
         },
       })
       .to(s, { fly: 1, duration: 0.7 * pace, ease: "power2.inOut" })
-      .to(s, { open: 1, duration: 0.6 * pace, ease: "power2.out" });
+      .to(s, { open: 1, duration: 0.6 * pace, ease: "power2.out" })
+      // Its print comes up as the cover settles, not after.
+      .call(
+        () => {
+          // A timeline's calls fire both ways: shutting, the book's pages are already gone.
+          if (!book?.reversed()) document.documentElement.dataset.book = "open";
+        },
+        [],
+        `-=${PRINT_EARLY * pace}`,
+      );
   };
   const shutBook = () => {
     if (!book) return;
     dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: null }));
+    document.documentElement.dataset.book = "";
     leafTurn?.kill();
+    restDress();
     book.reverse();
   };
   // The page asks for a turn: the leaf lifts off the right half and lies down on the left, or back.
-  // Done, it is back on the right, unseen: both halves are blank paper under the page's print.
+  // It carries the pages it turns over, and the halves under it show the spread it uncovers; done,
+  // it is back on the right, wearing the new spread's right page.
   const onTurn = (e: Event) => {
-    const leaf = shown?.getObjectByName("BookOpenLeaf");
-    if (!leaf || !book || book.reversed() || book.progress() < 1) return;
+    if (!book || book.reversed()) return;
     const forward = (e as CustomEvent<number>).detail > 0;
+    const from = 2 * spread;
+    spread += forward ? 1 : -1;
+    const leaf = shown?.getObjectByName("BookOpenLeaf");
+    if (!leaf || book.progress() < 1) return restDress();
+    if (forward) dress(from, from + 3, from + 1, from + 2);
+    else dress(from - 2, from + 1, from - 1, from);
     const flat = -LEAN;
     const over = LEAN - Math.PI;
     leafTurn?.kill();
     leafTurn = gsap.fromTo(
       leaf.rotation,
       { y: forward ? flat : over },
-      { y: forward ? over : flat, duration: TURN * (reduce ? 0.01 : 1), ease: "power2.inOut", onComplete: () => void (leaf.rotation.y = flat) },
+      {
+        y: forward ? over : flat,
+        duration: TURN * (reduce ? 0.01 : 1),
+        ease: "power2.inOut",
+        onComplete: () => {
+          leaf.rotation.y = flat;
+          restDress();
+        },
+      },
     );
   };
   addEventListener(TURN_EVENT, onTurn);
+  addEventListener(PRINT_EVENT, onPrint);
   addEventListener("pointerdown", onDown);
   addEventListener(SHUT_EVENT, shutBook);
 
   // The shelf's titles are professions from the API that have something to show. A title the API
   // lists keeps its book; the rest take one of its professions, and every ROTATE seconds one book
-  // on its shelf changes to another. The research book never changes; one in a paw or open waits.
-  const shelved = rooms.flatMap((r) => r.props.map((p) => p.object)).filter((o) => o.userData.career && !o.userData.research);
+  // on its shelf changes to another. Arandu's own books never change; one in a paw or open waits.
+  const shelved = rooms.flatMap((r) => r.props.map((p) => p.object)).filter((o) => o.userData.career && !o.userData.research && !o.userData.product);
   const title = (o: THREE.Object3D, b: BookSummary) => {
     kit.retitle(o, b.profession.name);
     o.userData.slug = b.profession.slug;
@@ -525,6 +734,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     holding = null;
     document.body.style.cursor = "";
   };
+  // A finger holding a toy drags it, not the page: while it is held, the page does not scroll.
+  const noScroll = (e: TouchEvent) => void (holding && e.cancelable && e.preventDefault());
+  addEventListener("touchmove", noScroll, { passive: false });
   addEventListener("pointermove", onDrag);
   addEventListener("pointerup", onUp);
   addEventListener("pointercancel", onUp);
@@ -555,7 +767,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const inverse = new THREE.Matrix4();
   const toRoom = (r: Room, sx: number, sy: number, out: THREE.Vector3) => {
     inverse.copy(r.content.matrixWorld).invert();
-    ray.origin.set(sx - W / 2, H / 2 - sy, 1000).applyMatrix4(inverse);
+    ray.origin.set(worldX(sx), worldY(sy), 1000).applyMatrix4(inverse);
     ray.direction.set(0, 0, -1).transformDirection(inverse);
     return ray.intersectPlane(wall, out);
   };
@@ -564,7 +776,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const headAt = new THREE.Vector3();
   const headOnScreen = () => {
     cat.mouth.getWorldPosition(headAt);
-    return { x: headAt.x + W / 2, y: H / 2 - headAt.y - 0.06 * cat.root.scale.x };
+    return { x: screenX(headAt.x), y: screenY(headAt.y + 0.06 * cat.root.scale.x) };
   };
   const float = (kind: "heart" | "z", glyph: string) => {
     const host = bubble?.parentElement;
@@ -595,6 +807,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   let sayAt = last / 1000 + SAY_FIRST;
   let sayUntil = 0;
   let said = -1;
+  let line = "";
+  let hinting = false;
   let sayFrom = 0;
   let typed = -1;
   // The bubble holds the whole line from the start, the letters still to come hidden, so it never
@@ -603,6 +817,205 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const said2 = document.createElement("span");
   said2.dataset.untyped = "";
   bubble?.replaceChildren(said1, said2);
+
+  // The neon sign invites a tap: under the pointer it glows brighter and grows a little, and now and
+  // then it flickers like a tube warming up. A tap on it closes the camera in on the shelves.
+  const neons = rooms.flatMap((r) => r.content.children.filter((o) => o.userData.prop === "NeonSign"));
+  const neonTubes = new Map<THREE.MeshStandardMaterial, number>();
+  for (const n of neons)
+    n.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = o.material as THREE.MeshStandardMaterial;
+      if (m.emissiveIntensity > 0) neonTubes.set(m, m.emissiveIntensity);
+    });
+  let neonHover = false;
+  let neonBurst = -10;
+  /** The cat has pointed the neon out, or it was tapped: once a visit. */
+  let hinted = false;
+  const neonAt = new THREE.Vector3();
+  let neonHot = 0;
+  const over = (objects: THREE.Object3D[], sx: number, sy: number) => {
+    if (objects.length === 0 || zoomed) return false;
+    ndc.set((sx / W) * 2 - 1, 1 - (sy / H) * 2);
+    raycaster.setFromCamera(ndc, camera);
+    return raycaster.intersectObjects(objects, true).length > 0;
+  };
+  const overNeon = (sx: number, sy: number) => over(neons, sx, sy);
+  // The notebook opens Alejandro's portfolio: under the pointer its screen lights up a little.
+  const notebook = rooms[0].content.children.filter((o) => o.userData.prop === "Notebook");
+  const nbScreen = notebook[0]?.getObjectByName("NotebookScreen");
+  const nbShot = nbScreen instanceof THREE.Mesh ? (nbScreen.material as THREE.MeshBasicMaterial) : null;
+  let nbHover = false;
+  let tvHover = false;
+  const overNotebook = (sx: number, sy: number) => over(notebook, sx, sy);
+  // The frames: a tap closes in on them, their photos' credits under them (stage.tsx).
+  const frames = rooms[0].content.children.filter((o) => FRAME_PHOTOS[String(o.userData.prop)]);
+  const overFrame = (sx: number, sy: number) => frames.find((f) => over([f], sx, sy));
+  let frameHover = false;
+  const tvs = rooms[0].content.children.filter((o) => o.userData.prop === "Tv");
+  const overTv = (sx: number, sy: number) => over(tvs, sx, sy);
+  const shine = (t: number, dt: number) => {
+    neonHot = lerp(neonHot, neonHover ? 1 : 0, 1 - 0.0001 ** dt);
+    // A flicker: two quick dips at the start of every NEON_FLICKER seconds, not under the pointer.
+    const f = t % NEON_FLICKER;
+    const b = t - neonBurst;
+    const burst = !reduce && b >= 0 && b < NEON_BURST && Math.floor(b / 0.12) % 2 === 1;
+    const flicker = burst ? 0.15 : reduce || neonHover || zoomed ? 1 : f < 0.08 || (f > 0.16 && f < 0.22) ? 0.35 : 1;
+    for (const [m, base] of neonTubes) m.emissiveIntensity = base * (1 + NEON_HOT.glow * neonHot) * flicker;
+    for (const n of neons) n.scale.setScalar(1 + NEON_HOT.grow * neonHot);
+    nbShot?.color.setScalar(nbHover ? 1.1 : 0.78);
+  };
+
+  // Closing in on the shelves, where the books' titles read, or on the notebook, where the portfolio
+  // opens; Escape, a scroll or the page's "Voltar" button backs out.
+  let zoomed: "shelves" | "notebook" | "tv" | "frames" | null = null;
+  let zoomTween: gsap.core.Tween | null = null;
+  const shelfBox = new THREE.Box3();
+  const site = document.querySelector<HTMLIFrameElement>("iframe[data-portfolio]");
+  // The shelves and what stands on them, filling the screen; null where they already do (a phone).
+  const shelfView = () => {
+    const r = rooms[0];
+    shelfBox.makeEmpty();
+    // The desk's things are props too, but lower than every plank.
+    const planks = r.fixtures.filter((f) => String(f.object.userData.prop).startsWith("Shelf")).map((f) => f.object);
+    const lowest = Math.min(...planks.map((o) => o.position.y));
+    for (const object of [...planks, ...r.props.map((p) => p.object).filter((o) => o.position.y >= lowest - 0.01)]) shelfBox.expandByObject(object);
+    const z = Math.min((W * 0.98) / (shelfBox.max.x - shelfBox.min.x), (H * 0.94) / (shelfBox.max.y - shelfBox.min.y));
+    return z < ZOOM_LEAST ? null : { zoom: z, x: (shelfBox.min.x + shelfBox.max.x) / 2, y: (shelfBox.min.y + shelfBox.max.y) / 2 };
+  };
+  const zoom = (on: typeof zoomed) => {
+    if (on === zoomed || book) return;
+    let to = { zoom: 1, x: 0, y: 0 };
+    if (on === "notebook" || on === "tv" || on === "frames") {
+      const screen = on === "tv" ? tvScreen : on === "notebook" ? nbScreen : frames[0];
+      if (!screen) return;
+      shelfBox.setFromObject(screen);
+      if (on === "frames") for (const f of frames) shelfBox.expandByObject(f);
+      const fit = on === "tv" ? 0.82 : on === "frames" ? 0.7 : 0.72;
+      const z = Math.min((W * fit) / (shelfBox.max.x - shelfBox.min.x), (H * fit) / (shelfBox.max.y - shelfBox.min.y));
+      to = { zoom: z, x: (shelfBox.min.x + shelfBox.max.x) / 2, y: (shelfBox.min.y + shelfBox.max.y) / 2 };
+      if (on === "notebook" && site && !site.src) site.src = site.dataset.portfolio ?? "";
+    } else if (on) {
+      const view = shelfView();
+      if (!view) return;
+      to = view;
+    }
+    zoomed = on;
+    if (on) document.documentElement.dataset.zoom = on;
+    else delete document.documentElement.dataset.zoom;
+    if (site) delete site.dataset.on;
+    zoomTween?.kill();
+    const s = { zoom: camera.zoom, x: camera.position.x, y: camera.position.y };
+    zoomTween = gsap.to(s, {
+      ...to,
+      duration: ZOOM_TIME * (reduce ? 0.01 : 1),
+      ease: "power2.inOut",
+      onUpdate: () => {
+        camera.zoom = s.zoom;
+        camera.position.x = s.x;
+        camera.position.y = s.y;
+        camera.updateProjectionMatrix();
+      },
+      onComplete: () => {
+        if (zoomed === "notebook" && site) site.dataset.on = "";
+      },
+    });
+  };
+  // The portfolio lies over the notebook's screen, wherever the camera has it.
+  const nbBox = new THREE.Box3();
+  const onNotebook = () => {
+    if (!site || site.dataset.on === undefined || !nbScreen) return;
+    nbBox.setFromObject(nbScreen);
+    const x = screenX(nbBox.min.x);
+    const y = screenY(nbBox.max.y);
+    site.style.setProperty("--nb-x", `${x.toFixed(1)}px`);
+    site.style.setProperty("--nb-y", `${y.toFixed(1)}px`);
+    site.style.setProperty("--nb-w", `${(screenX(nbBox.max.x) - x).toFixed(1)}px`);
+    site.style.setProperty("--nb-h", `${(screenY(nbBox.min.y) - y).toFixed(1)}px`);
+  };
+  const unzoom = () => zoom(null);
+  addEventListener(UNZOOM_EVENT, unzoom);
+  addEventListener("scroll", unzoom, { passive: true });
+
+  // The coffee's steam is the page's (stage.tsx), soft wisps over the mug's rim: the model's own stays hidden.
+  const steam = document.querySelector<HTMLElement>("[data-steam]");
+  const mug = rooms[0].content.children.find((o) => o.userData.prop === "Mug");
+  const mugSteam = mug?.getObjectByName("MugSteam");
+  mugSteam?.removeFromParent();
+  const mugBox = new THREE.Box3();
+  const steamAt = () => {
+    if (!steam || !mug) return;
+    mugBox.setFromObject(mug);
+    steam.dataset.on = "";
+    steam.style.translate = `${screenX((mugBox.min.x + mugBox.max.x) / 2).toFixed(1)}px ${screenY(mugBox.max.y).toFixed(1)}px`;
+    steam.style.setProperty("--steam-k", ((rooms[0].k * camera.zoom) / STEAM_K).toFixed(3));
+  };
+
+  // The hero's title card (hero.tsx) lies over the TV's screen, scaled from its 640 by 360 layout.
+  const tvCard = document.querySelector<HTMLElement>("[data-tv]");
+  const tvScreen = rooms[0].content.getObjectByName("TvScreen");
+  // The TV switches off for an open book and back on once it is shut, as a branded set does: its
+  // picture (the card, hero.module.css) goes, and the cat's head glows alone on the dark screen and
+  // goes out; switching on, the head comes first, then the picture. The head is drawn on the 3D screen,
+  // not over the page, so the book flying in front of the TV hides it.
+  const tvGlass = tvScreen instanceof THREE.Mesh ? (tvScreen.material as THREE.MeshBasicMaterial) : null;
+  const tvOn = tvGlass?.color.clone();
+  const brandCanvas = document.createElement("canvas");
+  brandCanvas.width = BRAND.width;
+  brandCanvas.height = BRAND.height;
+  const brand = new THREE.CanvasTexture(brandCanvas);
+  brand.colorSpace = THREE.SRGBColorSpace;
+  brand.flipY = false;
+  const head = new Image();
+  head.onload = () => {
+    const g = brandCanvas.getContext("2d");
+    if (!g) return;
+    g.fillStyle = `#${tokenColor("ink-950").getHexString()}`;
+    g.fillRect(0, 0, BRAND.width, BRAND.height);
+    g.drawImage(head, (BRAND.width - BRAND.head) / 2, (BRAND.height - BRAND.head) / 2, BRAND.head, BRAND.head);
+    brand.needsUpdate = true;
+  };
+  head.src = "/img/head.svg";
+  let tvTween: gsap.core.Timeline | null = null;
+  const tvPower = (on: boolean) => {
+    if (!tvGlass || !tvOn) return;
+    tvTween?.kill();
+    tvGlass.map = brand;
+    tvGlass.color.setScalar(0);
+    tvGlass.needsUpdate = true;
+    const glow = { v: 0 };
+    const shine = () => void tvGlass.color.setScalar(glow.v);
+    const pace = reduce ? 0.01 : 1;
+    tvTween = gsap
+      .timeline({
+        onComplete: () => {
+          if (!on) return;
+          tvGlass.map = null;
+          tvGlass.color.copy(tvOn);
+          tvGlass.needsUpdate = true;
+        },
+      })
+      .to(glow, { v: 1, duration: 0.35 * pace, delay: (on ? 0 : 0.2) * pace, ease: "power1.out", onUpdate: shine })
+      .to(glow, { v: 0, duration: 0.4 * pace, delay: 0.4 * pace, ease: "power1.in", onUpdate: shine });
+  };
+  // It boots the same way when the room first comes up.
+  tvPower(true);
+  const tvBox = new THREE.Box3();
+  let tvAt = "";
+  const onTv = () => {
+    if (!tvCard || !tvScreen) return;
+    tvBox.setFromObject(tvScreen);
+    const x = Math.round(screenX(tvBox.min.x));
+    const y = Math.round(screenY(tvBox.max.y));
+    const k = ((tvBox.max.x - tvBox.min.x) * camera.zoom) / TV_CARD;
+    const now = `${x} ${y} ${k.toFixed(4)}`;
+    if (now === tvAt) return;
+    tvAt = now;
+    tvCard.dataset.onTv = "";
+    tvCard.style.setProperty("--tv-x", `${x}px`);
+    tvCard.style.setProperty("--tv-y", `${y}px`);
+    tvCard.style.setProperty("--tv-k", k.toFixed(4));
+  };
 
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
@@ -617,6 +1030,15 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       light.distance = reach * r.k;
       light.intensity = lamp.visible && !dark.has(lamp) ? power : 0;
     }
+    if (windowRoom) for (const { from, light } of beams) from.getWorldPosition(light.position);
+    for (const { r, at, light, reach } of glowLights) {
+      at.getWorldPosition(light.position);
+      light.distance = reach * r.k;
+    }
+    onTv();
+    shine(t, dt);
+    onNotebook();
+    steamAt();
     kit.tick(t);
 
     // The scroll waits while he is mid-jump or mid-tap: he lands first.
@@ -700,9 +1122,25 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // moves, else around.
     let gaze: THREE.Vector3 | null = null;
     if (own && p.look) gaze = rooms[life.room].content.localToWorld(look.copy(p.look));
+    else if (sayUntil > 0 && hinting && neons[0]) gaze = neons[0].getWorldPosition(neonAt).setZ(700);
     else if (sayUntil > 0) gaze = look.set(catAt.x, catAt.y + 0.3 * k, 2000);
-    else if (pointer.on && sitNow > 0.5 && t - lastMove < GAZE) gaze = look.set(pointer.x - W / 2, H / 2 - pointer.y, 700);
-    cat.update({ sit: sitNow, leap, air, stride, tap: p.tap, lids: purring ? Math.max(p.lids, 0.6) : p.lids, ears: p.ears, hold: p.hold, lie: p.lie, look: gaze }, dt, t);
+    else if (pointer.on && sitNow > 0.5 && t - lastMove < GAZE) gaze = look.set(worldX(pointer.x), worldY(pointer.y), 700);
+    cat.update(
+      {
+        sit: sitNow,
+        leap,
+        air,
+        stride,
+        tap: p.tap,
+        lids: purring ? Math.max(p.lids, 0.6) : p.lids,
+        ears: p.ears,
+        hold: p.hold,
+        lie: p.lie,
+        look: gaze,
+      },
+      dt,
+      t,
+    );
     // What he carries sits in his mouth, where the pose just put it: its origin is at its bottom.
     if (own && life.carried) {
       cat.root.updateMatrixWorld(true);
@@ -737,11 +1175,15 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       }
       seen = { x: pointer.x, y: pointer.y };
       const over = holding ? null : pick(pointer.x, pointer.y);
+      neonHover = !holding && !over && overNeon(pointer.x, pointer.y);
+      nbHover = !holding && !over && !neonHover && overNotebook(pointer.x, pointer.y);
+      frameHover = !holding && !over && !!overFrame(pointer.x, pointer.y);
+      tvHover = !holding && !over && overTv(pointer.x, pointer.y);
       document.body.style.cursor = holding
         ? "grabbing"
-        : over?.prop.userData.prop === "YarnBall"
+        : TOYS.has(String(over?.prop.userData.prop))
           ? "grab"
-          : over || overCat(pointer.x, pointer.y)
+          : over || neonHover || nbHover || tvHover || frameHover || overCat(pointer.x, pointer.y)
             ? "pointer"
             : "";
     }
@@ -750,7 +1192,6 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // His bubble: it opens while he sits still in a room, over his head, inside the viewport.
     if (bubble) {
       const sitting = own && sitNow > 0.9 && !life.busy() && life.pose.lie < 0.1 && !book;
-      const line = SAYS[said] ?? "";
       const pace = reduce ? 0 : TYPE;
       // Once he has started a line he finishes it, even if he gets up meanwhile.
       const done = t - sayFrom >= line.length * pace;
@@ -759,16 +1200,24 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
         sayUntil = 0;
         sayAt = t + SAY_EVERY[0] + Math.random() * (SAY_EVERY[1] - SAY_EVERY[0]);
       } else if (sayUntil === 0 && sitting && t > sayAt) {
-        said = (said + 1 + Math.floor(Math.random() * (SAYS.length - 1))) % SAYS.length;
+        hinting = !hinted && life.room === 0 && neons.length > 0 && !zoomed && shelfView() !== null;
+        if (hinting) {
+          hinted = true;
+          line = HINT;
+          neonBurst = t + line.length * pace;
+        } else {
+          said = (said + 1 + Math.floor(Math.random() * (SAYS.length - 1))) % SAYS.length;
+          line = SAYS[said];
+        }
         said1.textContent = "";
-        said2.textContent = SAYS[said];
+        said2.textContent = line;
         typed = 0;
         sayFrom = t;
         bubble.dataset.on = "";
-        sayUntil = t + SAYS[said].length * (reduce ? 0 : TYPE) + SAY_FOR;
+        sayUntil = t + line.length * pace + SAY_FOR;
       }
       if (sayUntil > 0) {
-        const text = SAYS[said];
+        const text = line;
         const n = pace > 0 ? Math.min(text.length, Math.floor((t - sayFrom) / pace)) : text.length;
         if (n !== typed) {
           typed = n;
@@ -776,7 +1225,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
           said2.textContent = text.slice(n);
         }
         const half = bubble.offsetWidth / 2 + 8;
-        bubble.style.translate = `${clamp(catAt.x + W / 2, half, W - half).toFixed(1)}px ${(H / 2 - catAt.y - 0.5 * k).toFixed(1)}px`;
+        bubble.style.translate = `${clamp(screenX(catAt.x), half, W - half).toFixed(1)}px ${screenY(catAt.y + 0.5 * k).toFixed(1)}px`;
       }
     }
 
@@ -796,6 +1245,13 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     worlds.forEach((w) => w.dispose());
     glows.forEach((m) => m.dispose());
     if (bubble) delete bubble.dataset.on;
+    if (tvCard) delete tvCard.dataset.onTv;
+    if (steam) delete steam.dataset.on;
+    removeEventListener(UNZOOM_EVENT, unzoom);
+    removeEventListener("scroll", unzoom);
+    delete document.documentElement.dataset.zoom;
+    delete document.documentElement.dataset.book;
+    if (site) delete site.dataset.on;
     document.body.style.cursor = "";
     removeEventListener("pointerdown", onDown);
     book?.kill();
@@ -803,11 +1259,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     clearInterval(rotation);
     removeEventListener(SHUT_EVENT, shutBook);
     removeEventListener(TURN_EVENT, onTurn);
+    removeEventListener(PRINT_EVENT, onPrint);
+    unpaper();
     leafTurn?.kill();
     dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: null }));
     removeEventListener("pointermove", onDrag);
     removeEventListener("pointerup", onUp);
     removeEventListener("pointercancel", onUp);
+    removeEventListener("touchmove", noScroll);
     removeEventListener("scroll", onInput);
     removeEventListener("keydown", onInput);
     cancelAnimationFrame(raf);
@@ -818,6 +1277,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     cat.dispose();
     kit.dispose();
     shadowTex.dispose();
+    tvTween?.kill();
+    brand.dispose();
     shadowGeo.dispose();
     catShadowMaterial.dispose();
   };

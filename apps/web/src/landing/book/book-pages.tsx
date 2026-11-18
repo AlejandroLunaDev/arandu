@@ -1,8 +1,24 @@
 "use client";
 
 import type { Book, Offering, Source } from "@arandu/contracts";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BOOK_EVENT, getBook, openHeight, safeUrl, SHUT_EVENT, TURN, TURN_EVENT, type OpenedBook } from "./book-data";
+import { getFontEmbedCSS, toCanvas } from "html-to-image";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import {
+  BOOK_EVENT,
+  getBook,
+  openHeight,
+  pictured,
+  pictures,
+  preload,
+  PRINT_EVENT,
+  safeUrl,
+  SHUT_EVENT,
+  thumb,
+  TURN,
+  TURN_EVENT,
+  type OpenedBook,
+  type PagePrint,
+} from "./book-data";
 import { ANSWER, FACTS, type Fact } from "./research";
 import styles from "./book-pages.module.css";
 
@@ -17,8 +33,9 @@ const DEGREE: Record<NonNullable<Offering["course"]["degree"]>, string> = {
   bacharelado_licenciatura: "Bacharelado e licenciatura",
 };
 const CLOSING = "Com o Arandu, você vive um pedacinho dessa carreira antes de escolher.";
-/** The universities the book shows: only those with a photo of their own (owner's rule). */
-const pictured = (book: Book) => book.offerings.filter((o) => safeUrl(o.institution.photo?.url));
+/** What Arandu is, as the TV's title card says it (hero/tv-card.tsx). */
+const PITCH =
+  "Um app de orientação vocacional com inteligência artificial, onde quem quer entrar na universidade vive uma carreira antes de escolher.";
 /** Census and some grades write in capitals: shown in sentence case, the words as they are. */
 const calm = (text: string) => (text === text.toUpperCase() ? text.charAt(0) + text.slice(1).toLowerCase() : text);
 const KIND: Record<Offering["institution"]["kind"], string> = { public: "Pública", private: "Privada", special: "Especial" };
@@ -26,6 +43,13 @@ const KIND: Record<Offering["institution"]["kind"], string> = { public: "Públic
 // The pages of the open book, laid over the 3D book run-stage opens in the middle of the screen. It
 // reads like a book: one university a page, the first facing a taste of the course, and the leaf turns
 // to the next spread. Anything the API leaves null stays off the page: no stand-in image, no fallback.
+/** The longest (ms) an open book waits for its first pictures before it shows anyway. */
+const READY_WAIT = 1500;
+/** How far (px) a finger must swipe across the book to turn a page. */
+const SWIPE = 40;
+/** How many device pixels a page's picture on the 3D book gets per CSS pixel of its print. */
+const PRINT_SHARPNESS = 2;
+
 export function BookPages() {
   const [opened, setOpened] = useState<OpenedBook>(null);
   const [book, setBook] = useState<Book | null>(null);
@@ -34,6 +58,8 @@ export function BookPages() {
   const [turning, setTurning] = useState(false);
   const host = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const proofs = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onBook = (e: Event) => {
@@ -42,7 +68,18 @@ export function BookPages() {
       setOpened(next);
       setSpread(0);
       setTurning(false);
-      if (next?.slug) getBook(next.slug).then(setBook, () => setFailed(next.slug));
+      // The book shows once its first pictures are in, every other one loading behind it; a slow
+      // picture does not hold it past READY_WAIT.
+      if (next?.slug)
+        getBook(next.slug).then(
+          (b) => {
+            const urls = pictures(b);
+            const wait = new Promise((done) => setTimeout(done, READY_WAIT));
+            void Promise.race([preload(urls.slice(0, 2)), wait]).then(() => setBook(b));
+            void preload(urls.slice(2));
+          },
+          () => setFailed(next.slug),
+        );
     };
     addEventListener(BOOK_EVENT, onBook);
     return () => removeEventListener(BOOK_EVENT, onBook);
@@ -60,25 +97,51 @@ export function BookPages() {
     return () => removeEventListener("resize", fit);
   }, [opened]);
 
+  // The book is tapped before it opens: while it flies in, every page is drawn into a picture
+  // (html-to-image) for run-stage to lay on the 3D pages, so opening, turning and shutting show print,
+  // not blank paper. The pages are drawn from proofs laid out off screen, all at once.
+  const shown = opened && book?.profession.slug === opened.slug ? book : null;
+  const printable = !!opened?.research || !!opened?.product || !!shown;
+  useEffect(() => {
+    const el = proofs.current;
+    if (!printable || !el) return;
+    let live = true;
+    void (async () => {
+      await Promise.all([...el.querySelectorAll("img")].map((img) => img.decode().catch(() => {})));
+      const fontEmbedCSS = await getFontEmbedCSS(el).catch(() => undefined);
+      for (const [page, node] of [...el.querySelectorAll<HTMLElement>(`.${styles.page}`)].entries()) {
+        // A page that cannot be drawn stays blank paper on the 3D book; its print still shows open.
+        const image = await toCanvas(node, { pixelRatio: PRINT_SHARPNESS, fontEmbedCSS }).catch(() => null);
+        if (!live) return;
+        if (image) dispatchEvent(new CustomEvent<PagePrint>(PRINT_EVENT, { detail: { page, image } }));
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [printable, shown, opened]);
+
   if (!opened) return null;
-  const shown = book?.profession.slug === opened.slug ? book : null;
-  const blank = !opened.research && !shown && (!opened.slug || failed === opened.slug);
-  const pages: ReactNode[] = opened.research
-    ? [...FACTS.map((fact, i) => <FactPage key={i} fact={fact} first={i === 0} />), <AnswerPage key="answer" />]
-    : shown
-      ? [
-          ...pictured(shown)
-            .slice(0, 1)
-            .map((o) => <OfferingPage key="u0" offering={o} profession={shown.profession.name} />),
-          <SamplePage key="sample" book={shown} />,
-          ...pictured(shown)
-            .slice(1)
-            .map((o, i) => <OfferingPage key={`u${i + 1}`} offering={o} profession={shown.profession.name} />),
-        ]
-      : [<Note key="wait" text={blank ? "Este livro não abriu agora. Tente de novo daqui a pouco." : "Abrindo o livro…"} />];
+  const blank = !opened.research && !opened.product && !shown && (!opened.slug || failed === opened.slug);
+  const pages: ReactNode[] = opened.product
+    ? [<PitchPage key="pitch" />, <AnswerPage key="answer" />]
+    : opened.research
+      ? [...FACTS.map((fact, i) => <FactPage key={i} fact={fact} first={i === 0} />), <AnswerPage key="answer" />]
+      : shown
+        ? [
+            ...pictured(shown)
+              .slice(0, 1)
+              .map((o) => <OfferingPage key="u0" offering={o} profession={shown.profession.name} />),
+            <SamplePage key="sample" book={shown} />,
+            ...pictured(shown)
+              .slice(1)
+              .map((o, i) => <OfferingPage key={`u${i + 1}`} offering={o} profession={shown.profession.name} />),
+          ]
+        : [<Note key="wait" text={blank ? "Este livro não abriu agora. Tente de novo daqui a pouco." : "Abrindo o livro…"} />];
   // A last page left alone gets Arandu's word, so no spread ends on bare paper.
   if (shown && pages.length % 2) pages.push(<Note key="end" text={CLOSING} />);
   const spreads = Math.ceil(pages.length / 2);
+  const proofSpreads = printable ? Array.from({ length: spreads }, (_, i) => pages.slice(i * 2, i * 2 + 2)) : [];
 
   // The print fades, the leaf turns over it (run-stage), and the next spread's print comes up.
   const turn = (dir: 1 | -1) => {
@@ -88,39 +151,80 @@ export function BookPages() {
     timers.current = [window.setTimeout(() => setSpread((n) => n + dir), ms / 2), window.setTimeout(() => setTurning(false), ms)];
   };
 
+  // On a touch screen the pages also turn under a swipe, sideways, as a book's leaves do.
+  const onSwipeStart = (e: PointerEvent) => {
+    swipe.current = e.pointerType === "mouse" ? null : { x: e.clientX, y: e.clientY };
+  };
+  const onSwipeEnd = (e: PointerEvent) => {
+    const from = swipe.current;
+    swipe.current = null;
+    if (!from || turning) return;
+    const dx = e.clientX - from.x;
+    if (Math.abs(dx) < SWIPE || Math.abs(dx) < Math.abs(e.clientY - from.y)) return;
+    const dir = dx < 0 ? 1 : -1;
+    if (spread + dir >= 0 && spread + dir < spreads) turn(dir);
+  };
+
   return (
-    <section ref={host} tabIndex={-1} data-pages data-turning={turning || undefined} role="dialog" aria-label={opened.title} className={styles.book} data-theme="dark">
+    <section
+      ref={host}
+      onPointerDown={onSwipeStart}
+      onPointerUp={onSwipeEnd}
+      onPointerCancel={() => (swipe.current = null)}
+      tabIndex={-1}
+      data-pages
+      data-turning={turning || undefined}
+      role="dialog"
+      aria-label={opened.title}
+      className={styles.book}
+      data-theme="dark"
+    >
       <div className={styles.page}>{pages[spread * 2]}</div>
       <div className={styles.page}>{pages[spread * 2 + 1]}</div>
       {spreads > 1 && (
+        // The pages turn by their folded corners, as a book's do.
         <nav className={styles.turn} aria-label="Páginas">
-          <button type="button" aria-label="Página anterior" disabled={spread === 0 || turning} onClick={() => turn(-1)}>
-            ‹
-          </button>
-          <span className={styles.on}>
-            <span className="type-caption">
-              {spread + 1}/{spreads}
-            </span>
-            <button type="button" aria-label="Próxima página" disabled={spread === spreads - 1 || turning} onClick={() => turn(1)}>
-              ›
-            </button>
+          <button
+            type="button"
+            className={`${styles.corner} ${styles.back}`}
+            aria-label="Página anterior"
+            disabled={spread === 0 || turning}
+            onClick={() => turn(-1)}
+          />
+          <span className={`${styles.count} type-caption`}>
+            {spread + 1}/{spreads}
           </span>
+          <button
+            type="button"
+            className={styles.corner}
+            aria-label="Próxima página"
+            disabled={spread === spreads - 1 || turning}
+            onClick={() => turn(1)}
+          />
         </nav>
       )}
+      {/* A tap outside the book or Escape shuts it; the button is there for the keyboard, shown on focus. */}
       <button type="button" className={styles.shut} aria-label="Fechar o livro" onClick={() => dispatchEvent(new Event(SHUT_EVENT))}>
         ×
       </button>
+      <div ref={proofs} aria-hidden inert>
+        {proofSpreads.map((spread, i) => (
+          <div key={i} className={styles.book} data-proof data-theme="dark">
+            {spread.map((page, j) => (
+              <div key={j} className={styles.page}>
+                {page}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
 
 // A page of the book, laid out as a screen of the app.
 function Card({ children }: { children: ReactNode }) {
-  return (
-    <article className={styles.card}>
-      {children}
-    </article>
-  );
+  return <article className={styles.card}>{children}</article>;
 }
 
 function Note({ text }: { text: string }) {
@@ -150,7 +254,13 @@ function Cite({ source }: { source: Pick<Source, "label" | "url"> }) {
 function OfferingPage({ offering: { institution, course, curriculum }, profession }: { offering: Offering; profession: string }) {
   const photo = safeUrl(institution.photo?.url);
   const logo = safeUrl(institution.logo?.url);
-  const where = [course.campus.name, course.campus.city].filter((x) => x !== null).map(calm).join(" · ");
+  // The same small copies the book loaded ahead (BookPages).
+  const photoSrc = photo && thumb(photo);
+  const logoSrc = logo && thumb(logo);
+  const where = [course.campus.name, course.campus.city]
+    .filter((x) => x !== null)
+    .map(calm)
+    .join(" · ");
   const kind = [course.degree && DEGREE[course.degree], course.durationYears && `${course.durationYears} anos`].filter(Boolean).join(" · ");
   const firstYear = curriculum?.years.find((y) => y.year === 1)?.subjects ?? [];
   return (
@@ -158,7 +268,11 @@ function OfferingPage({ offering: { institution, course, curriculum }, professio
       {photo && institution.photo && (
         <span className={styles.photo}>
           {/* eslint-disable-next-line @next/next/no-img-element -- Wikimedia Commons file of any size: no optimizer route for it. */}
-          <img src={photo} alt={`Foto de ${institution.name}`} />
+          <img
+            src={photoSrc ?? undefined}
+            alt={`Foto de ${institution.name}`}
+            onError={(e) => photo && e.currentTarget.src !== photo && (e.currentTarget.src = photo)}
+          />
           <a className={styles.credit} href={safeUrl(institution.photo.sourceUrl) ?? undefined} target="_blank" rel="noreferrer">
             Foto: {institution.photo.credit} · {institution.photo.license}
           </a>
@@ -174,7 +288,7 @@ function OfferingPage({ offering: { institution, course, curriculum }, professio
           title={`Logo: ${institution.logo.license}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- as above */}
-          <img src={logo} alt={`Logo de ${institution.name}`} />
+          <img src={logoSrc ?? undefined} alt={`Logo de ${institution.name}`} />
         </a>
       )}
       <div className={styles.body}>
@@ -253,6 +367,18 @@ function FactPage({ fact, first }: { fact: Fact; first: boolean }) {
         <p className={styles.figure}>{fact.figure}</p>
         <p className={styles.text}>{fact.text}</p>
         <Cite source={fact.source} />
+      </div>
+    </Card>
+  );
+}
+
+// The product book's first page: what Arandu is, in the TV's words.
+function PitchPage() {
+  return (
+    <Card>
+      <div className={styles.body}>
+        <p className={styles.label}>O que é o Arandu</p>
+        <p className={styles.text}>{PITCH}</p>
       </div>
     </Card>
   );

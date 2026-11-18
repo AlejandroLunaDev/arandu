@@ -27,6 +27,7 @@ Everything the script creates lives in the "Props" collection, which it rebuilds
 """
 
 import math
+import os
 import random
 
 import bmesh
@@ -52,6 +53,7 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "BookCover": (srgb("#6B3FA0"), 0.6, 0.0),  # violet-600
     "BookSpine": (srgb("#6B3FA0"), 0.6, 0.0),
     "BookPages": (srgb("#E8E0CF"), 0.85, 0.0),  # cream-200
+    "BookGilt": (srgb("#E0A845"), 0.3, 0.8),  # amber-400 gold leaf on a grand book's page edges
     "BookPage": (srgb("#FBF8F1"), 0.85, 0.0),  # cream-50: an open page, which the web draws on
     "BookLeafFront": (srgb("#FBF8F1"), 0.85, 0.0),
     "BookLeafBack": (srgb("#FBF8F1"), 0.85, 0.0),
@@ -74,6 +76,51 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "YarnDark": (srgb("#8A5A12"), 0.95, 0.0),  # amber-700
     "BallMain": (srgb("#9B72CF"), 0.4, 0.0),  # violet-400
     "BallStripe": (srgb("#F1EBDD"), 0.4, 0.0),
+    # the room's furniture
+    "DeskTop": (srgb("#4A320E"), 0.5, 0.0),  # amber-900, a dark walnut
+    "DeskMat": (srgb("#2E1B46"), 0.9, 0.0),  # violet-900 felt
+    "LaptopBody": (srgb("#A9A2B4"), 0.35, 0.7),  # ink-400 aluminium
+    "LaptopKey": (srgb("#15131B"), 0.6, 0.0),  # ink-900
+    "LaptopTrackpad": (srgb("#6F6880"), 0.3, 0.5),  # ink-500
+    "LaptopBezel": (srgb("#09090D"), 0.2, 0.0),  # ink-950
+    "LaptopHinge": (srgb("#2E2A38"), 0.4, 0.5),  # ink-800
+    "NotebookScreen": (srgb("#15131B"), 0.15, 0.0),  # the display, which the web draws on
+    "TvScreen": (srgb("#0B0A10"), 0.15, 0.0),  # the TV's display, which the web draws on
+    "ChairLeather": (srgb("#15131B"), 0.45, 0.0),  # ink-900
+    "ChairAccent": (srgb("#6B3FA0"), 0.45, 0.0),  # violet-600
+    "ChairBase": (srgb("#1F1C27"), 0.4, 0.0),  # ink-850
+    "ChairMetal": (srgb("#A9A2B4"), 0.25, 0.9),
+    "ChairSlot": (srgb("#09090D"), 0.6, 0.0),
+    "SofaFabric": (srgb("#432765"), 0.95, 0.0),  # violet-800
+    "SofaCushion": (srgb("#573383"), 0.95, 0.0),  # violet-700
+    "SofaPillow": (srgb("#D99A32"), 0.9, 0.0),  # amber-500
+    "SofaLeg": (srgb("#8A5A12"), 0.5, 0.0),  # amber-700 wood
+    "TableWood": (srgb("#8A5A12"), 0.45, 0.0),  # the side table, in the sofa legs' wood
+    "Blanket": (srgb("#DDD3C0"), 1.0, 0.0),  # cream-300 knit
+    "BinMetal": (srgb("#6F6880"), 0.35, 0.7),
+    "Paper": (srgb("#FBF8F1"), 0.9, 0.0),  # cream-50
+    "TrophyBase": (srgb("#15131B"), 0.35, 0.0),
+    "TrophyPlate": (srgb("#DDD3C0"), 0.3, 0.8),
+    "CapCloth": (srgb("#09090D"), 0.7, 0.0),
+    "Tassel": (srgb("#E0A845"), 0.8, 0.0),  # amber-400
+    "PencilAmber": (srgb("#E9B75E"), 0.5, 0.0),  # amber-300
+    "PencilViolet": (srgb("#9B72CF"), 0.5, 0.0),
+    "PencilWood": (srgb("#DDD3C0"), 0.8, 0.0),
+    "Graphite": (srgb("#15131B"), 0.4, 0.3),
+    "MugCeramic": (srgb("#F1EBDD"), 0.3, 0.0),  # cream-100
+    "MugBand": (srgb("#6B3FA0"), 0.3, 0.0),
+    "Coffee": (srgb("#3B2414"), 0.15, 0.0),
+    "Steam": (srgb("#FBF8F1"), 1.0, 0.0),  # the web makes it a fading, rising wisp
+    "FrameWood": (srgb("#09090D"), 0.5, 0.0),
+    "FrameMat": (srgb("#F1EBDD"), 0.9, 0.0),
+    "FrameArt": (srgb("#FBF8F1"), 0.8, 0.0),  # the picture, which the web draws on
+    "NeonTube": (srgb("#F1EBDD"), 0.3, 0.0),  # cream-100, glowing white; the web makes it glow
+    "NeonBorder": (srgb("#EF5D6C"), 0.3, 0.0),  # the palette's coral red, the sign's frame
+    "NeonBacking": (srgb("#15131B"), 0.35, 0.0),  # smoked acrylic
+    "StringBulb": (srgb("#F1EBDD"), 0.2, 0.0),  # lit by the web in amber-300
+    "StringSocket": (srgb("#3A3645"), 0.5, 0.0),
+    "TowerStone": (srgb("#DDD3C0"), 0.7, 0.0),
+    "TowerWindow": (srgb("#3A3645"), 0.4, 0.0),
 }
 
 
@@ -85,6 +132,7 @@ def material(name):
     bsdf.inputs["Base Color"].default_value = color
     bsdf.inputs["Roughness"].default_value = roughness
     bsdf.inputs["Metallic"].default_value = metallic
+    bsdf.inputs["Emission Strength"].default_value = 0.0  # the web lights what glows; a preview's glow never ships
     return mat
 
 
@@ -260,7 +308,9 @@ BOOKS = {  # name: height, depth (spine to fore-edge, along Y), thickness (along
     "BookThick": (0.37, 0.27, 0.11, 0.045, 0.008, 0.009),
     "BookShort": (0.30, 0.21, 0.07, 0.028, 0.006, 0.007),
     "BookPaperback": (0.33, 0.22, 0.05, 0.006, 0.0025, 0.0),  # soft cover, flush with its pages
+    "BookGrand": (0.52, 0.40, 0.07, 0.03, 0.01, 0.012),  # Arandu's own books: large, gilt-edged hardcovers
 }
+GILT = {"BookGrand"}  # the books whose page edges are gilt
 
 
 def arc(r, cx, cy, a0, a1, n):
@@ -322,7 +372,7 @@ def book(coll, name):
 
     p = Part()
     p.add(verts, faces, mats, uvs)
-    p.add(*prism(block, gap, H - gap), "BookPages")
+    p.add(*prism(block, gap, H - gap), "BookGilt" if name in GILT else "BookPages")
     return p.build(name, coll, uv=True)
 
 
@@ -623,6 +673,454 @@ def ball(coll):
     return p.build("Ball", coll)
 
 
+# ---------------------------------------------------------------- the room's furniture
+#
+# The furniture shares the cat's scale too: about 1.3 times a person's, so the cat and the books never
+# look small beside it. Floor and desk pieces have their origin at the centre of their base on Z = 0.
+# Wall pieces (the frames, NeonSign) have it at the centre of their back, on the wall, their front
+# toward -Y; StringLights has it at its left hook.
+
+DESK_TOP = 0.98  # the desk's top: the trophy, cap, pencil cup and mug stand here
+DESK_MAT = DESK_TOP + 0.006  # the felt mat on it, where the notebook stands
+FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "Outfit.ttf")  # the brand's display face
+NEON_TEXT = ("Abra", "um livro")  # two lines: the book and the first, then the second
+FRAMES = {"FrameTall": (0.34, 0.44), "FrameSquare": (0.3, 0.3)}  # name: width, height
+
+
+def add_box(part, size, center, mat, radius=0.0, m=Matrix(), seg=3):
+    if radius > 0:
+        verts, faces = rbox(size, radius, center, seg)
+    else:
+        hx, hy, hz = (s / 2 for s in size)
+        cx, cy, cz = center
+        verts = [(cx + x * hx, cy + y * hy, cz + z * hz) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
+        faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    part.add(moved(verts, m), faces, mat)
+
+
+def soft(verts, faces, radius, seg=3):
+    """Round a closed mesh's edges."""
+    bm = bmesh.new()
+    vs = [bm.verts.new(v) for v in verts]
+    for f in faces:
+        bm.faces.new([vs[i] for i in f])
+    bmesh.ops.bevel(bm, geom=list(bm.edges), offset=radius, segments=seg, profile=0.5, affect="EDGES", clamp_overlap=True)
+    index = {v: i for i, v in enumerate(bm.verts)}
+    out = [tuple(v.co) for v in bm.verts], [tuple(index[v] for v in f.verts) for f in bm.faces]
+    bm.free()
+    return out
+
+
+def upright(outline, thick, radius, m):
+    """An outline in (x, height), extruded thick toward -Y from Y = 0, its edges rounded, then moved by m."""
+    verts, faces = soft(*prism(outline, 0, thick), radius)
+    return moved(verts, m @ Matrix.Rotation(math.radians(90), 4, "X")), faces
+
+
+def mirrored(half):
+    """A symmetric outline from its right half, listed bottom to top."""
+    return half + [(-x, z) for x, z in reversed(half)]
+
+
+def crumple(center, radius, seed):
+    """A crumpled sheet of paper: a lumpy, faceted ball."""
+    rng = random.Random(seed)
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=2, radius=radius)
+    for v in bm.verts:
+        v.co = v.co * rng.uniform(0.78, 1.08) + Vector(center)
+    index = {v: i for i, v in enumerate(bm.verts)}
+    out = [tuple(v.co) for v in bm.verts], [tuple(index[v] for v in f.verts) for f in bm.faces]
+    bm.free()
+    return out
+
+
+def face_front(obj, mat):
+    """Part.build guesses which side a lone face shows: turn the faces of material mat toward -Y."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    index = obj.data.materials.find(mat)
+    bmesh.ops.reverse_faces(bm, faces=[f for f in bm.faces if f.material_index == index and f.normal.y > 0])
+    bm.to_mesh(obj.data)
+    bm.free()
+    return obj
+
+
+def desk(coll):
+    """A writing desk: a walnut top on a slim metal frame, a felt mat where the notebook goes."""
+    W, D, T = 1.7, 0.78, 0.045
+    p = Part()
+    add_box(p, (W, D, T), (0, 0, DESK_TOP - T / 2), "DeskTop", 0.01)
+    leg = DESK_TOP - T
+    for sx in (-1, 1):
+        x = sx * (W / 2 - 0.08)
+        for sy in (-1, 1):
+            add_box(p, (0.045, 0.045, leg), (x, sy * (D / 2 - 0.07), leg / 2), "LampMetal", 0.006)
+        add_box(p, (0.035, D - 0.14, 0.035), (x, 0, 0.1), "LampMetal", 0.005)  # foot rail
+    add_box(p, (W - 0.16, 0.03, 0.06), (0, D / 2 - 0.07, leg - 0.03), "LampMetal", 0.005)  # back rail
+    add_box(p, (0.95, 0.46, 0.006), (-0.1, -0.06, DESK_TOP + 0.003), "DeskMat", 0.003, seg=2)
+    return p.build("Desk", coll)
+
+
+def notebook(coll):
+    """A laptop open a little past upright. Its child NotebookScreen is the display, 16:10: one face mapped
+    to the full 0-1 UV square, u left to right and v up seen from the front, for the web to draw on."""
+    W, D, H, LID = 0.48, 0.33, 0.02, 0.31
+    p = Part()
+    add_box(p, (W, D, H), (0, 0, H / 2), "LaptopBody", 0.006)
+    pitch, key = 0.036, 0.03
+    cols = 11
+    x0 = -(cols * pitch - (pitch - key)) / 2 + key / 2
+    for row in range(5):
+        y = -0.035 + row * pitch + key / 2
+        if row == 0:  # the bottom row: three keys, the space bar, three keys
+            spans = [(0, 1), (1, 2), (2, 3), (3, 8), (8, 9), (9, 10), (10, 11)]
+        else:
+            spans = [(c, c + 1) for c in range(cols)]
+        for a, b in spans:
+            width = (b - a) * pitch - (pitch - key)
+            add_box(p, (width, key, 0.004), (x0 - key / 2 + a * pitch + width / 2, y, H + 0.0005), "LaptopKey", 0.0012, seg=1)
+    add_box(p, (0.15, 0.09, 0.002), (0, -0.11, H), "LaptopTrackpad", 0.004, seg=1)
+    hinge = Vector((0, D / 2 - 0.008, H))
+    lid = Matrix.Translation(hinge) @ Matrix.Rotation(math.radians(-14), 4, "X")
+    add_box(p, (W, 0.012, LID), (0, 0.006, LID / 2), "LaptopBody", 0.005, m=lid)
+    add_box(p, (W - 0.006, 0.002, LID - 0.006), (0, -0.0005, LID / 2), "LaptopBezel", 0.002, m=lid, seg=1)
+    add_box(p, (0.006, 0.001, 0.006), (0, -0.0018, LID - 0.009), "LaptopHinge", m=lid)  # the webcam
+    p.add(*tube([(-W / 2 + 0.05, hinge.y, H), (W / 2 - 0.05, hinge.y, H)], 0.007, sides=12), "LaptopHinge")
+    body = p.build("Notebook", coll)
+
+    s = Part()
+    x0, x1, z0, z1 = -W / 2 + 0.014, W / 2 - 0.014, 0.022, 0.022 + (W - 0.028) / 1.6
+    corners = moved([(x0, -0.0018, z0), (x1, -0.0018, z0), (x1, -0.0018, z1), (x0, -0.0018, z1)], lid)
+    s.add(corners, [(0, 1, 2, 3)], "NotebookScreen", uvs=[[(0, 0), (1, 0), (1, 1), (0, 1)]])
+    screen = face_front(s.build("NotebookScreen", coll, uv=True), "NotebookScreen")
+    screen.parent = body
+    return body
+
+
+def tv(coll):
+    """A slim wall TV, 2.2 m across, on a bracket. Its child TvScreen is the display, 16:9: one face mapped
+    to the full 0-1 UV square, u left to right and v up seen from the front, for the web to draw on."""
+    W, D = 2.2, 0.035
+    H = W * 9 / 16
+    p = Part()
+    add_box(p, (W, D, H), (0, -D / 2, 0), "LaptopBezel", 0.012)
+    add_box(p, (0.3, 0.03, 0.18), (0, 0.0, 0), "LampMetal", 0.01)  # the wall bracket behind it
+    body = p.build("Tv", coll)
+    s = Part()
+    x, z, y = W / 2 - 0.025, H / 2 - 0.025, -D - 0.001
+    s.add([(-x, y, -z), (x, y, -z), (x, y, z), (-x, y, z)], [(0, 1, 2, 3)], "TvScreen", uvs=[[(0, 0), (1, 0), (1, 1), (0, 1)]])
+    screen = face_front(s.build("TvScreen", coll, uv=True), "TvScreen")
+    screen.parent = body
+    return body
+
+
+def chair_gamer(coll):
+    """A racing-style gamer chair: a bucket seat and a winged back with belt slots, racing stripes, neck
+    and lumbar pillows, T arms on a five-star base with casters. Black, its bolsters in violet."""
+    p = Part()
+    for i in range(5):
+        a = math.radians(90 + 72 * i)
+        tip = Vector((0.36 * math.cos(a), 0.36 * math.sin(a), 0.075))
+        p.add(*tube([(0, 0, 0.11), tuple(tip)], [0.032, 0.022], sides=10), "ChairBase")
+        add_box(p, (0.024, 0.024, 0.04), (tip.x, tip.y, 0.06), "ChairBase", 0.006, seg=1)
+        wheel = Matrix.Translation((tip.x, tip.y, 0.035)) @ Matrix.Rotation(a, 4, "Z") @ Matrix.Rotation(math.radians(90), 4, "X")
+        add_lathe(p, [(0.0, -0.016), (0.03, -0.016), (0.035, -0.008), (0.035, 0.008), (0.03, 0.016), (0.0, 0.016)], "ChairBase", wheel, seg=20)
+    add_lathe(p, [(0.0, 0.08), (0.07, 0.08), (0.075, 0.12), (0.05, 0.16), (0.0, 0.16)], "ChairBase", seg=24)
+    add_lathe(p, [(0.0, 0.15), (0.032, 0.15), (0.032, 0.33), (0.023, 0.34), (0.023, 0.52), (0.0, 0.52)], "ChairMetal", seg=20)
+    add_box(p, (0.3, 0.32, 0.05), (0, 0, 0.53), "ChairBase", 0.012)
+    p.add(*tube([(0.14, -0.05, 0.53), (0.24, -0.12, 0.5)], 0.008, sides=8), "ChairBase")  # height lever
+    # bucket seat
+    add_box(p, (0.62, 0.62, 0.11), (0, 0, 0.61), "ChairLeather", 0.045)
+    for sx in (-1, 1):
+        tilt = Matrix.Translation((sx * 0.28, 0, 0.65)) @ Matrix.Rotation(math.radians(-8 * sx), 4, "Y")
+        add_box(p, (0.12, 0.62, 0.13), (0, 0, 0), "ChairAccent", 0.055, m=tilt)
+    # winged back, reclined a little
+    back = Matrix.Translation((0, 0.37, 0.62)) @ Matrix.Rotation(math.radians(-11), 4, "X")
+    shell = [(0.26, 0.0), (0.286, 0.18), (0.26, 0.44), (0.35, 0.78), (0.35, 0.88), (0.22, 0.975), (0.208, 1.145), (0.156, 1.21)]
+    p.add(*upright(mirrored(shell), 0.13, 0.035, back), "ChairAccent")
+    panel = [(0.17, 0.04), (0.18, 0.44), (0.247, 0.78), (0.247, 0.86), (0.156, 0.94), (0.143, 1.12), (0.104, 1.16)]
+    p.add(*upright(mirrored(panel), 0.17, 0.015, back), "ChairLeather")
+    for sx in (-1, 1):
+        add_box(p, (0.09, 0.08, 0.65), (sx * 0.28, -0.15, 0.39), "ChairAccent", 0.04, m=back)  # back bolsters
+        add_box(p, (0.035, 0.006, 0.075), (sx * 0.1, -0.172, 0.99), "ChairSlot", 0.012, m=back, seg=2)  # belt slots
+        add_box(p, (0.014, 0.004, 0.6), (sx * 0.075, -0.171, 0.44), "ChairAccent", 0.002, m=back, seg=1)  # stripes
+    add_box(p, (0.28, 0.08, 0.12), (0, -0.2, 0.86), "ChairLeather", 0.05, m=back)  # neck pillow
+    add_box(p, (0.34, 0.09, 0.17), (0, -0.2, 0.22), "ChairLeather", 0.06, m=back)  # lumbar pillow
+    # T arms
+    for sx in (-1, 1):
+        add_box(p, (0.14, 0.05, 0.035), (sx * 0.31, 0.02, 0.55), "ChairBase", 0.008)
+        add_box(p, (0.045, 0.06, 0.27), (sx * 0.38, 0.02, 0.69), "ChairBase", 0.01)
+        add_box(p, (0.1, 0.34, 0.045), (sx * 0.38, -0.01, 0.84), "ChairBase", 0.018)
+    return p.build("ChairGamer", coll)
+
+
+def sofa(coll):
+    """A two-seat sofa: deep violet cushions, an amber pillow and a cream knitted one."""
+    p = Part()
+    add_box(p, (2.34, 1.07, 0.31), (0, 0, 0.26), "SofaFabric", 0.06)
+    add_box(p, (2.1, 0.2, 0.56), (0, 0.44, 0.62), "SofaFabric", 0.07)  # back frame
+    for sx in (-1, 1):
+        add_box(p, (0.99, 0.94, 0.21), (sx * 0.507, -0.05, 0.505), "SofaCushion", 0.08)
+        lean = Matrix.Translation((sx * 0.507, 0.33, 0.88)) @ Matrix.Rotation(math.radians(-10), 4, "X")
+        add_box(p, (0.96, 0.26, 0.6), (0, 0, 0), "SofaCushion", 0.11, m=lean)
+        add_box(p, (0.21, 1.07, 0.62), (sx * 1.235, 0, 0.55), "SofaFabric", 0.09)
+        for sy in (-1, 1):
+            add_lathe(p, [(0.0, 0.0), (0.022, 0.0), (0.03, 0.105), (0.0, 0.105)], "SofaLeg", Matrix.Translation((sx * 1.08, sy * 0.42, 0)), seg=16)
+    pillow = Matrix.Translation((-0.72, 0.12, 0.8)) @ Matrix.Rotation(math.radians(14), 4, "Z") @ Matrix.Rotation(math.radians(-14), 4, "X")
+    add_box(p, (0.44, 0.15, 0.42), (0, 0, 0), "SofaPillow", 0.12, m=pillow)
+    # a cream knitted pillow on the right, its ribs running down
+    knit = Matrix.Translation((0.78, 0.13, 0.79)) @ Matrix.Rotation(math.radians(-10), 4, "Z") @ Matrix.Rotation(math.radians(-12), 4, "X")
+    add_box(p, (0.4, 0.14, 0.38), (0, 0, 0), "Blanket", 0.11, m=knit)
+    for k in range(5):
+        add_box(p, (0.03, 0.15, 0.3), (-0.12 + k * 0.06, -0.004, 0), "Blanket", 0.014, m=knit, seg=2)
+    return p.build("Sofa", coll)
+
+
+SIDE_TABLE = (0.45, 0.55)  # top radius, height
+
+
+def side_table(coll):
+    """A round wooden side table on three splayed legs, for beside the sofa. A low board stands across
+    the back of its top: the web stands two books on the table facing out, their backs against it."""
+    R, H = SIDE_TABLE
+    T = 0.035
+    p = Part()
+    add_lathe(p, [(0.0, H - T), (R - 0.012, H - T), (R, H - T + 0.012), (R, H - 0.008), (R - 0.008, H), (0.0, H)], "TableWood", seg=64)
+    for a in (90, 210, 330):  # one leg behind, two in front
+        c, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
+        p.add(*tube([(0.18 * c, 0.18 * s_, H - T + 0.005), (0.34 * c, 0.34 * s_, 0.0)], [0.03, 0.018], sides=12), "TableWood")
+    add_box(p, (0.8, 0.018, 0.16), (0, 0.06, H + 0.08), "TableWood", 0.004)
+    return p.build("SideTable", coll)
+
+
+def paper_bin(coll):
+    """An office wire bin. The crumpled sheets in it are PaperBall props of their own, for the web to toss."""
+    H, R0, R1 = 0.4, 0.14, 0.18
+    p = Part()
+    add_lathe(p, [(0.0, 0.0), (R0, 0.0), (R0, 0.006), (0.0, 0.006)], "BinMetal", seg=32)
+    for i in range(28):
+        a = 2 * math.pi * i / 28
+        p.add(*tube([(R0 * math.cos(a), R0 * math.sin(a), 0.004), (R1 * math.cos(a), R1 * math.sin(a), H)], 0.0025, sides=5), "BinMetal")
+    for z, r in ((0.008, 0.004), (H * 0.36, 0.003), (H * 0.7, 0.003), (H, 0.008)):
+        rr = R0 + (R1 - R0) * z / H
+        p.add(*tube([(rr * math.cos(a), rr * math.sin(a), z) for a in (2 * math.pi * i / 48 for i in range(48))], r, sides=6, closed=True), "BinMetal")
+    return p.build("PaperBin", coll)
+
+
+# The crumpled sheets: three sizes, each its own crumple (name: radius, seed), their origin at the bottom.
+PAPER_BALLS = {"PaperBall": (0.06, 3), "PaperBallSmall": (0.048, 5), "PaperBallLarge": (0.072, 1)}
+
+
+def paper_ball(coll, name):
+    """A crumpled sheet of paper, a toy for the cat."""
+    r, seed = PAPER_BALLS[name]
+    p = Part()
+    p.add(*crumple((0, 0, r * 0.85), r, seed), "Paper")
+    return p.build(name, coll)
+
+
+def trophy(coll):
+    """A gold cup on a black base, a blank plate on its front."""
+    p = Part()
+    add_box(p, (0.11, 0.11, 0.055), (0, 0, 0.0275), "TrophyBase", 0.006)
+    add_box(p, (0.07, 0.003, 0.028), (0, -0.0555, 0.0275), "TrophyPlate", 0.001, seg=1)
+    cup = [(0.0, 0.055), (0.03, 0.055), (0.03, 0.064), (0.009, 0.076), (0.009, 0.12), (0.017, 0.134), (0.04, 0.155),
+           (0.053, 0.188), (0.059, 0.235), (0.056, 0.239), (0.051, 0.235), (0.0, 0.215)]
+    add_lathe(p, cup, "LampAccent")
+    for sx in (-1, 1):
+        loop = spline([(sx * 0.052, 0, 0.222), (sx * 0.085, 0, 0.215), (sx * 0.084, 0, 0.18), (sx * 0.05, 0, 0.165)], 14)
+        p.add(*tube(loop, 0.005, sides=8), "LampAccent")
+    return p.build("Trophy", coll)
+
+
+def grad_cap(coll):
+    """A graduation cap, its tassel hanging over a corner of the board."""
+    p = Part()
+    add_lathe(p, [(0.0, 0.0), (0.098, 0.0), (0.1, 0.07), (0.0, 0.075)], "CapCloth")
+    board = Matrix.Rotation(math.radians(45), 4, "Z")
+    add_box(p, (0.27, 0.27, 0.012), (0, 0, 0.08), "CapCloth", 0.002, m=board, seg=1)
+    add_lathe(p, [(0.0, 0.086), (0.011, 0.086), (0.011, 0.092), (0.0, 0.094)], "Tassel", seg=16)
+    corner = 0.27 / math.sqrt(2) - 0.008
+    cord = spline([(0, 0, 0.09), (corner * 0.6, -0.004, 0.0895), (corner, 0, 0.088), (corner + 0.012, 0, 0.06), (corner + 0.014, 0, 0.035)], 16)
+    p.add(*tube(cord, 0.0028, sides=6), "Tassel")
+    add_lathe(p, [(0.0, 0.035), (0.005, 0.035), (0.011, 0.012), (0.012, 0.004), (0.0, 0.004)], "Tassel", Matrix.Translation((corner + 0.014, 0, 0)), seg=16)
+    return p.build("GradCap", coll)
+
+
+def pencil_cup(coll):
+    """A violet ceramic cup, empty: its pencils are props of their own, for the web to spill."""
+    p = Part()
+    add_lathe(p, [(0.0, 0.0), (0.05, 0.0), (0.053, 0.13), (0.047, 0.13), (0.045, 0.008), (0.0, 0.008)], "PotCeramic", seg=32)
+    return p.build("PencilCup", coll)
+
+
+# The pencils (name: length of the painted body, its color), upright, their origin at the bottom.
+PENCILS = {"PencilAmber": (0.2, "PencilAmber"), "PencilViolet": (0.18, "PencilViolet")}
+
+
+def pencil(coll, name):
+    """A hexagonal pencil, sharpened to a graphite point."""
+    length, mat = PENCILS[name]
+    p = Part()
+    for z0, z1, r0, r1, part_mat in ((0, length, 0.0065, 0.0065, mat), (length, length + 0.02, 0.0065, 0.0022, "PencilWood"),
+                                     (length + 0.02, length + 0.026, 0.0022, 0.0003, "Graphite")):
+        p.add(*tube([(0, 0, z0), (0, 0, z1)], [r0, r1], sides=6), part_mat)
+    return p.build(name, coll)
+
+
+def mug(coll):
+    """A coffee mug with a violet band, full. Its child MugSteam is three rising ribbons: UVs with v up
+    the ribbon, "_sway" 0 at the coffee to 1 at the tip, for the web's steam shader."""
+    p = Part()
+    outer = [(0.0, 0.0), (0.045, 0.0), (0.048, 0.005), (0.0485, 0.055), (0.0487, 0.07), (0.049, 0.105),
+             (0.044, 0.105), (0.043, 0.012), (0.0, 0.012)]
+    add_lathe(p, outer, ["MugCeramic", "MugCeramic", "MugCeramic", "MugBand", "MugCeramic", "MugCeramic", "MugCeramic", "MugCeramic"], seg=40)
+    add_lathe(p, [(0.0, 0.09), (0.0436, 0.09)], "Coffee", seg=40)
+    handle = spline([(0.046, 0, 0.088), (0.074, 0, 0.083), (0.083, 0, 0.058), (0.073, 0, 0.032), (0.046, 0, 0.027)], 18)
+    p.add(*tube(handle, 0.008, sides=10), "MugCeramic")
+    body = p.build("Mug", coll)
+
+    s = Part()
+    rng = random.Random(7)
+    for k in range(3):
+        turn = Matrix.Rotation(math.radians(60 * k), 4, "Z")
+        phase = rng.uniform(0, 6.28)
+        spine = spline([(0.012 * math.sin(phase + 1.7 * j) + (k - 1) * 0.01, 0, 0.095 + 0.07 * j) for j in range(5)], 16)
+        verts, uvs, faces = [], [], []
+        for i, c in enumerate(spine):
+            v = i / (len(spine) - 1)
+            half = 0.02 * (1 - 0.6 * v)
+            verts += [(c.x - half, c.y, c.z), (c.x + half, c.y, c.z)]
+            uvs.append(v)
+        for i in range(len(spine) - 1):
+            faces.append((2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2))
+        face_uvs = [[(0, uvs[i]), (1, uvs[i]), (1, uvs[i + 1]), (0, uvs[i + 1])] for i in range(len(spine) - 1)]
+        s.add(moved(verts, turn), faces, "Steam", uvs=face_uvs, sway=lambda q: min(1.0, max(0.0, (q.z - 0.095) / 0.28)))
+    steam = s.build("MugSteam", coll, uv=True, sway=True)
+    steam.parent = body
+    return body
+
+
+def frame(coll, name):
+    """A black gallery frame with a cream mat. The picture is one face, material "FrameArt", mapped to the
+    full 0-1 UV square, u left to right and v up, for the web to draw on."""
+    W, H = FRAMES[name]
+    B, DEPTH, MAT = 0.022, 0.03, 0.035
+    p = Part()
+    add_box(p, (W, DEPTH, B), (0, -DEPTH / 2, H / 2 - B / 2), "FrameWood", 0.003, seg=1)
+    add_box(p, (W, DEPTH, B), (0, -DEPTH / 2, -H / 2 + B / 2), "FrameWood", 0.003, seg=1)
+    add_box(p, (B, DEPTH, H - 2 * B), (W / 2 - B / 2, -DEPTH / 2, 0), "FrameWood", 0.003, seg=1)
+    add_box(p, (B, DEPTH, H - 2 * B), (-W / 2 + B / 2, -DEPTH / 2, 0), "FrameWood", 0.003, seg=1)
+    add_box(p, (W - 2 * B, 0.004, H - 2 * B), (0, -0.006, 0), "FrameMat")
+    x, z = W / 2 - B - MAT, H / 2 - B - MAT
+    p.add([(-x, -0.0085, -z), (x, -0.0085, -z), (x, -0.0085, z), (-x, -0.0085, z)], [(0, 1, 2, 3)], "FrameArt",
+          uvs=[[(0, 0), (1, 0), (1, 1), (0, 1)]])
+    return face_front(p.build(name, coll, uv=True), "FrameArt")
+
+
+def neon_sign(coll):
+    """An open book drawn in tube and 'Abra' on the first line, 'um livro' on the second starting left of
+    'Abra', bent in neon tube in the brand's face, on a smoked acrylic panel held off the wall, a coral tube
+    framing it. The tubes are "NeonTube" and "NeonBorder", for the web to light."""
+    font = bpy.data.fonts.load(FONT, check_existing=True)
+
+    def line(text):
+        cu = bpy.data.curves.new("NeonText", "FONT")
+        cu.body, cu.font, cu.size = text, font, 0.2
+        cu.align_x, cu.align_y = "LEFT", "CENTER"
+        cu.fill_mode, cu.bevel_depth, cu.bevel_resolution, cu.resolution_u = "NONE", 0.008, 1, 4
+        tmp = bpy.data.objects.new("NeonText", cu)
+        coll.objects.link(tmp)
+        bpy.context.view_layer.update()
+        evaluated = tmp.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        me = evaluated.to_mesh()
+        verts, faces = [tuple(v.co) for v in me.vertices], [tuple(f.vertices) for f in me.polygons]
+        evaluated.to_mesh_clear()
+        bpy.data.objects.remove(tmp)
+        bpy.data.curves.remove(cu)
+        left = min(v[0] for v in verts)
+        return [(x - left, y, z) for x, y, z in verts], faces, max(v[0] for v in verts) - left
+
+    (v1, f1, w1), (v2, f2, w2) = line(NEON_TEXT[0]), line(NEON_TEXT[1])
+    # The first line is the book, a gap and the first word; the second starts INDENT in, left of that word.
+    # Everything is moved so the panel centres on X = 0.
+    book_w, gap, pad, indent, lead = 0.17, 0.05, 0.09, 0.1, 0.115
+    width = max(book_w + gap + w1, indent + w2)
+    total = pad + width + pad
+    x0 = -total / 2 + pad  # the content's left edge
+    bx = x0 + book_w / 2  # the book's spine
+    p = Part()
+    up = Matrix.Rotation(math.radians(90), 4, "X")
+    p.add(moved(v1, Matrix.Translation((x0 + book_w + gap, -0.05, lead)) @ up), f1, "NeonTube")
+    p.add(moved(v2, Matrix.Translation((x0 + indent, -0.05, -lead)) @ up), f2, "NeonTube")
+    for side in (-1, 1):
+        page = [(0, -0.07), (0.04 * side, -0.055), (0.085 * side, -0.06), (0.085 * side, 0.06), (0.04 * side, 0.07), (0, 0.055)]
+        p.add(*tube([(bx + c.x, -0.05, lead + c.y) for c in spline([(x, z, 0) for x, z in page], 24)], 0.008, sides=8), "NeonTube")
+    p.add(*tube([(bx, -0.05, lead - 0.07), (bx, -0.05, lead + 0.055)], 0.008, sides=8), "NeonTube")
+    ph = 0.56
+    add_box(p, (total, 0.012, ph), (0, -0.034, 0), "NeonBacking", 0.03, seg=4)
+    # a border tube in coral around the panel, inset from its edge, corners rounded
+    hx, hz, r = total / 2 - 0.035, ph / 2 - 0.035, 0.045
+    border = []
+    for cx, cz, a0 in ((hx - r, hz - r, 0), (-hx + r, hz - r, 90), (-hx + r, -hz + r, 180), (hx - r, -hz + r, 270)):
+        border += [(cx + r * math.cos(math.radians(a0 + d)), -0.05, cz + r * math.sin(math.radians(a0 + d))) for d in range(0, 90, 10)]
+    p.add(*tube(border, 0.007, sides=8, closed=True), "NeonBorder")
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            at = Matrix.Translation((sx * (total / 2 - 0.05), 0, sz * (ph / 2 - 0.05))) @ Matrix.Rotation(math.radians(90), 4, "X")
+            add_lathe(p, [(0.0, 0.0), (0.009, 0.0), (0.009, 0.042), (0.0, 0.042)], "LampMetal", at, seg=12)
+    return p.build("NeonSign", coll)
+
+
+def string_lights(coll):
+    """Fairy lights strung along the wall in four scallops, a warm bulb hanging every 0.2 m. Its
+    StringLightsLight1 to 3 empties mark where the web may put a few point lights."""
+    L, SAG, BULBS = 3.7, 0.12, 18
+    p = Part()
+    wire = []
+    for i in range(121):
+        x = L * i / 120
+        u = (x / (L / 4)) % 1
+        wire.append((x, -0.01, -SAG * 4 * u * (1 - u)))
+    p.add(*tube(wire, 0.003, sides=5), "LampCord")
+    for x in (0, L / 4, L / 2, 3 * L / 4, L):
+        add_box(p, (0.012, 0.02, 0.012), (x, 0.0, 0.004), "LampMetal", 0.003, seg=1)  # hooks
+    for k in range(BULBS):
+        x = L * (k + 0.5) / BULBS
+        u = (x / (L / 4)) % 1
+        z = -SAG * 4 * u * (1 - u)
+        at = Matrix.Translation((x, -0.012, z))
+        add_lathe(p, [(0.0, 0.0), (0.008, 0.0), (0.009, -0.018), (0.0, -0.02)], "StringSocket", at, seg=12)
+        add_lathe(p, [(0.0, -0.016), (0.011, -0.022), (0.017, -0.036), (0.016, -0.05), (0.009, -0.06), (0.0, -0.062)], "StringBulb", at, seg=16)
+    obj = p.build("StringLights", coll)
+    for i, x in enumerate((L / 6, L / 2, 5 * L / 6)):
+        light("StringLightsLight%d" % (i + 1), obj, (x, -0.03, -0.1))
+    return obj
+
+
+def farol_santander(coll):
+    """A souvenir of the Farol Santander (the old Banespa tower), São Paulo's Art Deco skyline mark:
+    stepped volumes with vertical window bands and a spire, on a small black stand."""
+    p = Part()
+    add_box(p, (0.11, 0.09, 0.012), (0, 0, 0.006), "TrophyBase", 0.003, seg=1)
+    steps = [(0.09, 0.07, 0.012, 0.142), (0.072, 0.058, 0.142, 0.182), (0.054, 0.046, 0.182, 0.302),
+             (0.044, 0.038, 0.302, 0.327), (0.034, 0.03, 0.327, 0.347), (0.024, 0.022, 0.347, 0.364), (0.014, 0.014, 0.364, 0.374)]
+    for w, d, z0, z1 in steps:
+        add_box(p, (w, d, z1 - z0), (0, 0, (z0 + z1) / 2), "TowerStone")
+        if z1 - z0 > 0.03:
+            n = int(w / 0.012)
+            for i in range(n):
+                x = -w / 2 + (i + 0.5) * w / n
+                add_box(p, (0.004, 0.001, z1 - z0 - 0.014), (x, -d / 2 - 0.0004, (z0 + z1) / 2), "TowerWindow")
+            n = int(d / 0.012)
+            for i in range(n):
+                y = -d / 2 + (i + 0.5) * d / n
+                add_box(p, (0.001, 0.004, z1 - z0 - 0.014), (w / 2 + 0.0004, y, (z0 + z1) / 2), "TowerWindow")
+    add_lathe(p, [(0.0, 0.374), (0.004, 0.374), (0.0015, 0.42), (0.0, 0.425)], "LampAccent", seg=12)
+    return p.build("FarolSantander", coll)
+
+
 # ---------------------------------------------------------------- assembly
 
 LAYOUT = {  # where each prop stands in the Blender scene; the export puts every one at the origin
@@ -638,6 +1136,28 @@ LAYOUT = {  # where each prop stands in the Blender scene; the export puts every
     "ShelfLarge": (-0.45, 0.05, 0.6),
     "ShelfMedium": (-0.45, 0.05, 1.15),
     "ShelfSmall": (-0.45, 0.05, 1.6),
+    # the furniture, a row behind
+    "Desk": (-3.2, 3.0, 0),
+    "Notebook": (-3.2, 3.0, DESK_MAT),
+    "ChairGamer": (-4.6, 3.0, 0),
+    "Sofa": (-0.4, 3.0, 0),
+    "SideTable": (1.6, 1.5, 0),  # in the open, between the rows
+    "PaperBin": (2.6, 3.0, 0),
+    "PaperBall": (2.95, 3.0, 0),
+    "PaperBallSmall": (3.15, 3.0, 0),
+    "PaperBallLarge": (3.4, 3.0, 0),
+    "PencilAmber": (-2.45, 3.0, DESK_TOP),
+    "PencilViolet": (-2.38, 3.0, DESK_TOP),
+    "Trophy": (-3.75, 3.0, DESK_TOP),
+    "GradCap": (-3.6, 3.15, DESK_TOP),
+    "PencilCup": (-2.6, 3.0, DESK_TOP),
+    "Mug": (-2.75, 2.85, DESK_TOP),
+    "FrameTall": (3.4, 3.0, 1.2),
+    "FrameSquare": (3.85, 3.0, 1.2),
+    "NeonSign": (-0.4, 3.0, 2.2),
+    "StringLights": (-2.2, 3.0, 2.8),
+    "FarolSantander": (4.3, 3.0, 0),
+    "Tv": (-1.5, 4.5, 1.6),
 }
 
 
@@ -665,6 +1185,10 @@ def build():
     props = [book(coll, name) for name in BOOKS] + [book_open(coll)]
     props += [shelf(coll, name) for name in SHELVES]
     props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball)]
+    props += [f(coll) for f in (desk, notebook, chair_gamer, sofa, paper_bin, trophy, grad_cap,
+                                pencil_cup, mug, neon_sign, string_lights, farol_santander, tv, side_table)]
+    props += [paper_ball(coll, name) for name in PAPER_BALLS] + [pencil(coll, name) for name in PENCILS]
+    props += [frame(coll, name) for name in FRAMES]
     for obj in props:
         obj.location = LAYOUT[obj.name]
     tris = sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in coll.objects if o.type == "MESH")

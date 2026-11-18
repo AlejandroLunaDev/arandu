@@ -91,3 +91,132 @@
     transform: translate(calc(-50% + var(--space-4)), calc(-1 * var(--space-8))) scale(1.2);
   }
 }
+
+/*
+ * The coffee's steam: three soft wisps that rise from the mug, widen and fade. run-stage puts the
+ * group on the mug's rim (translate) and sizes it to the room (--steam-k); it shows with [data-on].
+ */
+.steam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.steam[data-on] {
+  opacity: 1;
+}
+
+.steam i {
+  position: absolute;
+  /* The mug's box tops it with its tilt: the wisps start a little lower, on the coffee. */
+  bottom: calc(var(--steam-k, 1) * -16px);
+  left: calc(var(--steam-k, 1) * -7px);
+  width: calc(var(--steam-k, 1) * 14px);
+  height: calc(var(--steam-k, 1) * 22px);
+  border-radius: 50%;
+  background: var(--cream-50);
+  filter: blur(calc(var(--steam-k, 1) * 5px));
+  opacity: 0;
+  animation: steam 3.6s ease-out infinite;
+}
+
+.steam i:nth-child(2) {
+  animation-delay: 1.2s;
+  --sway: -1;
+}
+
+.steam i:nth-child(3) {
+  animation-delay: 2.4s;
+}
+
+@keyframes steam {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  12% {
+    opacity: 0.32;
+  }
+  60% {
+    transform: translate(calc(var(--sway, 1) * var(--steam-k, 1) * 5px), calc(var(--steam-k, 1) * -24px)) scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--sway, 1) * var(--steam-k, 1) * -3px), calc(var(--steam-k, 1) * -44px)) scale(1.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steam {
+    display: none;
+  }
+}
+
+/* The way back from the shelves to the whole room: shown while the camera is in on them. */
+.back {
+  position: fixed;
+  z-index: 7;
+  bottom: var(--space-8);
+  left: 50%;
+  translate: -50% 0;
+  display: none;
+}
+
+:global(html[data-zoom]) .back {
+  display: inline-flex;
+}
+
+/* The frames' photo credits: over the way back, only while the camera is on the frames. */
+.credits {
+  position: fixed;
+  z-index: 7;
+  bottom: calc(var(--space-8) + 48px);
+  left: 50%;
+  translate: -50% 0;
+  display: none;
+  margin: 0;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+:global(html[data-zoom="frames"]) .credits {
+  display: block;
+}
+
+.credits a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+.credits a:hover,
+.credits a:focus-visible {
+  color: var(--text);
+}
+
+/* The portfolio on the notebook's screen: where (--nb-x, --nb-y) and how big (--nb-w, --nb-h) run-stage sets. */
+.portfolio {
+  position: fixed;
+  z-index: 6;
+  top: 0;
+  left: 0;
+  width: var(--nb-w);
+  height: var(--nb-h);
+  translate: var(--nb-x) var(--nb-y);
+  border: 0;
+  border-radius: 2px;
+  background: var(--ink-950);
+  display: none;
+}
+
+.portfolio[data-on] {
+  display: block;
+}
+
+/* The mug's steam, over the 3D like the TV's card, hides under an open book. */
+:global(html[data-book]) .steam {
+  visibility: hidden;
+}
