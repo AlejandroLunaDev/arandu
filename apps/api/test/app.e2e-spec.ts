@@ -23,6 +23,13 @@ describe('AppController (e2e)', () => {
       .expect('Hello World!');
   });
 
+  it('/arandu/chat (POST) rejects an invalid body with 400', () => {
+    return request(app.getHttpServer())
+      .post('/arandu/chat')
+      .send({ professionSlug: 'Direito!', messages: [] })
+      .expect(400);
+  });
+
   afterEach(async () => {
     await app.close();
   });
