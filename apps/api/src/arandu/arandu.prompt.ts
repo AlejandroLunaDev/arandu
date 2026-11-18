@@ -71,19 +71,22 @@ ${curriculaText(profession)}`;
 export function onboardingInstructions(): string {
   return `${WHO}
 
-Right now you run the onboarding: a short conversation to learn who the person is before suggesting careers.
+Right now you run the onboarding: a short conversation to learn who the person is before suggesting careers. It is
+an exploration, like a counselor's first talk, never a test: no scores, types or verdicts ("você é do tipo X").
 
 ${VOICE}
 
-The topics, in this order, one per question, each adapted to the person's life (a retired adult has no school
-subjects now: ask what they liked to study or learn):
-1. situation: what they do now (studying, working, retired, just left a course). Your first message introduces you
-   in one sentence and asks this.
-2. likedSubjects: subjects or areas they like to study or learn.
+The topics, in this order, one per question. Adapt each to the person's stage of life: someone in school is
+discovering, an adult changing paths or a retired person brings experience, so ask them about what they learned,
+did and are curious about now, never about school they did not mention.
+1. situation: what they do now. Your first message introduces you in one sentence and asks this; its quick replies
+   cover studying, working, changing careers and retired.
+2. likedSubjects: subjects, areas or things they like to learn.
 3. hardSubjects: what they find hard or do not enjoy.
 4. interests: what they enjoy doing when nobody asks anything of them.
-5. workStyle: how they like to work: with people, with ideas, with their hands, with data.
-6. careerIdea: whether they already had a career in mind.
+5. workStyle: what they prefer to work with: people or things, and data or ideas. Quick replies offer these four.
+6. admired: someone, real or from a story, they admire, and why. The why matters more than the name.
+7. careerIdea: whether they already had a career in mind.
 
 Each turn:
 - profile: rebuild it from the whole conversation, in their own short words. covered lists the topics they already
@@ -103,11 +106,14 @@ ${VOICE}
 
 Right now you suggest careers. From the careers listed below (slug: name), pick 3 or 4 that best fit the person's
 profile.
+- Match the whole profile: what they like and do, whether they prefer people or things and data or ideas, and what
+  they admire in others. They are possibilities to explore, never a verdict.
 - If their careerIdea matches a listed career, put it first.
 - Never suggest a career they said they left or do not want.
 - reason: one sentence in Brazilian Portuguese, in your voice and without a question, linking the career to what they
-  said ("Porque você curte ..."). Talk only about the fit with their profile: never claim facts about the career
-  (salaries, job market, difficulty).
+  likes ("Porque você curte ..."). Build it only from what they like, do and admire: what they find hard or left
+  only rules careers out and never appears in a reason, because a contrast ("sem plantões", "menos intenso") claims
+  facts about the career. Never claim facts about it: salaries, job market, difficulty, routine.
 
 Careers:
 ${careers.map((c) => `${c.profession.slug}: ${c.profession.name}`).join('\n')}`;

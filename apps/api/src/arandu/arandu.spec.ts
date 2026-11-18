@@ -202,6 +202,7 @@ const profile = (over: Record<string, unknown> = {}) => ({
   hardSubjects: [],
   interests: [],
   workStyle: [],
+  admired: [],
   careerIdea: null,
   covered: [],
   ...over,
@@ -212,6 +213,7 @@ const ALL_TOPICS = [
   'hardSubjects',
   'interests',
   'workStyle',
+  'admired',
   'careerIdea',
 ];
 const user = (content = 'Oi') => ({ role: 'user', content });
@@ -259,7 +261,7 @@ describe('POST /arandu/onboarding', () => {
 
     expect(res.body.done).toBe(true);
     expect(res.body.quickReplies).toEqual([]);
-    expect(res.body.progress).toEqual({ answered: 6, total: 6 });
+    expect(res.body.progress).toEqual({ answered: 7, total: 7 });
   });
 
   it('is done after 10 answers even with topics missing', async () => {
@@ -283,7 +285,7 @@ describe('POST /arandu/onboarding', () => {
     const res = await post({ messages: [user()] }).expect(200);
 
     expect(res.body.profile.covered).toEqual(['situation', 'interests']);
-    expect(res.body.progress).toEqual({ answered: 2, total: 6 });
+    expect(res.body.progress).toEqual({ answered: 2, total: 7 });
     expect(res.body.quickReplies).toEqual(['1', '2', '3', '4', '5']);
     expect(res.body.done).toBe(false);
   });
@@ -352,6 +354,15 @@ describe('POST /arandu/recommendations', () => {
       ],
       reason: 'why a',
     });
+  });
+
+  it('400s without calling the model when admired is missing', async () => {
+    await start(['a']);
+    const { admired: _, ...rest } = profile();
+
+    await post({ profile: rest }).expect(400);
+
+    expect(model.calls).toHaveLength(0);
   });
 
   it.each([

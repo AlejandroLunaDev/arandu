@@ -21,6 +21,7 @@ export const TOPICS = [
   'hardSubjects',
   'interests',
   'workStyle',
+  'admired',
   'careerIdea',
 ] as const satisfies readonly OnboardingTopic[];
 
@@ -30,6 +31,7 @@ const profileSchema = z.object({
   hardSubjects: z.array(z.string()),
   interests: z.array(z.string()),
   workStyle: z.array(z.string()),
+  admired: z.array(z.string()),
   careerIdea: z.string().nullable(),
   covered: z.array(z.enum(TOPICS)),
 });

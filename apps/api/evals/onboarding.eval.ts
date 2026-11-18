@@ -101,6 +101,34 @@ const turnCases: TurnCase[] = [
     ],
   },
   {
+    id: 'asks-admired',
+    messages: [
+      welcome,
+      user(personas.retired),
+      arandu('Que bonito! O que você sempre gostou de aprender?'),
+      user('História do Brasil e ler biografias.'),
+      arandu('E o que é mais difícil ou chato para você?'),
+      user('Fazer contas.'),
+      arandu('Entendi. O que você gosta de fazer quando ninguém te pede nada?'),
+      user('Cuidar da horta e contar histórias para os netos.'),
+      arandu(
+        'Você prefere lidar com pessoas ou com coisas, com dados ou com ideias?',
+      ),
+      user('Com pessoas e ideias.'),
+    ],
+    covers: [
+      'situation',
+      'likedSubjects',
+      'hardSubjects',
+      'interests',
+      'workStyle',
+    ],
+    doesNotCover: ['admired'],
+    judge: [
+      'Asks whom the person admires, real or from a story, and invites the why.',
+    ],
+  },
+  {
     id: 'last-answer-closes',
     messages: [
       welcome,
@@ -115,6 +143,8 @@ const turnCases: TurnCase[] = [
         'Que bacana! Como você prefere trabalhar: com pessoas, ideias, mãos ou dados?',
       ),
       user('Com pessoas, liderando um time.'),
+      arandu('Tem alguém, real ou de uma história, que você admira?'),
+      user('Minha primeira chefe: ela fazia o time crescer junto.'),
       arandu('E você já tinha alguma carreira em mente?'),
       user('Pensei em Administração.'),
     ],
@@ -124,6 +154,7 @@ const turnCases: TurnCase[] = [
       'hardSubjects',
       'interests',
       'workStyle',
+      'admired',
       'careerIdea',
     ],
     done: true,
@@ -140,6 +171,7 @@ const turnCriteria = [
   'no-assumptions: Neither the reply nor the profile assumes anything about the person’s age, school, family or gender that they did not say.',
   'faithful-profile: The profile holds only what the person said, in short items, with nothing invented.',
   'no-careers-yet: It suggests no career yet.',
+  'not-a-test: It never calls the conversation a test and gives no score, type or verdict about the person.',
 ];
 
 const profile = (p: Partial<AranduProfile>): AranduProfile => ({
@@ -148,6 +180,7 @@ const profile = (p: Partial<AranduProfile>): AranduProfile => ({
   hardSubjects: [],
   interests: [],
   workStyle: [],
+  admired: [],
   careerIdea: null,
   covered: [
     'situation',
@@ -155,6 +188,7 @@ const profile = (p: Partial<AranduProfile>): AranduProfile => ({
     'hardSubjects',
     'interests',
     'workStyle',
+    'admired',
     'careerIdea',
   ],
   ...p,
@@ -198,6 +232,7 @@ const recommendCases: RecommendCase[] = [
       hardSubjects: ['contas muito detalhadas'],
       interests: ['ler sobre negócios', 'organizar eventos'],
       workStyle: ['com pessoas', 'liderando um time'],
+      admired: ['primeira chefe, que fazia o time crescer'],
       careerIdea: 'Administração',
     }),
     first: 'administracao',

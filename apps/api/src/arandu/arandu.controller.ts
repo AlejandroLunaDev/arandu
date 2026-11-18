@@ -46,6 +46,7 @@ const recommendationsRequest = z.object({
     hardSubjects: items,
     interests: items,
     workStyle: items,
+    admired: items,
     careerIdea: item.nullable(),
     covered: z.array(z.enum(TOPICS)).max(TOPICS.length),
   }),

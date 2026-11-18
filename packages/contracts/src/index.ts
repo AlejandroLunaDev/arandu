@@ -32,7 +32,12 @@ export interface Institution {
 
 export interface Course {
   name: string;
-  degree: "bacharelado" | "licenciatura" | "tecnologico" | "bacharelado_licenciatura" | null;
+  degree:
+    | "bacharelado"
+    | "licenciatura"
+    | "tecnologico"
+    | "bacharelado_licenciatura"
+    | null;
   shift: "matutino" | "vespertino" | "noturno" | "integral" | null;
   durationYears: number | null;
   campus: { name: string | null; city: string };
@@ -105,6 +110,7 @@ export type OnboardingTopic =
   | "hardSubjects"
   | "interests"
   | "workStyle"
+  | "admired"
   | "careerIdea";
 
 /** What Arandu learns in the onboarding: the base of "Quem sou eu". Items are in the person's own words. */
@@ -117,6 +123,8 @@ export interface AranduProfile {
   interests: string[];
   /** How they like to work: with people, ideas, their hands, data. */
   workStyle: string[];
+  /** People, characters or stories they admire, and why: themes of who they want to be. */
+  admired: string[];
   /** The career they had in mind; null when they had none or were not asked yet. */
   careerIdea: string | null;
   /** The topics they already answered. */
@@ -133,7 +141,7 @@ export interface OnboardingReply {
   /** Tappable answers to the question in `reply`; the person can always write freely. Empty when done. */
   quickReplies: string[];
   profile: AranduProfile;
-  /** Topics answered, of all of them: "3 de 6". */
+  /** Topics answered, of all of them: "3 de 7". */
   progress: { answered: number; total: number };
   /** Every topic is answered: time to show careers. */
   done: boolean;
