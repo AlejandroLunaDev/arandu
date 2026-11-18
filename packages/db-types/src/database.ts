@@ -31,6 +31,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"cine_areas": {
+                  Row: {
+                    "code": string,"name": string,"parent_code": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"name": string,"parent_code"?: string | null
+                  }
+                  Update: {
+                    "code"?: string,"name"?: string,"parent_code"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "cine_areas_parent_code_fkey"
+      columns: ["parent_code"]
+isOneToOne: false
+      referencedRelation: "cine_areas"
+      referencedColumns: ["code"]
+    }
+                  ]
                 },"courses": {
                   Row: {
                     "campus_name": string | null,"city": string,"degree": string | null,"duration_years": number | null,"id": number,"inep_code": number,"institution_id": number,"name": string,"profession_id": number | null,"shift": string | null,"source_id": number
@@ -65,14 +85,14 @@ isOneToOne: false
                   ]
                 },"curriculum_subjects": {
                   Row: {
-                    "course_id": number,"hours": number | null,"id": number,"is_elective": boolean,"name": string,"source_id": number,"term": number | null,"year": number
+                    "course_id": number,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"source_id": number,"term": number | null,"term_to": number | null,"year": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "course_id": number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean,"name": string,"source_id": number,"term"?: number | null,"year": number
+                    "course_id": number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"source_id": number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Update: {
-                    "course_id"?: number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean,"name"?: string,"source_id"?: number,"term"?: number | null,"year"?: number
+                    "course_id"?: number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"source_id"?: number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Relationships: [
                     {
@@ -111,17 +131,23 @@ isOneToOne: false
                   ]
                 },"professions": {
                   Row: {
-                    "id": number,"name": string,"slug": string
+                    "area_code": string | null,"cine_code": string,"id": number,"name": string,"slug": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "id"?: never,"name": string,"slug": string
+                    "area_code"?: never,"cine_code": string,"id"?: never,"name": string,"slug": string
                   }
                   Update: {
-                    "id"?: never,"name"?: string,"slug"?: string
+                    "area_code"?: never,"cine_code"?: string,"id"?: never,"name"?: string,"slug"?: string
                   }
                   Relationships: [
-                    
+                    {
+      foreignKeyName: "professions_area_code_fkey"
+      columns: ["area_code"]
+isOneToOne: false
+      referencedRelation: "cine_areas"
+      referencedColumns: ["code"]
+    }
                   ]
                 },"scrape_runs": {
                   Row: {
