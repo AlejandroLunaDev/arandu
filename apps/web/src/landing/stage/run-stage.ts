@@ -22,6 +22,7 @@ import { makeCat } from "./cat";
 import { CARRY, HELD_SCALE, makeLife, OPEN_HEIGHT, openTo, SHUT } from "./cat-life";
 import { tokenColor } from "./palette";
 import { loadRapier, roomPhysics, type RoomPhysics } from "./physics";
+import { GITHUB_URL } from "../links";
 import { FRAME_PHOTOS, makeKit, type Kit } from "./props";
 import { heroRoom, TILT, type Room } from "./rooms";
 
@@ -62,6 +63,9 @@ const NEON_BURST = 0.84;
 const ZOOM_TIME = 0.9;
 /** Seconds before an opening book lies flat that its pages' print starts to come up. */
 const PRINT_EARLY = 0.2;
+/** How much the GitHub plaque's face carries its own light, at rest and under the pointer (props.ts). */
+const PLAQUE_GLOW = 0.35;
+const PLAQUE_HOT = 0.9;
 /** The TV's brand screen: a canvas at the screen's 16:9, the cat's head (px) in its middle. */
 const BRAND = { width: 640, height: 360, head: 120 };
 const ZOOM_LEAST = 1.2;
@@ -462,6 +466,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       zoom("frames");
       return;
     }
+    if (overPlaque(e.clientX, e.clientY)) {
+      window.open(GITHUB_URL, "_blank", "noopener,noreferrer");
+      return;
+    }
     const hit = pick(e.clientX, e.clientY);
     if (!hit) return;
     const name = String(hit.prop.userData.prop ?? "");
@@ -856,6 +864,17 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const frames = rooms[0].content.children.filter((o) => FRAME_PHOTOS[String(o.userData.prop)]);
   const overFrame = (sx: number, sy: number) => frames.find((f) => over([f], sx, sy));
   let frameHover = false;
+  // The plaque under the TV: a tap opens Arandu's code on GitHub, and it glows under the pointer.
+  const plaques = rooms.flatMap((r) => r.content.children.filter((o) => o.userData.prop === "GithubPlaque"));
+  const overPlaque = (sx: number, sy: number) => over(plaques, sx, sy);
+  const plaqueGlow = (on: boolean) =>
+    plaques.forEach((p) =>
+      p.traverse((m) => {
+        if (m instanceof THREE.Mesh && m.material.name === "PlaqueArt")
+          (m.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? PLAQUE_HOT : PLAQUE_GLOW;
+      }),
+    );
+  let plaqueHover = false;
   const tvs = rooms[0].content.children.filter((o) => o.userData.prop === "Tv");
   const overTv = (sx: number, sy: number) => over(tvs, sx, sy);
   const shine = (t: number, dt: number) => {
@@ -1182,12 +1201,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       neonHover = !holding && !over && overNeon(pointer.x, pointer.y);
       nbHover = !holding && !over && !neonHover && overNotebook(pointer.x, pointer.y);
       frameHover = !holding && !over && !!overFrame(pointer.x, pointer.y);
+      const onPlaque = !holding && !over && overPlaque(pointer.x, pointer.y);
+      if (onPlaque !== plaqueHover) plaqueGlow((plaqueHover = onPlaque));
       tvHover = !holding && !over && overTv(pointer.x, pointer.y);
       document.body.style.cursor = holding
         ? "grabbing"
         : TOYS.has(String(over?.prop.userData.prop))
           ? "grab"
-          : over || neonHover || nbHover || tvHover || frameHover || overCat(pointer.x, pointer.y)
+          : over || neonHover || nbHover || tvHover || frameHover || plaqueHover || overCat(pointer.x, pointer.y)
             ? "pointer"
             : "";
     }

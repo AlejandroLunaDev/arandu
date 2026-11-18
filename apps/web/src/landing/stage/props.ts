@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { MOTTO } from "../copy";
 import { tokenColor, tokenValue } from "./palette";
 
 // The room props from public/models/props.glb (built by blender/props/build.py). Units are metres,
@@ -40,7 +41,9 @@ export type PropName =
   | "FrameTall"
   | "FrameSquare"
   | "Tv"
-  | "SideTable";
+  | "SideTable"
+  | "GithubPlaque"
+  | "MottoSign";
 
 /** A book's dress: the token names of its cover and of its print (title and bands). */
 export type BookLook = { cover: string; band: string };
@@ -190,6 +193,54 @@ const FRAME_GLOW = 0.35;
 /** The frames' pictures: Wikimedia Commons photos of universities, credited when the camera closes in on them (stage.tsx). */
 export const FRAME_PHOTOS: Record<string, string> = { FrameTall: "/img/frames/usp.webp", FrameSquare: "/img/frames/ufscar.webp" };
 
+/** GitHub's mark (Octicons, MIT), drawn on the plaque that links to Arandu's code. */
+const GITHUB_MARK =
+  "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z";
+/** How many pixels a metre of the wooden signs' faces gets. */
+const FACE_PPM = 1900;
+
+/** A wooden sign's face, width by height (m): the wood, and what draw burns light into it. */
+function woodFace(width: number, height: number, draw: (g: CanvasRenderingContext2D, w: number, h: number, font: string) => void) {
+  const canvas = document.createElement("canvas");
+  const w = (canvas.width = Math.round(width * FACE_PPM));
+  const h = (canvas.height = Math.round(height * FACE_PPM));
+  const g = canvas.getContext("2d");
+  if (!g) throw new Error("No 2D canvas for a sign");
+  g.fillStyle = tokenValue("amber-700");
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = tokenValue("cream-100");
+  g.textBaseline = "middle";
+  draw(g, w, h, tokenValue("font-display"));
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.flipY = false;
+  map.anisotropy = 4;
+  return map;
+}
+
+/** The faces of the wooden signs (build.py, less each board's edge): the GitHub plaque and the motto's sign. */
+const FACES: Record<string, () => THREE.Texture> = {
+  PlaqueArt: () =>
+    woodFace(0.336, 0.126, (g, w, h) => {
+      // Only GitHub's mark, centred: words this small would not read from across the room.
+      const mark = h * 0.78;
+      g.translate((w - mark) / 2, (h - mark) / 2);
+      g.scale(mark / 16, mark / 16);
+      g.fill(new Path2D(GITHUB_MARK));
+    }),
+  // The motto in two lines, as large as the board allows.
+  SignArt: () =>
+    woodFace(0.716, 0.196, (g, w, h, font) => {
+      const words = MOTTO.split(" ");
+      const lines = [words.slice(0, 4).join(" "), words.slice(4).join(" ")];
+      g.textAlign = "center";
+      g.font = `600 ${h * 0.3}px ${font}`;
+      const fit = Math.min(1, (w * 0.88) / Math.max(...lines.map((l) => g.measureText(l).width)));
+      g.font = `600 ${h * 0.3 * fit}px ${font}`;
+      lines.forEach((line, k) => g.fillText(line, w / 2, h * (0.34 + 0.34 * k)));
+    }),
+};
+
 export function makeKit(gltf: GLTF): Kit {
   const protos = new Map<string, THREE.Object3D>();
   for (const child of gltf.scene.children) protos.set(child.name, child);
@@ -246,6 +297,21 @@ export function makeKit(gltf: GLTF): Kit {
           })),
         );
       }
+    }
+    if (FACES[m.name]) {
+      const map = FACES[m.name]();
+      // Its own light, so it reads in the dark room; the GitHub plaque's rises under the pointer (run-stage).
+      owned.push(
+        map,
+        (o.material = new THREE.MeshStandardMaterial({
+          name: m.name,
+          map,
+          roughness: 0.7,
+          emissive: tokenColor("cream-50"),
+          emissiveMap: map,
+          emissiveIntensity: FRAME_GLOW,
+        })),
+      );
     }
     if (m.name === "Steam") Object.assign(m, { transparent: true, opacity: 0.2, depthWrite: false });
     const sway = o.geometry.getAttribute("_sway");

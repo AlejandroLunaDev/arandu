@@ -11,23 +11,16 @@ type SceneProps = {
   copy: ReactNode;
   art: ReactNode;
   /** A line across the whole scene, under the copy and the art. */
-  foot?: ReactNode;
 };
 
 // A scroll scene: a tall section whose content stays pinned to the viewport while the page moves,
 // the copy on one side and the art on the other. The 3D stage finds it through [data-scene].
-export function Scene({ length, flip = false, id, labelledBy, copy, art, foot }: SceneProps) {
+export function Scene({ length, flip = false, id, labelledBy, copy, art }: SceneProps) {
   return (
-    <section
-      id={id}
-      data-scene
-      aria-labelledby={labelledBy}
-      className={`${styles.scene} ${styles[length]} ${flip ? styles.flip : ""}`}
-    >
+    <section id={id} data-scene aria-labelledby={labelledBy} className={`${styles.scene} ${styles[length]} ${flip ? styles.flip : ""}`}>
       <div data-pin className={styles.pin}>
         <div className={styles.copy}>{copy}</div>
         <div className={styles.art}>{art}</div>
-        {foot && <div className={styles.foot}>{foot}</div>}
       </div>
     </section>
   );

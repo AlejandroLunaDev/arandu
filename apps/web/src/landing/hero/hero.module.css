@@ -141,18 +141,6 @@
   color: var(--primary);
 }
 
-/* The motto's words never break; each letter moves on its own (see stage/physics.ts). */
-.word {
-  display: inline-block;
-  white-space: nowrap;
-}
-
-/* A tap flicks a letter: it shows it takes one. */
-.letter {
-  display: inline-block;
-  cursor: pointer;
-}
-
 /*
  * The room's footprint: as wide as the space allows at its own proportions (--room-aspect, which the
  * stage sets), its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom).
@@ -220,7 +208,6 @@
     font-size: 56px;
   }
 }
-
 
 /*
  * The TV switches off for an open book and back on once it is shut (run-stage shows the cat's head on
