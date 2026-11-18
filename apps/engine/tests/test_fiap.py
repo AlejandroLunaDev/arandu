@@ -1,6 +1,7 @@
 import io
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from engine import fiap
 
@@ -83,6 +84,13 @@ class ParseCurriculumTest(unittest.TestCase):
     def test_year_without_modules_raises(self):
         with self.assertRaisesRegex(ValueError, "no subject"):
             fiap.parse_curriculum(doc('<p class="styles_grade-year__x">1<!-- -->º Ano</p>'))
+
+
+class LoadCoursesTest(unittest.TestCase):
+    def test_load_passes_every_unit_true(self):
+        with mock.patch.object(fiap.curricula, "load_courses") as load_courses:
+            fiap.courses.load("conn", 1, [])
+        self.assertIs(load_courses.call_args.kwargs.get("every_unit"), True)
 
 
 if __name__ == "__main__":

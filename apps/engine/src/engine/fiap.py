@@ -57,6 +57,7 @@ def parse_curriculum(doc):
 courses = SimpleNamespace(
     parse=parse_courses,
     load=lambda conn, source_id, parsed: curricula.load_courses(
-        conn, "fiap_curriculum", INEP_CODE, "FIAP, matriz curricular", parsed),
+        conn, "fiap_curriculum", INEP_CODE, "FIAP, matriz curricular", parsed,
+        every_unit=True),  # one matriz per course, no campus: it serves both census rows (owner, 2026-11-18)
 )
 curriculum = SimpleNamespace(parse=parse_curriculum, load=curricula.load_subjects)
