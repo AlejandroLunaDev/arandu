@@ -4,10 +4,9 @@ import type { ChatMessage } from '@arandu/contracts';
 import { AiService, type AiTextResult } from '@nestjs/ai';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module.js';
-import { AranduService } from '../src/arandu/arandu.service.js';
-import { curriculaText } from '../src/arandu/arandu.prompt.js';
-import { findFirstTermSubjects } from '../src/arandu/first-term-subjects.js';
-import { SQL, type Sql } from '../src/database.module.js';
+import { CareerChatService } from '../src/career-chat/career-chat.service.js';
+import { curriculaText } from '../src/career-chat/career-chat.prompt.js';
+import { CareersRepository } from '../src/careers/careers.repository.js';
 import { createJudge, questionMarks } from './judge.js';
 
 /** Each case runs this many times: a model answers differently each time, and a case passes only if every run does. */
@@ -233,9 +232,9 @@ interface Run {
 }
 
 describe('Arandu chat evals', () => {
-  let arandu: AranduService;
+  let arandu: CareerChatService;
   let ai: AiService;
-  let sql: Sql;
+  let careers: CareersRepository;
   let judge: ReturnType<typeof createJudge>;
   const runs: Run[] = [];
   // Arandu's own model call, captured to measure its tokens, cost and finish reason.
@@ -246,9 +245,9 @@ describe('Arandu chat evals', () => {
       imports: [AppModule],
     }).compile();
     await module.init();
-    arandu = module.get(AranduService);
+    arandu = module.get(CareerChatService);
     ai = module.get(AiService);
-    sql = module.get(SQL);
+    careers = module.get(CareersRepository);
     judge = createJudge(ai);
 
     const generateText = ai.generateText.bind(ai);
@@ -306,7 +305,7 @@ describe('Arandu chat evals', () => {
           if (found) failures.push(`contains ${banned}`);
         }
 
-        const profession = await findFirstTermSubjects(sql, c.slug);
+        const profession = await careers.firstTerm(c.slug);
         failures.push(
           ...(await judge.failures(
             [

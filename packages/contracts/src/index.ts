@@ -91,13 +91,15 @@ export interface ChatMessage {
   content: string;
 }
 
-/** POST /arandu/chat: the conversation so far, about one profession. The last message is the student's. */
+/** POST /arandu/chat: the person's next message about one profession. Without sessionId it starts a new session. */
 export interface AranduChatRequest {
   professionSlug: string;
-  messages: ChatMessage[];
+  sessionId?: string;
+  message: string;
 }
 
 export interface AranduChatReply {
+  sessionId: string;
   reply: string;
   /** The curricula Arandu was given to ground the reply. */
   sources: Source[];
@@ -131,12 +133,12 @@ export interface AranduProfile {
   covered: OnboardingTopic[];
 }
 
-/** POST /arandu/onboarding: the conversation so far; empty to start it. */
-export interface OnboardingRequest {
-  messages: ChatMessage[];
-}
+/** POST /arandu/onboarding: {} starts a session and Arandu speaks first; then the session and the person's answer. */
+export type OnboardingRequest =
+  Record<string, never> | { sessionId: string; message: string };
 
 export interface OnboardingReply {
+  sessionId: string;
   reply: string;
   /** Tappable answers to the question in `reply`; the person can always write freely. Empty when done. */
   quickReplies: string[];
@@ -163,4 +165,18 @@ export interface CareerOption {
 export interface Recommendations {
   /** 3 or 4 careers, the person's own idea first when it is one of them. */
   careers: CareerOption[];
+}
+
+/** GET /arandu/memory: everything Arandu remembers about the signed-in person, so they can see it (§5 transparency). */
+export interface AranduMemory {
+  /** The profile they confirmed; null until they do. */
+  profile: AranduProfile | null;
+  /** Arandu's note on their past sessions, in Brazilian Portuguese, at most 1500 characters. */
+  summary: string;
+  /** Newest first, the last 50. */
+  sessions: {
+    kind: "onboarding" | "career";
+    professionSlug: string | null;
+    startedAt: string;
+  }[];
 }

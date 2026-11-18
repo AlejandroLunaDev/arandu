@@ -13,8 +13,14 @@ export type Sql = postgres.Sql;
     {
       provide: SQL,
       inject: [ConfigService],
+      // One pool for the whole app. Small: the free instance has 512 MB and the Supabase session pooler caps the
+      // connections all services share; idle connections close so a quiet API holds none.
       useFactory: (config: ConfigService): Sql =>
-        postgres(config.getOrThrow<string>('DATABASE_URL')),
+        postgres(config.getOrThrow<string>('DATABASE_URL'), {
+          max: 5,
+          idle_timeout: 20,
+          connect_timeout: 10,
+        }),
     },
   ],
   exports: [SQL],

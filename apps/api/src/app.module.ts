@@ -1,58 +1,54 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { AiModule } from '@nestjs/ai';
-import { Module, StandardSchemaValidationPipe } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_PIPE } from '@nestjs/core';
+import {
+  type MiddlewareConsumer,
+  Module,
+  type NestModule,
+  StandardSchemaValidationPipe,
+} from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
-import { AranduModule } from './arandu/arandu.module.js';
-import { DatabaseModule } from './database.module.js';
+import { AuthGuard } from './auth/auth.guard.js';
+import { AuthModule } from './auth/auth.module.js';
+import { CareerChatModule } from './career-chat/career-chat.module.js';
+import { CareersModule } from './careers/careers.module.js';
+import { validateEnv } from './config/env.js';
+import { MemoryModule } from './memory/memory.module.js';
+import { OnboardingModule } from './onboarding/onboarding.module.js';
+import { AiModule } from './platform/ai/ai.module.js';
+import { DatabaseModule } from './platform/database/database.module.js';
+import { AllExceptionsFilter } from './platform/http/all-exceptions.filter.js';
+import { RequestLoggerMiddleware } from './platform/http/request-logger.middleware.js';
+import { RateLimitModule } from './platform/rate-limit/rate-limit.module.js';
+import { RecommendationsModule } from './recommendations/recommendations.module.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     DatabaseModule,
-    AiModule.forRootAsync({
-      isGlobal: true,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const openrouter = createOpenAICompatible({
-          name: 'openrouter',
-          baseURL: 'https://openrouter.ai/api/v1',
-          apiKey: config.getOrThrow<string>('OPENROUTER_API_KEY'),
-          headers: { 'X-OpenRouter-Title': 'Arandu Reka' },
-          // generateObject sends a JSON schema, which OpenRouter passes on to the model.
-          supportsStructuredOutputs: true,
-        });
-        return {
-          models: {
-            // Prices in USD per million tokens, from openrouter.ai/anthropic/claude-haiku-5.5 (2026-11-17).
-            default: {
-              model: openrouter('anthropic/claude-haiku-5.5'),
-              pricing: { input: 0.1, output: 0.5 },
-            },
-          },
-          defaults: {
-            maxOutputTokens: 400,
-            // The students are minors (LGPD): route only to providers that neither store nor train on prompts.
-            // Reasoning off: Haiku 5.5's thinking spent 307 of 400 output tokens and cut replies mid-sentence.
-            providerOptions: {
-              openrouter: {
-                provider: { data_collection: 'deny' },
-                reasoning: { enabled: false },
-              },
-            },
-          },
-        };
-      },
-    }),
-    AranduModule,
+    AiModule,
+    RateLimitModule,
+    AuthModule,
+    CareersModule,
+    MemoryModule,
+    OnboardingModule,
+    RecommendationsModule,
+    CareerChatModule,
   ],
   controllers: [AppController],
-  // Validates every @Body({ schema }) and @Param(..., { schema }): Nest does not without this pipe.
   providers: [
     AppService,
+    // Global guards run in this order: who the person is first, then how often they may call.
+    { provide: APP_GUARD, useExisting: AuthGuard },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Validates every @Body({ schema }) and @Param(..., { schema }): Nest does not without this pipe.
     { provide: APP_PIPE, useClass: StandardSchemaValidationPipe },
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('{*path}');
+  }
+}

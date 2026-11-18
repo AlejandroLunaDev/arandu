@@ -8,7 +8,8 @@ import type {
 import { AiService, type AiObjectResult } from '@nestjs/ai';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module.js';
-import { OnboardingService } from '../src/arandu/onboarding.service.js';
+import { OnboardingService } from '../src/onboarding/onboarding.service.js';
+import { RecommendationsService } from '../src/recommendations/recommendations.service.js';
 import { createJudge, questionMarks } from './judge.js';
 
 /** Each case runs this many times; a case passes only if every run does. */
@@ -290,6 +291,7 @@ const recommendCriteria = [
 
 describe('Onboarding evals', () => {
   let onboarding: OnboardingService;
+  let recommendations: RecommendationsService;
   let judge: ReturnType<typeof createJudge>;
   const results: { id: string; passed: boolean; ms: number }[] = [];
   const samples = new Map<string, string>();
@@ -303,6 +305,7 @@ describe('Onboarding evals', () => {
     }).compile();
     await module.init();
     onboarding = module.get(OnboardingService);
+    recommendations = module.get(RecommendationsService);
     const ai = module.get(AiService);
     judge = createJudge(ai);
     const generateObject = ai.generateObject.bind(ai);
@@ -389,7 +392,7 @@ describe('Onboarding evals', () => {
       for (let run = 0; run < RUNS; run++) {
         const failures: string[] = [];
         const started = Date.now();
-        const { careers } = await onboarding.recommend({ profile: c.profile });
+        const { careers } = await recommendations.recommend(c.profile);
         const ms = Date.now() - started;
         const slugs = careers.map((k) => k.profession.slug);
 
