@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { CareerChatModule } from './career-chat/career-chat.module.js';
 import { CareersModule } from './careers/careers.module.js';
 import { validateEnv } from './config/env.js';
+import { DisciplinesModule } from './disciplines/disciplines.module.js';
 import { MemoryModule } from './memory/memory.module.js';
 import { OnboardingModule } from './onboarding/onboarding.module.js';
 import { AiModule } from './platform/ai/ai.module.js';
@@ -31,6 +32,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module.
     RateLimitModule,
     AuthModule,
     CareersModule,
+    DisciplinesModule,
     MemoryModule,
     OnboardingModule,
     RecommendationsModule,

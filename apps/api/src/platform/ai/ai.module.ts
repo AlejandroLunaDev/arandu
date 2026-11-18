@@ -6,8 +6,11 @@ import type { Env } from '../../config/env.js';
 
 const logger = new Logger('AI');
 
+/** Every stored vector names this model; changing it re-embeds everything (DisciplinesService.embedPending). */
+export const EMBEDDING_MODEL = 'baai/bge-m3';
+
 /**
- * The language model behind Arandu, through OpenRouter. AiService adds timeouts (60 s), retries of what the provider
+ * The language and embedding models behind Arandu, through OpenRouter. AiService adds timeouts (60 s), retries of what the provider
  * marks retryable (429, 5xx, network) and the cost of each call, logged here without any of its content.
  */
 @Module({
@@ -24,7 +27,41 @@ const logger = new Logger('AI');
           // generateObject sends a JSON schema, which OpenRouter passes on to the model.
           supportsStructuredOutputs: true,
         });
+        // The SDK sends no provider options with embeddings, so the privacy rule goes into the request body here.
+        const embeddings = createOpenAICompatible({
+          name: 'openrouter',
+          baseURL: 'https://openrouter.ai/api/v1',
+          apiKey: config.get('OPENROUTER_API_KEY', { infer: true }),
+          headers: { 'X-OpenRouter-Title': 'Arandu Reka' },
+          fetch: (url, init) =>
+            fetch(url, {
+              ...init,
+              body: JSON.stringify({
+                ...JSON.parse(init?.body as string),
+                provider: { data_collection: 'deny' },
+              }),
+            }),
+        });
         return {
+          embeddingModels: {
+            // Verified 2026-11-18: 1024 dimensions, served with data_collection deny (the free Nemotron models refuse it).
+            default: {
+              model: embeddings.embeddingModel(EMBEDDING_MODEL),
+              pricing: { input: 0.01 },
+            },
+          },
+          onEmbeddingUsage: ({
+            label,
+            model,
+            inputCount,
+            usage,
+            cost,
+            durationMs,
+          }) =>
+            logger.log(
+              `${label ?? 'embed'} ${model.modelId} ${inputCount} input(s) ${usage.tokens} tokens` +
+                ` US$ ${(cost ?? 0).toFixed(6)} ${durationMs} ms`,
+            ),
           models: {
             // Prices in USD per million tokens, from openrouter.ai/anthropic/claude-haiku-5.5 (2026-11-17).
             default: {

@@ -18,7 +18,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "typecheck": "tsc --noEmit",
     "dev": "nest start --watch",
-    "eval": "vitest run --config ./vitest.config.eval.ts"
+    "eval": "vitest run --config ./vitest.config.eval.ts",
+    "embed": "nest start --entryFile disciplines/embed"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.93",
