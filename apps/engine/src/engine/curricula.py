@@ -18,7 +18,7 @@ def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_uni
             (page_adapter, url, label),
         ).rowcount
         source_id = conn.execute("select id from sources where url = %s", (url,)).fetchone()[0]
-        written += conn.execute(
+        staged = conn.execute(
             """insert into staging.curriculum_courses (source_id, institution_inep_code, name, city, every_unit)
                values (%s, %s, %s, %s, %s)
                on conflict (source_id, city) do update
@@ -28,6 +28,9 @@ def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_uni
                    is distinct from (excluded.institution_inep_code, excluded.name, excluded.every_unit)""",
             (source_id, inep_code, name, city, every_unit),
         ).rowcount
+        written += staged
+        if staged:  # the course changed, so its already-staged subjects may link elsewhere now
+            written += conn.execute("select staging.normalize_curriculum(%s)", (source_id,)).fetchone()[0]
     return written
 
 

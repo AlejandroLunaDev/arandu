@@ -41,15 +41,33 @@ class LoadCoursesTest(unittest.TestCase):
         return [c[1] for c in conn.calls if "insert into staging.curriculum_courses" in c[0]]
 
     def test_the_same_url_with_two_cities_stages_one_source_in_both(self):
-        conn = FakeConn([(42,), (42,)])
+        conn = FakeConn([(42,), (0,), (42,), (0,)])  # source id, normalize count, per course
         curricula.load_courses(conn, "x_curriculum", 322, "UNIP", [("u", "Medicina", None, "SANTOS"), ("u", "Medicina", None, "CAMPINAS")])
         self.assertEqual(self.staged(conn), [(42, 322, "Medicina", "SANTOS", False), (42, 322, "Medicina", "CAMPINAS", False)])
 
     def test_every_unit_is_passed_through_and_the_label_has_the_shift(self):
-        conn = FakeConn([(42,)])
+        conn = FakeConn([(42,), (0,)])
         curricula.load_courses(conn, "x", 1, "P", [("u", "N", "Noite", "C")], every_unit=True)
         self.assertEqual(self.staged(conn), [(42, 1, "N", "C", True)])
         self.assertEqual(conn.calls[0][1], ("x", "u", "P: N (Noite)"))
+
+    def test_a_changed_course_renormalizes_its_page_and_adds_both_counts(self):
+        conn = FakeConn([(42,), (5,)])
+        written = curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "C")])
+        self.assertEqual(written, 1 + 1 + 5)  # source insert + course upsert + subjects relinked
+        self.assertEqual(conn.calls[-1], ("select staging.normalize_curriculum(%s)", (42,)))
+
+    def test_an_unchanged_course_does_not_renormalize(self):
+        class Unchanged(FakeConn):
+            def execute(self, sql, params=()):
+                result = super().execute(sql, params)
+                if "insert into staging.curriculum_courses" in sql:
+                    result.rowcount = 0
+                return result
+
+        conn = Unchanged([(42,)])
+        self.assertEqual(curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "C")]), 1)
+        self.assertFalse(any("normalize_curriculum" in c[0] for c in conn.calls))
 
 
 if __name__ == "__main__":

@@ -21,9 +21,14 @@ def parse_courses(doc):
         if first.startswith("Campus:"):
             city = first.removeprefix("Campus:").split(" - ")[0].strip()  # 'São Paulo - Cidade Universitária ...'
         elif row and row[0][1] and "listarGradeCurricular" in row[0][1]:
+            if "tipo=N" not in row[0][1]:
+                continue  # other grade types ('Percurso Formativo', tipo=V) publish no subjects
             if city is None:
                 raise ValueError(f"course {first!r} is listed before any campus")
-            courses.append((urljoin(BASE, row[0][1]), first, row[1][0] if len(row) > 1 else None, city))
+            # Some units list the codes 'codcur codhab' first, then the name, e.g. 'Habilitação: Engenharia Civil'.
+            cells = row[1:] if re.fullmatch(r"\d+ \d+", first) else row
+            name = cells[0][0].removeprefix("Habilitação: ")
+            courses.append((urljoin(BASE, row[0][1]), name, cells[1][0] if len(cells) > 1 else None, city))
     if not courses:
         raise ValueError("no course found on the course list")
     return courses

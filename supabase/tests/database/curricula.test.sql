@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(48);
+select plan(52);
 
 -- One institution (INEP 55) with census courses, and one staged page per case.
 insert into public.sources (id, adapter, url, label) overriding system value values
@@ -163,6 +163,19 @@ select is(
 select throws_ok(
   $$insert into staging.curriculum_courses (source_id, institution_inep_code, name, city) values (9110, 55, 'X', 'Campinas')$$,
   '23505', null, 'a source cannot stage the same city twice');
+
+-- A page staged under a wrong name stays unlinked with its subjects staged; re-staging the right name and normalizing links them.
+insert into public.sources (id, adapter, url, label) overriding system value values (9120, 't_page', 'https://example.test/eng-civil', 'eng civil');
+insert into public.courses (id, inep_code, institution_id, name, degree, city, source_id) overriding system value values
+  (9226, 990026, 9001, 'Engenharia Civil', 'bacharelado', 'São Paulo', 9001);
+insert into staging.curriculum_courses (source_id, institution_inep_code, name, city) values (9120, 55, 'Habilitação: Engenharia Civil', 'São Paulo');
+insert into staging.curriculum_subjects (source_id, term, year, name, hours, is_elective) values (9120, 1, 1, 'Cálculo A', 90, false), (9120, 1, 1, 'Física A', 60, false);
+
+select is(staging.normalize_curriculum(9120), 0, 'a page staged under a wrong name links nothing');
+select is((select count(*)::int from staging.curriculum_subjects where source_id = 9120), 2, 'and keeps its subjects staged');
+update staging.curriculum_courses set name = 'Engenharia Civil' where source_id = 9120;
+select is(staging.normalize_curriculum(9120), 2, 're-staged with the right name, the same normalize links both subjects');
+select is((select count(*)::int from public.curriculum_subjects where course_id = 9226), 2, 'they land in the census course');
 
 select * from finish();
 rollback;

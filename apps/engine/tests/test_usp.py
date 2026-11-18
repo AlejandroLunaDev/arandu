@@ -7,6 +7,7 @@ from engine import curricula, usp
 FIXTURES = Path(__file__).parent / "fixtures" / "usp"
 LIST = (FIXTURES / "usp_course_list_45.html").read_bytes()
 PSICO = (FIXTURES / "usp_course_list_47.html").read_bytes()
+POLI = (FIXTURES / "usp_course_list_3.html").read_bytes()
 GRADE = (FIXTURES / "usp_grade_45052.html").read_bytes()
 BASE = "https://uspdigital.usp.br/jupiterweb/"
 
@@ -53,6 +54,19 @@ class ParseCoursesTest(unittest.TestCase):
             ],
         )
         self.assertEqual(courses[0][0], BASE + "listarGradeCurricular?codcg=47&codcur=47012&codhab=100&tipo=N")
+
+    def test_code_first_rows_take_name_and_shift_from_the_next_cells_and_tipo_v_is_skipped(self):
+        courses = usp.parse_courses(io.BytesIO(POLI))
+        self.assertEqual(
+            [(c[1], c[2], c[3]) for c in courses],
+            [
+                ("Engenharia Ambiental", "integral", "São Paulo"),
+                ("Engenharia Civil", "integral", "São Paulo"),
+                ("Engenharia Elétrica - Ênfase em Automação e Controle", "integral", "São Paulo"),
+            ],
+        )
+        self.assertEqual(courses[1][0], BASE + "listarGradeCurricular?codcg=3&codcur=3023&codhab=3000&tipo=N")
+        self.assertFalse(any("tipo=V" in c[0] or "Percurso" in c[1] for c in courses))
 
     def test_no_courses_raise(self):
         with self.assertRaisesRegex(ValueError, "no course"):
