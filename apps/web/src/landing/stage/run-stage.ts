@@ -416,6 +416,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const push = new THREE.Vector3();
   const pokeBox = new THREE.Box3();
   const pokeSize = new THREE.Vector3();
+  // A press on the GitHub plaque opens the repo when it lifts: a touch only lets a page open a tab on pointerup.
+  let plaquePressed = false;
   const onDown = (e: PointerEvent) => {
     lastInput = performance.now() / 1000;
     const target = e.target instanceof Element ? e.target : null;
@@ -467,7 +469,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       return;
     }
     if (overPlaque(e.clientX, e.clientY)) {
-      window.open(GITHUB_URL, "_blank", "noopener,noreferrer");
+      plaquePressed = true;
       return;
     }
     const hit = pick(e.clientX, e.clientY);
@@ -736,10 +738,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   let holding: { i: number; prop: THREE.Object3D } | null = null;
   const onDrag = (e: PointerEvent) => {
     // Let go outside the window: no pointerup came, but no button is down any more.
-    if (holding && e.pointerType === "mouse" && e.buttons === 0) return onUp();
+    if (holding && e.pointerType === "mouse" && e.buttons === 0) return onUp(e);
     if (holding && toRoom(rooms[holding.i], e.clientX, e.clientY, at)) worlds[holding.i].drag(at);
   };
-  const onUp = () => {
+  const onUp = (e: PointerEvent) => {
+    if (plaquePressed) {
+      plaquePressed = false;
+      if (e.type === "pointerup" && overPlaque(e.clientX, e.clientY)) window.open(GITHUB_URL, "_blank", "noopener,noreferrer");
+    }
     if (!holding) return;
     worlds[holding.i].release();
     life.fetch(holding.i, holding.prop);
