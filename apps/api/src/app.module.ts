@@ -11,6 +11,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule } from './auth/auth.module.js';
+import { BooksModule } from './books/books.module.js';
 import { CareerChatModule } from './career-chat/career-chat.module.js';
 import { CareersModule } from './careers/careers.module.js';
 import { validateEnv } from './config/env.js';
@@ -31,6 +32,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module.
     RateLimitModule,
     AuthModule,
     CareersModule,
+    BooksModule,
     MemoryModule,
     OnboardingModule,
     RecommendationsModule,

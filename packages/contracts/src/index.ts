@@ -79,10 +79,30 @@ export interface Offering {
   curriculum: Curriculum | null;
 }
 
+/** A first-semester subject with its real topics: a taste of the path Arandu offers in this career. */
+export interface SampleSubject {
+  name: string;
+  /** In the source's order. One item can be a whole paragraph: the web trims them. */
+  topics: string[];
+  /** The institution's short name, or its name when it has none. */
+  institution: string;
+  source: Source;
+}
+
 /** One book on the shelf: a profession and the São Paulo institutions that offer it. */
 export interface Book {
   profession: { slug: string; name: string };
+  /** Up to 3, each with a real first-year curriculum: the sample's own institution first, then FIAP where it offers
+   * the profession, then the rest in a neutral order. `admission` is empty: the book does not show cut-offs. */
   offerings: Offering[];
+  /** 1-2 subjects. */
+  sample: SampleSubject[];
+}
+
+/** GET /books: a book the shelf can show. The web picks which ones and rotates them. */
+export interface BookSummary {
+  profession: { slug: string; name: string };
+  offeringCount: number;
 }
 
 /** One turn of the conversation with Arandu. */
