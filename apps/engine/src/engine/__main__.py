@@ -14,6 +14,7 @@ ADAPTERS = {
     "mec_powerbi": mec_powerbi,  # names each course's campus, which Ânima's unit matrices link through
     "usp_courses": usp.courses,
     "usp_curriculum": usp.curriculum,
+    "usp_discipline": usp.discipline,  # after usp_curriculum: it links to the rows that level loads
     "enem_usp": enem_usp,  # links through the Júpiter pages usp_curriculum registers
     "mackenzie_courses": mackenzie.courses,
     "mackenzie_curriculum": mackenzie.curriculum,
