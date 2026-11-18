@@ -1,6 +1,7 @@
 import io
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from engine import ufscar
 from tests.fakes import FakeConn
@@ -50,6 +51,31 @@ class ParseListAndCourseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no campus link"):
             ufscar.parse_course(doc('<h1 class="documentFirstHeading">X</h1>'))
 
+    def test_one_campus_page_returns_its_own_matriz(self):
+        self.assertEqual(
+            ufscar.parse_course(doc(read("ufscar_economicas.html"))),
+            [("https://www.prograd.ufscar.br/pt-br/assets/arquivos/cursos/cursos-oferecidos/ciencias-economicas/"
+              "matriz-curricular-do-curso-de-ciencias-economicas-2026.pdf", "Ciências Econômicas - Bacharelado",
+              "Integral - Matutino e Vespertino", "Sorocaba")],
+        )
+
+    def test_page_without_campus_links_and_campus_field_raises(self):
+        html = read("ufscar_economicas.html").replace("<strong>Campus: </strong>", "<strong>Outro: </strong>")
+        with self.assertRaisesRegex(ValueError, "no campus link and no campus field"):
+            ufscar.parse_course(doc(html))
+
+    def test_course_load_registers_campus_links_and_loads_matriz_tuples(self):
+        conn = FakeConn()
+        with mock.patch.object(ufscar, "_register", return_value=2) as register,                 mock.patch.object(ufscar.curricula, "load_courses", return_value=1) as load_courses:
+            links = [(BASE + "a/sorocaba", "UFSCar, campus: A - Sorocaba")]
+            self.assertEqual(ufscar.course.load(conn, 1, links), 2)
+            register.assert_called_once_with(conn, "ufscar_campus", links)
+            load_courses.assert_not_called()
+            matriz = [("https://x/m.pdf", "A - Bacharelado", None, "Sorocaba")]
+            self.assertEqual(ufscar.course.load(conn, 1, matriz), 1)
+            load_courses.assert_called_once_with(conn, "ufscar_curriculum", 7, "UFSCar, matriz curricular", matriz)
+            register.assert_called_once()
+
     def test_register_writes_one_source_per_page_of_the_adapter(self):
         conn = FakeConn()
         ufscar.courses.load(conn, 1, [(BASE + "a/a", "UFSCar, curso: A")])
@@ -68,6 +94,10 @@ class ParseCampusTest(unittest.TestCase):
         html = read("ufscar_ciencia_da_computacao_sao_carlos.html").replace("Bacharelado</li>", "Tecnólogo</li>")
         html = html.replace("<strong>Turno:</strong>", "<strong>Outro:</strong>")
         self.assertEqual(ufscar.parse_campus(doc(html))[0][1:], ("Ciência da Computação", None, "São Carlos"))
+
+    def test_lagoa_do_sino_is_the_city_of_buri(self):
+        html = read("ufscar_ciencia_da_computacao_sao_carlos.html").replace(" - São Carlos", " - Lagoa do Sino")
+        self.assertEqual(ufscar.parse_campus(doc(html))[0][3], "Buri")
 
     def test_heading_without_a_campus_raises(self):
         with self.assertRaisesRegex(ValueError, "no campus in the heading"):
@@ -110,6 +140,64 @@ class ParseCurriculumTest(unittest.TestCase):
     def test_text_pdf_without_subjects_raises(self):
         with self.assertRaisesRegex(ValueError, "no subject found"):
             ufscar.parse_curriculum(pdf("ufscar_no_subject.pdf"))
+
+
+class TableMatrizTest(unittest.TestCase):
+    """Ruled matrices, page 1 of the real PDFs (outlines, structure tree and images stripped)."""
+
+    def first(self, name):
+        return [s[2] for s in ufscar.parse_curriculum(pdf(name)) if s[0] == 1]
+
+    def test_semester_in_a_one_cell_row(self):
+        self.assertEqual(self.first("ufscar_pedagogia_sao_carlos_p1.pdf"), [
+            "Filosofia da Educação I", "História da Educação I", "Sociologia Sociedade e Educação",
+            "Metodologia de Pesquisa Científica", "Didáticas e Educação das Relações Étnicos Raciais"])
+
+    def test_semester_in_a_perfil_heading_above_the_table(self):
+        self.assertEqual(self.first("ufscar_quimica_sao_carlos_p1.pdf"), [
+            "Química Geral", "Química Experimental Geral", "Química Analítica Geral",
+            "Geometria Analítica", "Cálculo 1", "Física 1"])
+
+    def test_semester_in_a_primeiro_periodo_heading(self):
+        self.assertEqual(self.first("ufscar_fisica_sao_carlos_p1.pdf"), [
+            "Geometria Analítica", "Cálculo Diferencial e Integral 1", "Introdução à Física",
+            "Métodos de Física Experimental", "Introdução à Prática de Ensino de Física"])
+
+    def test_year_is_two_semesters(self):
+        years = {s[0]: s[1] for s in ufscar.parse_curriculum(pdf("ufscar_quimica_sao_carlos_p1.pdf"))}
+        self.assertEqual(years, {1: 1, 2: 1, 3: 2})
+
+
+class TermMarkAndValidationTest(unittest.TestCase):
+    def test_term_mark_reads_each_heading_style(self):
+        for text, term in [("1º Perfil", 1), ("Perfil 1", 1), ("2° Período", 2), ("3ª Etapa", 3), ("PRIMEIRO PERÍODO", 1),
+                           ("10º Semestre", 10), ("Segundo Semestre", 2)]:
+            self.assertEqual(ufscar._term_mark(text), term, text)
+
+    def test_term_mark_ignores_other_text(self):
+        for text in ("Disciplina", "Total de horas", "Cálculo 1"):
+            self.assertIsNone(ufscar._term_mark(text), text)
+
+    def parse_with(self, rows):
+        with mock.patch.object(ufscar, "_matriz_rows", return_value=[]),                 mock.patch.object(ufscar, "_table_rows", return_value=rows),                 mock.patch.object(ufscar.pdfplumber, "open") as opened:
+            opened.return_value.__enter__.return_value.pages = [mock.Mock(chars=["x"])]
+            return ufscar.parse_curriculum(None)
+
+    def test_semesters_with_a_gap_raise(self):
+        with self.assertRaisesRegex(ValueError, "not 1..n"):
+            self.parse_with([(1, "Cálculo 1", 60, False), (8, "Física 1", 60, False)])
+
+    def test_a_subject_without_a_semester_raises(self):
+        with self.assertRaisesRegex(ValueError, "not 1..n"):
+            self.parse_with([(None, "Cálculo 1", 60, False)])
+
+    def test_glued_words_raise(self):
+        with self.assertRaisesRegex(ValueError, "glued words"):
+            self.parse_with([(1, "CálculoDiferencial", 60, False)])
+
+    def test_valid_rows_get_a_year(self):
+        self.assertEqual(self.parse_with([(1, "Cálculo 1", 60, False), (2, "Optativa", None, True)]),
+                         [(1, 1, "Cálculo 1", 60, False), (2, 1, "Optativa", None, True)])
 
 
 if __name__ == "__main__":

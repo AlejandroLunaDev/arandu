@@ -7,6 +7,8 @@ from engine import mackenzie
 FIXTURES = Path(__file__).parent / "fixtures" / "mackenzie"
 LIST = (FIXTURES / "mackenzie_course_list.html").read_text(encoding="utf-8")
 MATRIZ = (FIXTURES / "mackenzie_ciencia_da_computacao_matriz.html").read_text(encoding="utf-8")
+DESIGN = (FIXTURES / "mack_design.html").read_text(encoding="utf-8")
+FARMACIA = (FIXTURES / "mack_farmacia.html").read_text(encoding="utf-8")
 CIVIL = (FIXTURES / "engenharia_civil_matriz.html").read_text(encoding="utf-8")
 BASE = "https://www.mackenzie.br/graduacao/"
 TAB_2026 = '<a class="nav-link active" href="#tab-content-14874"'
@@ -170,6 +172,35 @@ class ParseParagraphCurriculumTest(unittest.TestCase):
         for old in ("Álgebra Linear", "Topografia I", "Geometria Descritiva", "Computação, Algoritmos e Programação I"):
             self.assertNotIn(old, names)
         self.assertNotIn("", names)
+
+
+class ParsePageLayoutsTest(unittest.TestCase):
+    """Trimmed real pages: nav tabs plus the 1st etapa pane of the chosen version and of another one."""
+
+    def test_active_version_tab_without_a_pane_reads_the_etapas_ending_with_its_id(self):
+        subjects = mackenzie.parse_curriculum(doc(DESIGN))
+        self.assertEqual(
+            subjects,
+            [(1, 1, n, None, False) for n in (
+                "Ciência Tecnologia e Sociedade na Arquitetura e Design",
+                "Ferramentas Materiais e Processos do Design I",
+                "Fundamentos Matemáticos e Físicos do Design I",
+                "Histórias e Teorias do Design I",
+                "Projeto I",
+            )],
+        )
+        self.assertNotIn("PROJETO I", {s[2] for s in subjects})  # the 2023 version's pane is upper case
+
+    def test_active_tab_that_is_not_a_curriculum_reads_the_version_of_the_latest_year(self):
+        subjects = mackenzie.parse_curriculum(doc(FARMACIA))
+        self.assertEqual(len(subjects), 9)
+        self.assertEqual(subjects[0], (1, 1, "Anatomia Humana", None, False))
+        self.assertNotIn("Anatomia", {s[2] for s in subjects})  # the 2014-2017 version's pane
+
+    def test_active_tab_that_is_not_a_curriculum_and_versions_without_a_year_raise(self):
+        html = FARMACIA.replace("Currículo 2026", "Currículo novo").replace("Currículo 2014-2017", "Currículo antigo")
+        with self.assertRaisesRegex(ValueError, "no version names a year"):
+            mackenzie.parse_curriculum(doc(html))
 
 
 if __name__ == "__main__":

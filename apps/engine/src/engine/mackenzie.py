@@ -58,17 +58,28 @@ def parse_curriculum(doc):
     first_etapa = min((pos for pos, tab, _ in tabs if tab in etapas), default=0)
     # Version tabs come before the first etapa tab; later non-etapa tabs ('Optativas') sit inside a version.
     versions = [tab for pos, tab, _ in tabs if tab not in etapas and pos < first_etapa]
-    start, end = 0, len(html)
+    start, end, suffix = 0, len(html), None
     if versions:
         active = next((tab for tab in ACTIVE_TAB.findall(html) if tab in versions), None)
         if active is None:
             raise ValueError(f"no active curriculum version among {versions}")
-        start = html.index(f'id="tab-content-{active}"')
-        end = min([pos for tab in versions if (pos := html.find(f'id="tab-content-{tab}"')) > start] or [end])
+        panes = [tab for tab in versions if f'id="tab-content-{tab}"' in html]
+        if active not in panes and any(tab.endswith(active) for tab in etapas):
+            suffix = active  # no pane wraps this version: its etapa ids end with its id ('1a_etapa350818')
+        elif active not in panes:
+            # The active tab holds no curriculum ('Disciplinas e Pré-Requisitos'): take the version of the latest year.
+            labels = {tab: label for _, tab, label in tabs}
+            years = {tab: max(map(int, re.findall(r"\b(?:19|20)\d\d\b", labels[tab])), default=0) for tab in panes}
+            if not years or max(years.values()) == 0:
+                raise ValueError(f"the active tab {active!r} holds no curriculum and no version names a year")
+            active = max(years, key=years.get)
+        if suffix is None:
+            start = html.index(f'id="tab-content-{active}"')
+            end = min([pos for tab in versions if (pos := html.find(f'id="tab-content-{tab}"')) > start] or [end])
     subjects = []
     for tab, term in etapas.items():
         pane_start = html.find(f'id="tab-content-{tab}"')
-        if not start <= pane_start < end:
+        if not start <= pane_start < end or (suffix and not tab.endswith(suffix)):
             continue  # an etapa of another version
         stop = html.find('id="tab-content-', pane_start + 1)
         pane = html[pane_start:stop if stop > 0 else None]

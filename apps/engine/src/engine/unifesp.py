@@ -43,7 +43,13 @@ def parse_curriculum(doc):
     shortcut: year is None, as no page says how long a termo lasts; set (term + 1) // 2 once a source confirms
     termos are semesters.
     """
-    parts = TERM.split(doc.read().decode("utf-8").split("Critérios de integralização</strong></h5>")[0])
+    page = doc.read().decode("utf-8")
+    parts = TERM.split(page.split("Critérios de integralização</strong></h5>")[0])
+    if "Não há detalhes da estrutura curricular" in page:
+        raise ValueError("the matriz publishes no curricular structure ('Não há detalhes da estrutura curricular')")
+    if len(parts) == 1 and "<strong>Formação complementar</strong>" in page:
+        # ABI entry courses (Guarulhos) publish one pool of units with no termo: nothing says when each is taken.
+        raise ValueError("the matriz lists only a 'Formação complementar' pool, with no termo")
     subjects = []
     for term, chunk in zip(parts[1::2], parts[2::2]):
         for row in rows(chunk):

@@ -87,5 +87,17 @@ class ParseCurriculumTest(unittest.TestCase):
             unifesp.parse_curriculum(doc("<html>Critérios de integralização</strong></h5></html>"))
 
 
+
+class UnpublishedStructureTest(unittest.TestCase):
+    def test_a_matriz_with_no_structure_raises(self):
+        page = (FIXTURES / "unifesp_no_structure.html").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "publishes no curricular structure"):
+            unifesp.parse_curriculum(doc(page))
+
+    def test_a_complementar_pool_without_a_termo_raises(self):
+        page = (FIXTURES / "unifesp_abi_complementar.html").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "only a 'Formação complementar' pool, with no termo"):
+            unifesp.parse_curriculum(doc(page))
+
 if __name__ == "__main__":
     unittest.main()
