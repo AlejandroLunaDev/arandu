@@ -2,9 +2,12 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(20);
 
+-- A profession is a CINE label inside a CINE area chain (general > specific > detailed).
+insert into cine_areas (code, name, parent_code) values ('03', 'Ciências sociais', null), ('031', 'Ciências sociais e comportamentais', '03'), ('0313', 'Psicologia', '031');
+
 -- Valid rows (ids looked up, since identity sequences survive rollbacks).
 select lives_ok($$insert into sources (adapter, url, label) values ('inep_census', 'https://example.test/inep', 'INEP')$$, 'valid source');
-select lives_ok($$insert into professions (slug, name) values ('psicologia', 'Psicologia')$$, 'valid profession');
+select lives_ok($$insert into professions (cine_code, slug, name) values ('0313P01', 'psicologia', 'Psicologia')$$, 'valid profession');
 select lives_ok($$insert into institutions (inep_code, name, short_name, kind, source_id)
   values (1, 'U', 'U', 'public', (select id from sources limit 1))$$, 'valid institution');
 select lives_ok($$insert into courses (inep_code, institution_id, profession_id, name, degree, shift, duration_years, city, source_id)
@@ -25,7 +28,7 @@ select throws_ok($$insert into curriculum_subjects (course_id, year, term, name,
   values ((select id from courses where inep_code = 10), 1, null, 'Neuroanatomia', (select id from sources limit 1))$$, '23505', null, 'duplicate subject with null term');
 select throws_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, quota_code, quota_label, score, source_id)
   values ((select id from courses where inep_code = 10), 'sisu', 'final_cutoff', 2024, 'AC', 'x', 1001, (select id from sources limit 1))$$, '23514', null, 'score above 1000');
-select throws_ok($$insert into professions (slug, name) values ('Bad Slug', 'x')$$, '23514', null, 'invalid slug');
+select throws_ok($$insert into professions (cine_code, slug, name) values ('0313P02', 'Bad Slug', 'x')$$, '23514', null, 'invalid slug');
 
 -- Scholarship on cut-offs and logo licence.
 select lives_ok($$insert into admission_cutoffs (course_id, route, metric, edition_year, edition_term, quota_code, quota_label, score, scholarship, source_id)
@@ -47,10 +50,10 @@ select lives_ok($$insert into institutions (inep_code, name, kind, source_id, lo
 select is(
   (select count(*)::int from pg_class
    where oid in ('public.sources'::regclass, 'public.scrape_runs'::regclass, 'public.professions'::regclass,
-                 'public.institutions'::regclass, 'public.courses'::regclass,
+                 'public.cine_areas'::regclass, 'public.institutions'::regclass, 'public.courses'::regclass,
                  'public.admission_cutoffs'::regclass, 'public.curriculum_subjects'::regclass)
      and relrowsecurity),
-  7, 'RLS enabled on all 7 tables');
+  8, 'RLS enabled on all 8 tables');
 
 set local role anon;
 select is((select count(*)::int from public.courses), 0, 'anon reads no courses');
