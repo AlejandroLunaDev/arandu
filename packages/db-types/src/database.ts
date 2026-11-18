@@ -267,7 +267,21 @@ isOneToOne: false
                     "adapter"?: string,"created_at"?: string,"id"?: never,"label"?: string,"last_content_hash"?: string | null,"last_fetched_at"?: string | null,"refresh_interval"?: string,"url"?: string
                   }
                   Relationships: [
-                    
+
+                  ]
+                },"story_facts": {
+                  Row: {
+                    "book": string,"figure": string,"id": number,"position": number,"source_label": string | null,"source_url": string | null,"text": string,"verified_on": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "book": string,"figure": string,"id"?: never,"position": number,"source_label"?: string | null,"source_url"?: string | null,"text": string,"verified_on": string
+                  }
+                  Update: {
+                    "book"?: string,"figure"?: string,"id"?: never,"position"?: number,"source_label"?: string | null,"source_url"?: string | null,"text"?: string,"verified_on"?: string
+                  }
+                  Relationships: [
+
                   ]
                 }
           }
