@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(71);
+select plan(82);
 
 -- One institution (INEP 55) with census courses, and one staged page per case.
 insert into public.sources (id, adapter, url, label) overriding system value values
@@ -231,6 +231,36 @@ insert into staging.curriculum_courses (source_id, institution_inep_code, name, 
 insert into staging.curriculum_subjects (source_id, term, year, name, hours, is_elective) values (9142, 1, 1, 'Materia Y', 60, false);
 select is(staging.normalize_curriculum(9141), 1, 'once a non-identical twin is staged, normalize on the first page removes its subject');
 select is((select count(*)::int from public.curriculum_subjects where source_id = 9141), 0, 'and no rows of that page remain');
+
+-- Shifts: pages of one course in different shifts each link and keep their own grade.
+insert into public.sources (id, adapter, url, label) overriding system value
+select n, 't_page', 'https://example.test/shift-' || n, 'shift ' || n from generate_series(9151, 9156) n;
+insert into public.courses (id, inep_code, institution_id, name, degree, city, source_id) overriding system value values
+  (9251, 990051, 9001, 'Curso Turno Um', 'bacharelado', 'Cidade Turno', 9001),
+  (9252, 990052, 9001, 'Curso Turno Tres', 'bacharelado', 'Cidade Turno', 9001);
+insert into staging.curriculum_courses (source_id, institution_inep_code, name, city, shift) values
+  (9151, 55, 'Curso Turno Um', 'Cidade Turno', 'integral'), (9152, 55, 'Curso Turno Um', 'Cidade Turno', 'noturno'),
+  (9153, 55, 'Curso Turno Dois', 'Cidade Turno', 'integral'), (9154, 55, 'Curso Turno Dois', 'Cidade Turno', 'integral'),
+  (9155, 55, 'Curso Turno Tres', 'Cidade Turno', null);
+insert into staging.curriculum_subjects (source_id, term, year, name, hours, is_elective) values
+  (9151, 1, 1, 'Materia I', 60, false), (9152, 1, 1, 'Materia N', 60, false), (9152, 2, 1, 'Materia N2', 60, false),
+  (9153, 1, 1, 'Materia A', 60, false), (9154, 1, 1, 'Materia Z', 60, false),
+  (9155, 1, 1, 'Materia S', 60, false);
+
+select is((select array_agg(id) from staging.curriculum_course_ids(9151, 'Cidade Turno') as t(id)), array[9251::bigint], 'the integral page links to the one census course');
+select is((select array_agg(id) from staging.curriculum_course_ids(9152, 'Cidade Turno') as t(id)), array[9251::bigint], 'and the noturno page of the same name links to it too');
+select is(staging.normalize_curriculum(9151) + staging.normalize_curriculum(9152), 3, 'both shifts load their subjects');
+select is((select array_agg(shift || ':' || name order by name) from public.curriculum_subjects where course_id = 9251), array['integral:Materia I', 'noturno:Materia N', 'noturno:Materia N2'], 'the course holds both grades, each row with its shift');
+select is((select count(*)::int from staging.unlinked_curricula where source_id in (9151, 9152)), 0, 'neither shift page is unlinked');
+
+select is((select count(*)::int from staging.curriculum_course_ids(9153, 'Cidade Turno') as t(id)), 0, 'same name and same shift with different subjects: the lower stays unlinked');
+select is((select count(*)::int from staging.curriculum_course_ids(9154, 'Cidade Turno') as t(id)), 0, 'and the higher stays unlinked');
+select is((select array_agg(source_id order by source_id) from staging.unlinked_curricula where source_id in (9153, 9154)), array[9153::bigint, 9154], 'both same-shift differing pages are unlinked');
+
+select is(staging.normalize_curriculum(9155), 1, 'a page with no shift loads with a null shift');
+update staging.curriculum_courses set shift = 'integral' where source_id = 9155;
+select is(staging.normalize_curriculum(9155), 2, 'a page that gains a shift reloads its row and drops the stale null one');
+select is((select array_agg(shift) from public.curriculum_subjects where course_id = 9252), array['integral'], 'only rows with the new shift remain');
 
 select * from finish();
 rollback;

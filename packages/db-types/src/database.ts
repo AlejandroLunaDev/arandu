@@ -85,14 +85,14 @@ isOneToOne: false
                   ]
                 },"curriculum_subjects": {
                   Row: {
-                    "course_id": number,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"source_id": number,"term": number | null,"term_to": number | null,"year": number | null
+                    "course_id": number,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"shift": string | null,"source_id": number,"term": number | null,"term_to": number | null,"year": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "course_id": number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"source_id": number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
+                    "course_id": number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"shift"?: string | null,"source_id": number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Update: {
-                    "course_id"?: number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"source_id"?: number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
+                    "course_id"?: number,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"shift"?: string | null,"source_id"?: number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Relationships: [
                     {

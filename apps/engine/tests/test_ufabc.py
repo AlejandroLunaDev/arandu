@@ -97,7 +97,7 @@ class ParseCoursePageTest(unittest.TestCase):
         delete = next(c for c in conn.calls if c[0].startswith("delete from staging.curriculum_courses"))
         self.assertEqual(delete[1], (5, "Santo André"))
         staged = next(c for c in conn.calls if "insert into staging.curriculum_courses" in c[0])
-        self.assertEqual(staged[1][1:], (ufabc.INEP_CODE, "Bacharelado em Ciência da Computação", "Santo André", False))
+        self.assertEqual(staged[1][1:], (ufabc.INEP_CODE, "Bacharelado em Ciência da Computação", "Santo André", None, False))
 
     def test_load_with_a_label_naming_no_campus_raises(self):
         conn = FakeConn([("https://prograd.ufabc.edu.br/cursos/bcc", "Ciência da Computação")])

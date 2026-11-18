@@ -19,14 +19,15 @@ def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_uni
         ).rowcount
         source_id = conn.execute("select id from sources where url = %s", (url,)).fetchone()[0]
         staged = conn.execute(
-            """insert into staging.curriculum_courses (source_id, institution_inep_code, name, city, every_unit)
-               values (%s, %s, %s, %s, %s)
+            """insert into staging.curriculum_courses (source_id, institution_inep_code, name, city, shift, every_unit)
+               values (%s, %s, %s, %s, %s, %s)
                on conflict (source_id, city) do update
                  set institution_inep_code = excluded.institution_inep_code, name = excluded.name,
-                   every_unit = excluded.every_unit
-                 where (curriculum_courses.institution_inep_code, curriculum_courses.name, curriculum_courses.every_unit)
-                   is distinct from (excluded.institution_inep_code, excluded.name, excluded.every_unit)""",
-            (source_id, inep_code, name, city, every_unit),
+                   shift = excluded.shift, every_unit = excluded.every_unit
+                 where (curriculum_courses.institution_inep_code, curriculum_courses.name, curriculum_courses.shift,
+                   curriculum_courses.every_unit)
+                   is distinct from (excluded.institution_inep_code, excluded.name, excluded.shift, excluded.every_unit)""",
+            (source_id, inep_code, name, city, shift, every_unit),
         ).rowcount
         written += staged
         if staged:  # the course changed, so its already-staged subjects may link elsewhere now
