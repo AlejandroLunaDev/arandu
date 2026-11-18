@@ -203,6 +203,14 @@ class ParseDisciplineTest(unittest.TestCase):
         )
         self.assertEqual(usp.parse_discipline(doc(page))[2:], (["1. Um", "2. Dois"], ["SILVA. Obra."]))
 
+    def test_drops_a_line_repeated_right_after_itself_but_keeps_a_later_repeat(self):
+        page = (
+            "<b>Disciplina: ABC2 - Teste</b><br><b>Conteúdo Programático</b>"
+            "<pre>1. Um<br>1. Um<br>2. Dois<br>1. Um</pre>"
+            "<b>Bibliografia</b><pre>SILVA. Obra.</pre>"
+        )
+        self.assertEqual(usp.parse_discipline(doc(page))[2], ["1. Um", "2. Dois", "1. Um"])
+
     def test_rejects_a_page_without_the_heading(self):
         with self.assertRaises(ValueError):
             usp.parse_discipline(doc("<html>nada</html>"))

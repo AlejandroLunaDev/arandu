@@ -72,8 +72,10 @@ LABEL = re.compile(r"(?i)^(?:bibliografia|livros?|livro\(s\))\b[^.,]*$|^\(ver\b"
 
 
 def _lines(block):
-    return [line for raw in re.split(r"(?i)<br\s*/?>", block)
-            if (line := " ".join(entities.unescape(re.sub(r"<[^>]+>", " ", raw)).split()))]
+    lines = [line for raw in re.split(r"(?i)<br\s*/?>", block)
+             if (line := " ".join(entities.unescape(re.sub(r"<[^>]+>", " ", raw)).split()))]
+    # Some pages repeat a line back to back (CRP0466 lists its first topic twice): keep one (owner, 2026-11-18).
+    return [line for i, line in enumerate(lines) if not i or line != lines[i - 1]]
 
 
 def parse_discipline(doc):
