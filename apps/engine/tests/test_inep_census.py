@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from engine import inep_census
 
@@ -97,6 +98,22 @@ class LoadTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "check its format"):
             inep_census.load(conn, 1, ([], [("c",)] * 4))
         self.assertEqual(len(conn.statements), 1)  # only the count ran: nothing was truncated
+
+    def test_relinks_every_staged_curriculum_page_and_adds_the_subjects_to_the_count(self):
+        from tests.fakes import FakeConn
+
+        class Conn(FakeConn):
+            def cursor(self):
+                cur = mock.MagicMock()
+                cur.__enter__.return_value = cur
+                return cur
+
+        conn = Conn(answers=[(0,), (5,), (3,)])  # staged before, normalize_inep_census, normalize_curriculum sum
+        self.assertEqual(inep_census.load(conn, 1, ([], [("c",)])), 8)
+        sql = conn.calls[-1][0]
+        self.assertIn("staging.normalize_curriculum(source_id)", sql)
+        self.assertIn("select distinct source_id from staging.curriculum_courses", sql)
+        self.assertIn("normalize_inep_census", conn.calls[-2][0])  # the census first, so the courses exist to link
 
 
 if __name__ == "__main__":

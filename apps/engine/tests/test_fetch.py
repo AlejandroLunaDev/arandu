@@ -1,6 +1,10 @@
 import hashlib
+import http.client
+import socket
+import struct
 import threading
 import unittest
+import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
 from unittest import mock
@@ -19,6 +23,17 @@ def serve(routes):
             hits.append(self.path)
             queue = routes.get(self.path, [(404, b"")])
             status, body = queue.pop(0) if len(queue) > 1 else queue[0]
+            if status == "reset":  # RST instead of an answer
+                self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                self.close_connection = True
+                return self.connection.close()
+            if status == "short":  # promise the whole body, send half, hang up
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body[: len(body) // 2])
+                self.close_connection = True
+                return
             self.send_response(status)
             if status == 503:
                 self.send_header("Retry-After", "0")
@@ -89,6 +104,65 @@ class FetchTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "HTTP 202"):
             fetch.download(f"{base}/f.zip", dest)
         self.assertEqual(dest.getvalue(), b"")
+
+    def test_a_reset_connection_is_retried(self):
+        base, hits = self.serve({"/robots.txt": [(404, b"")], "/f.zip": [("reset", b""), (200, BODY)]})
+        dest = BytesIO()
+        self.assertEqual(fetch.download(f"{base}/f.zip", dest), hashlib.sha256(BODY).hexdigest())
+        self.assertEqual(dest.getvalue(), BODY)
+        self.assertEqual(hits.count("/f.zip"), 2)
+        fetch.time.sleep.assert_called_with(5)
+
+    def _cut_responses(self, cuts):
+        """Responses for mocked _open: the first `cuts` ones send half of BODY then raise IncompleteRead, the rest are whole."""
+        def response(cut):
+            parts = [BODY[: len(BODY) // 2], http.client.IncompleteRead(b"")] if cut else [BODY, b""]
+            return mock.MagicMock(status=200, length=0, read=mock.Mock(side_effect=parts), __enter__=lambda self: self, __exit__=lambda *a: None)
+
+        return [response(i < cuts) for i in range(fetch.MAX_ATTEMPTS)]
+
+    def test_a_body_cut_short_on_the_wire_restarts_the_file_without_duplicated_bytes(self):
+        base, hits = self.serve({"/robots.txt": [(404, b"")], "/f.zip": [("short", BODY), (200, BODY)]})
+        dest = BytesIO()
+        self.assertEqual(fetch.download(f"{base}/f.zip", dest), hashlib.sha256(BODY).hexdigest())
+        self.assertEqual(dest.getvalue(), BODY)
+        self.assertEqual(hits.count("/f.zip"), 2)
+
+    def test_download_gives_up_after_max_attempts_on_a_body_always_cut_short(self):
+        base, hits = self.serve({"/robots.txt": [(404, b"")], "/f.zip": [("short", BODY)]})
+        with self.assertRaises(http.client.IncompleteRead):
+            fetch.download(f"{base}/f.zip", BytesIO())
+        self.assertEqual(hits.count("/f.zip"), fetch.MAX_ATTEMPTS)
+
+    def test_a_body_cut_short_restarts_the_file_without_duplicated_bytes(self):
+        dest = BytesIO()
+        with mock.patch.object(fetch, "allowed", return_value=True), mock.patch.object(
+            fetch, "_open", side_effect=self._cut_responses(1)
+        ) as opened:
+            digest = fetch.download("http://x/f.zip", dest)
+        self.assertEqual(digest, hashlib.sha256(BODY).hexdigest())
+        self.assertEqual(dest.getvalue(), BODY)
+        self.assertEqual(opened.call_count, 2)
+
+    def test_download_gives_up_after_max_attempts(self):
+        with mock.patch.object(fetch, "allowed", return_value=True), mock.patch.object(
+            fetch, "_open", side_effect=self._cut_responses(fetch.MAX_ATTEMPTS)
+        ) as opened:
+            with self.assertRaises(http.client.IncompleteRead):
+                fetch.download("http://x/f.zip", BytesIO())
+        self.assertEqual(opened.call_count, fetch.MAX_ATTEMPTS)
+
+    def test_open_gives_up_after_max_attempts_on_resets(self):
+        base, hits = self.serve({"/robots.txt": [(404, b"")], "/f.zip": [("reset", b"")]})
+        with self.assertRaises((ConnectionError, OSError)):
+            fetch.download(f"{base}/f.zip", BytesIO())
+        self.assertGreaterEqual(hits.count("/f.zip"), fetch.MAX_ATTEMPTS)
+
+    def test_a_404_is_not_retried(self):
+        base, hits = self.serve({"/robots.txt": [(404, b"")], "/f.zip": [(404, b"")]})
+        with self.assertRaises(urllib.error.HTTPError):
+            fetch.download(f"{base}/f.zip", BytesIO())
+        self.assertEqual(hits.count("/f.zip"), 1)
 
 
 if __name__ == "__main__":

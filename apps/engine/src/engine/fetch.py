@@ -1,6 +1,7 @@
 """Polite HTTP shared by every adapter (ADR-0004 collection rules)."""
 
 import hashlib
+import http.client
 import time
 import urllib.error
 import urllib.request
@@ -11,6 +12,7 @@ USER_AGENT = "AranduRekaEngine/0.1 (+https://github.com/AlejandroLunaDev/arandu-
 MIN_INTERVAL = 1.5  # seconds between requests to one host
 RETRY_STATUSES = {429, 503}
 MAX_ATTEMPTS = 5
+TRANSIENT = (urllib.error.URLError, ConnectionError, TimeoutError)  # resets and timeouts: worth another try
 
 _last_request: dict[str, float] = {}
 _robots: dict[str, urllib.robotparser.RobotFileParser | bool] = {}  # per host, read once per run
@@ -30,6 +32,10 @@ def _open(url):
                 raise
             retry_after = error.headers.get("Retry-After", "")
             time.sleep(int(retry_after) if retry_after.isdigit() else 5 * 2**attempt)
+        except TRANSIENT:
+            if attempt == MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(5 * 2**attempt)
 
 
 def _read_robots(base):
@@ -62,11 +68,21 @@ def download(url, dest):
     """Stream url into the open binary file dest and return its SHA-256 hex digest."""
     if not allowed(url):
         raise PermissionError(f"robots.txt disallows {url}")
-    digest = hashlib.sha256()
-    with _open(url) as response:
-        if response.status != 200:
-            raise RuntimeError(f"{url} answered HTTP {response.status} instead of the document")
-        while chunk := response.read(1 << 20):
-            digest.update(chunk)
-            dest.write(chunk)
-    return digest.hexdigest()
+    for attempt in range(MAX_ATTEMPTS):
+        digest = hashlib.sha256()
+        dest.seek(0)
+        dest.truncate()
+        try:
+            with _open(url) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"{url} answered HTTP {response.status} instead of the document")
+                while chunk := response.read(1 << 20):
+                    digest.update(chunk)
+                    dest.write(chunk)
+                if response.length:  # bytes still owed by Content-Length: read(amt) ends quietly on a cut body
+                    raise http.client.IncompleteRead(b"", response.length)
+            return digest.hexdigest()
+        except (ConnectionError, TimeoutError, http.client.IncompleteRead):  # cut mid-download: start over
+            if attempt == MAX_ATTEMPTS - 1:
+                raise
+            time.sleep(5 * 2**attempt)
