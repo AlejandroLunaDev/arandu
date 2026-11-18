@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(52);
+select plan(71);
 
 -- One institution (INEP 55) with census courses, and one staged page per case.
 insert into public.sources (id, adapter, url, label) overriding system value values
@@ -176,6 +176,61 @@ select is((select count(*)::int from staging.curriculum_subjects where source_id
 update staging.curriculum_courses set name = 'Engenharia Civil' where source_id = 9120;
 select is(staging.normalize_curriculum(9120), 2, 're-staged with the right name, the same normalize links both subjects');
 select is((select count(*)::int from public.curriculum_subjects where course_id = 9226), 2, 'they land in the census course');
+
+-- Twins: staged pages with the same institution, city and name. One city and one name per case.
+insert into public.sources (id, adapter, url, label) overriding system value
+select n, 't_page', 'https://example.test/twin-' || n, 'twin ' || n from generate_series(9131, 9142) n;
+insert into public.courses (id, inep_code, institution_id, name, degree, city, source_id) overriding system value values
+  (9231, 990031, 9001, 'Curso Gemeo Um', 'bacharelado', 'Cidade Um', 9001),
+  (9232, 990032, 9001, 'Curso Gemeo Dois', 'bacharelado', 'Cidade Dois', 9001),
+  (9233, 990033, 9001, 'Curso Gemeo Dois', 'bacharelado', 'Cidade Dois', 9001),
+  (9234, 990034, 9001, 'Curso Gemeo Tres', 'bacharelado', 'Cidade Tres', 9001),
+  (9235, 990035, 9001, 'Curso Gemeo Quatro', 'bacharelado', 'Cidade Quatro', 9001),
+  (9236, 990036, 9001, 'Curso Gemeo Cinco', 'bacharelado', 'Cidade Cinco', 9001),
+  (9237, 990037, 9001, 'Curso Gemeo Cinco', 'bacharelado', 'Cidade Cinco', 9001),
+  (9238, 990038, 9001, 'Curso Gemeo Cinco', 'bacharelado', 'Cidade Cinco', 9001),
+  (9239, 990039, 9001, 'Curso Gemeo Seis', 'bacharelado', 'Cidade Seis', 9001);
+insert into staging.curriculum_courses (source_id, institution_inep_code, name, city) values
+  (9131, 55, 'Curso Gemeo Um', 'Cidade Um'), (9132, 55, 'Curso Gemeo Um', 'Cidade Um'),
+  (9133, 55, 'Curso Gemeo Dois', 'Cidade Dois'), (9134, 55, 'Curso Gemeo Dois', 'Cidade Dois'),
+  (9135, 55, 'Curso Gemeo Tres', 'Cidade Tres'), (9136, 55, 'Curso Gemeo Tres', 'Cidade Tres'),
+  (9137, 55, 'Curso Gemeo Quatro', 'Cidade Quatro'), (9138, 55, 'Curso Gemeo Quatro', 'Cidade Quatro'),
+  (9139, 55, 'Curso Gemeo Cinco', 'Cidade Cinco'), (9140, 55, 'Curso Gemeo Cinco', 'Cidade Cinco'),
+  (9141, 55, 'Curso Gemeo Seis', 'Cidade Seis');
+insert into staging.curriculum_subjects (source_id, term, year, name, hours, is_elective)
+select p, 1, 1, s, 60, false
+from (values (9131), (9132), (9133), (9134), (9139), (9140)) pages(p), (values ('Materia A'), ('Materia B')) subj(s);
+insert into staging.curriculum_subjects (source_id, term, year, name, hours, is_elective) values
+  (9135, 1, 1, 'Materia A', 60, false), (9136, 1, 1, 'Materia Z', 60, false),
+  (9137, 1, 1, 'Materia A', 60, false),
+  (9141, 1, 1, 'Materia A', 60, false);
+
+select is((select array_agg(id) from staging.curriculum_course_ids(9131, 'Cidade Um') as t(id)), array[9231::bigint], 'identical twins, one census match: the lower source_id links');
+select is((select count(*)::int from staging.curriculum_course_ids(9132, 'Cidade Um') as t(id)), 0, 'and the higher one returns none');
+select is(staging.normalize_curriculum(9131), 2, 'normalize on the lower twin links its subjects');
+select is((select count(*)::int from public.curriculum_subjects where course_id = 9231), 2, 'they land in the census course');
+select is((select count(*)::int from staging.unlinked_curricula where source_id in (9131, 9132)), 0, 'neither identical twin is unlinked');
+
+select is((select array_agg(id order by id) from staging.curriculum_course_ids(9133, 'Cidade Dois') as t(id)), array[9232::bigint, 9233], 'identical twins, two census matches: the lower links to both');
+select is((select count(*)::int from staging.curriculum_course_ids(9134, 'Cidade Dois') as t(id)), 0, 'and the higher one returns none');
+select is(staging.normalize_curriculum(9133), 4, 'normalize on the lower twin loads 2 subjects into each of the 2 courses');
+select is((select count(*)::int from staging.unlinked_curricula where source_id in (9133, 9134)), 0, 'neither two-match twin is unlinked');
+
+select is((select count(*)::int from staging.curriculum_course_ids(9135, 'Cidade Tres') as t(id)), 0, 'twins with different subjects: the lower returns none');
+select is((select count(*)::int from staging.curriculum_course_ids(9136, 'Cidade Tres') as t(id)), 0, 'and the higher returns none');
+select is((select array_agg(source_id order by source_id) from staging.unlinked_curricula where source_id in (9135, 9136)), array[9135::bigint, 9136], 'both differing twins are unlinked');
+
+select is((select count(*)::int from staging.curriculum_course_ids(9137, 'Cidade Quatro') as t(id)), 0, 'twins where one has no subjects: the one with subjects returns none');
+select is((select count(*)::int from staging.curriculum_course_ids(9138, 'Cidade Quatro') as t(id)), 0, 'and the one without returns none');
+
+select is((select count(*)::int from staging.curriculum_course_ids(9139, 'Cidade Cinco') as t(id)), 0, 'three census matches, two identical twins: the lower links nothing');
+select is((select count(*)::int from staging.curriculum_course_ids(9140, 'Cidade Cinco') as t(id)), 0, 'and the higher links nothing');
+
+select is(staging.normalize_curriculum(9141), 1, 'a single page links and loads its subject');
+insert into staging.curriculum_courses (source_id, institution_inep_code, name, city) values (9142, 55, 'Curso Gemeo Seis', 'Cidade Seis');
+insert into staging.curriculum_subjects (source_id, term, year, name, hours, is_elective) values (9142, 1, 1, 'Materia Y', 60, false);
+select is(staging.normalize_curriculum(9141), 1, 'once a non-identical twin is staged, normalize on the first page removes its subject');
+select is((select count(*)::int from public.curriculum_subjects where source_id = 9141), 0, 'and no rows of that page remain');
 
 select * from finish();
 rollback;
