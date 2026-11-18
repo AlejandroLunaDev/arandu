@@ -14,17 +14,23 @@ export const BOOK_OFFERINGS = 3;
 /** FIAP (INEP code 852): the owner's decision, it is always in the books of the professions it offers. */
 const FIAP = 852;
 
-/** A profession on the shelf: a first-semester subject of it has real topics, the taste of the path. */
+/** One rule for the sample: a first-semester subject (term 1, or year 1 without a term) whose discipline has topics. */
+const sampleSubject = (cs: string, d: string) =>
+  `${d}.topics is not null and (${cs}.term = 1 or (${cs}.term is null and ${cs}.year = 1))`;
+
+/** A profession on the shelf: it has a sample subject, the taste of the path. */
 const IN_POOL = `exists (
   select 1 from public.courses pc
   join public.curriculum_subjects pcs on pcs.course_id = pc.id
   join public.disciplines pd on pd.id = pcs.discipline_id
-  where pc.profession_id = p.id and pd.topics is not null
-    and (pcs.term = 1 or (pcs.term is null and pcs.year = 1)))`;
+  where pc.profession_id = p.id and ${sampleSubject('pcs', 'pd')})`;
+
+/** The book's sample: at most 2 subjects (the contract's 1-2). */
+const SAMPLE_SIZE = 2;
 
 /** The first-year mandatory subjects of the profession's courses. Undated subjects (no year, no term) stay out. */
 const GRADE = `
-  select cs.course_id, cs.source_id, cs.name, cs.term, cs.shift, cs.discipline_id
+  select cs.course_id, cs.source_id, cs.name, cs.term, cs.discipline_id
   from public.curriculum_subjects cs
   join public.courses c on c.id = cs.course_id
   join public.professions p on p.id = c.profession_id
@@ -34,7 +40,6 @@ interface OfferingRow {
   course_id: string;
   /** Null for a FIAP course whose grade is unknown. */
   grade_source_id: string | null;
-  shift: Offering['course']['shift'];
   institution: string;
   short_name: string | null;
   kind: Offering['institution']['kind'];
@@ -137,7 +142,8 @@ export class BooksRepository {
         course: {
           name: r.course,
           degree: r.degree,
-          shift: r.shift,
+          // The census states no shift, and course.source is the census: a grade's shift would be credited to it.
+          shift: null,
           durationYears:
             r.duration_years === null ? null : Number(r.duration_years),
           campus: { name: r.campus_name, city: r.city },
@@ -163,15 +169,18 @@ export class BooksRepository {
    * offering has a real first-year grade, FIAP's even without one. Neutral order, no institution pays for its place:
    * the sample's own course first, then FIAP, then institutions with a real image, then alphabetical by institution
    * and city. An institution's offering is its sample course, else one with a grade, else by city. A course with two
-   * grades (one per shift) shows the one holding the sample subjects, else the first; its shift is the grade's when it
-   * states one.
+   * grades (one per shift) shows the one holding the sample subjects, else the first.
    */
   private offerings(slug: string): Promise<OfferingRow[]> {
     return this.sql.unsafe<OfferingRow[]>(
       `with grade as (${GRADE}),
       course_grade as (
         (select distinct on (g.course_id) g.course_id, g.source_id,
-          bool_or(d.id is not null) over (partition by g.course_id) as sample
+          exists (
+            select 1 from public.curriculum_subjects scs
+            join public.disciplines sd on sd.id = scs.discipline_id
+            where scs.course_id = g.course_id and ${sampleSubject('scs', 'sd')}
+          ) as sample
         from grade g
         left join public.disciplines d on d.id = g.discipline_id and d.topics is not null
         order by g.course_id, (d.id is not null) desc, g.source_id)
@@ -201,10 +210,6 @@ export class BooksRepository {
         limit $2
       )
       select k.course_id::text as course_id, k.source_id::text as grade_source_id,
-        (select case when count(distinct lower(g.shift)) = 1 and count(g.shift) = count(*)
-            and min(lower(g.shift)) in ('matutino', 'vespertino', 'noturno', 'integral')
-          then min(lower(g.shift)) end
-        from grade g where g.course_id = k.course_id and g.source_id = k.source_id) as shift,
         i.name as institution, i.short_name, i.kind, i.logo_url, i.logo_license, i.logo_source_url, i.photo_url,
         i.photo_credit, i.photo_license, i.photo_source_url, c.name as course, c.degree, c.duration_years,
         c.campus_name, c.city, s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
@@ -217,7 +222,7 @@ export class BooksRepository {
     );
   }
 
-  /** The first-semester subjects with real topics, the taste of the path. */
+  /** The sample subjects, the taste of the path. */
   private async sample(slug: string): Promise<SampleSubject[]> {
     const rows = await this.sql<(SourceRow & Omit<SampleSubject, 'source'>)[]>`
       select d.name, d.topics, coalesce(i.short_name, i.name) as institution,
@@ -225,13 +230,14 @@ export class BooksRepository {
       from public.disciplines d
       join public.institutions i on i.id = d.institution_id
       join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
-      where d.topics is not null and exists (
+      where exists (
         select 1 from public.curriculum_subjects cs
         join public.courses c on c.id = cs.course_id
         join public.professions p on p.id = c.profession_id
-        where cs.discipline_id = d.id and p.slug = ${slug} and (cs.term = 1 or (cs.term is null and cs.year = 1))
+        where cs.discipline_id = d.id and p.slug = ${slug} and ${this.sql.unsafe(sampleSubject('cs', 'd'))}
       )
-      order by d.name`;
+      order by d.name
+      limit ${SAMPLE_SIZE}`;
     return rows.map(({ name, topics, institution, ...row }) => ({
       name,
       topics,

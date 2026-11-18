@@ -12,6 +12,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   let createdFiap = false;
   const createdAreas: string[] = [];
   let seq = 0;
+  let professions = 0; // its own counter: cine_code allows only two digits after the letter
 
   const cleanup = async () => {
     await sql`delete from public.courses where inep_code >= 99900000`;
@@ -67,7 +68,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   const profession = async (slug: string, name: string) => {
     const [row] = await sql<{ id: string }[]>`
       insert into public.professions (slug, name, cine_code)
-      values (${slug}, ${name}, ${`0411A${String(++seq).padStart(2, '0')}`})
+      values (${slug}, ${name}, ${`0411A${String(++professions).padStart(2, '0')}`})
       returning id::text`;
     return row.id;
   };
@@ -350,6 +351,53 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     ]);
     const oc = await course(other, zeta, base, 'oc');
     await subjects(oc, base, [firstTerm('Other', dOther)]);
+    // Three linked first-semester disciplines: the sample keeps the first two by name.
+    const cap = await profession('t-sample-cap', 'Test Sample Cap');
+    const capCourse = await course(cap, zeta, base, 'cap');
+    await subjects(capCourse, base, [
+      firstTerm('Cap C', await discipline(zeta, 'Cap C', ['C'], base)),
+      firstTerm(
+        'Cap A',
+        await discipline(
+          zeta,
+          'Cap A',
+          ['Zeta last', 'Alpha first', 'Mid'],
+          await source('Src Cap'),
+        ),
+      ),
+      firstTerm('Cap B', await discipline(zeta, 'Cap B', ['B'], base)),
+    ]);
+
+    // The sample flag follows the shared rule: term 2 does not make a course the sample, a term-1 elective does.
+    const flagTerm2 = await profession('t-flag-term2', 'Test Flag Term Two');
+    await sampleCourse(flagTerm2, 'pool');
+    await candidate(flagTerm2, alpha, 'a-plain');
+    const cTerm2 = await candidate(flagTerm2, carl, 'c-term2');
+    await subjects(cTerm2, base, [
+      {
+        year: 1,
+        term: 2,
+        name: 'Linked',
+        discipline: await discipline(carl, 'Flag term 2', ['T'], base),
+      },
+    ]);
+    const flagElective = await profession(
+      't-flag-elective',
+      'Test Flag Elective',
+    );
+    await sampleCourse(flagElective, 'pool');
+    await candidate(flagElective, alpha, 'a-plain');
+    const cElective = await candidate(flagElective, carl, 'c-elective');
+    await subjects(cElective, base, [
+      {
+        year: 1,
+        term: 1,
+        name: 'Linked',
+        elective: true,
+        discipline: await discipline(carl, 'Flag elective', ['E'], base),
+      },
+    ]);
+
     // A profession with courses but no sample subject at all.
     const noSample = await profession('t-no-sample', 'Test No Sample');
     await subjects(await course(noSample, zeta, base, 'ns'), base, [
@@ -436,12 +484,15 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(slugs).toEqual([
         't-fiap-empty',
         't-fiap-grade',
+        't-flag-elective',
+        't-flag-term2',
         't-grade',
         't-main',
         't-name',
         't-order',
         't-pool-term-null',
         't-sample',
+        't-sample-cap',
         't-sample-other',
         't-second-a',
         't-second-b',
@@ -659,68 +710,70 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   });
 
   describe('shift', () => {
-    const shifts = async (slug: string) =>
-      Object.fromEntries(
-        ((await book(slug))?.offerings ?? []).map((o) => [
-          o.course.name,
-          o.course.shift,
-        ]),
+    it('is always null, even when the grade states a clean shift', async () => {
+      const result = await book('t-shift-a');
+      const same = result?.offerings.find(
+        (o) => o.course.name === 'same-value',
       );
 
-    it('is the grade shift, lower-cased, when all rows share one of the four values', async () => {
-      expect((await shifts('t-shift-a'))['same-value']).toBe('noturno');
-    });
-
-    it('is null when the rows state two values or a value outside the four', async () => {
-      const result = await shifts('t-shift-a');
-
-      expect(result['two-values']).toBeNull();
-      expect(result['unknown-value']).toBeNull();
-    });
-
-    it('is null when no row states a shift, ignoring the course column', async () => {
-      const result = await shifts('t-shift-b');
-
-      expect(result['all-null']).toBeNull();
-      expect(result['course-column-only']).toBeNull();
-    });
-
-    it('is null when only some rows state a shift', async () => {
-      expect((await shifts('t-shift-b'))['null-and-value']).toBeNull();
+      expect(same).toBeDefined();
+      expect(result?.offerings.map((o) => o.course.shift)).toEqual(
+        result?.offerings.map(() => null),
+      );
     });
   });
 
   describe('sample', () => {
-    it('lists the pool disciplines of the first semester by name, once each, with topics in source order', async () => {
+    it('lists the pool disciplines of the first semester by name, once each, at most two', async () => {
       const result = await book('t-sample');
 
       expect(result?.sample.map((s) => s.name)).toEqual([
         'Anatomia',
         'Undated term',
-        'Zoologia',
-      ]);
-      expect(result?.sample[2].topics).toEqual([
-        'Zeta last',
-        'Alpha first',
-        'Mid',
       ]);
     });
 
-    it('uses the short name of the institution, or its name, and the discipline source', async () => {
-      const result = await book('t-sample');
+    it('returns 2 sample subjects, the first two by name, for 3 linked first-semester disciplines', async () => {
+      const result = await book('t-sample-cap');
 
-      expect(result?.sample[0]).toEqual({
-        name: 'Anatomia',
-        topics: ['A1', 'A2'],
-        institution: 'Alpha Univ',
+      expect(result?.sample.map((s) => s.name)).toEqual(['Cap A', 'Cap B']);
+    });
+
+    it('keeps topics in source order and uses the short name of the institution and the discipline source', async () => {
+      const [first] = (await book('t-sample-cap'))?.sample ?? [];
+
+      expect(first).toEqual({
+        name: 'Cap A',
+        topics: ['Zeta last', 'Alpha first', 'Mid'],
+        institution: 'ZU',
         source: {
-          label: 'Src A',
-          url: 'https://example.test/Src-A',
+          label: 'Src Cap',
+          url: 'https://example.test/Src-Cap',
           retrievedAt: '2026-01-02T03:04:05.000Z',
         },
       });
-      expect(result?.sample[2].institution).toBe('ZU');
-      expect(result?.sample[2].source.label).toBe('Src Z');
+    });
+
+    it('uses the name of an institution without a short name', async () => {
+      expect((await book('t-sample'))?.sample[0].institution).toBe(
+        'Alpha Univ',
+      );
+    });
+
+    it('does not rank a course linked only through a term-2 subject as the sample course', async () => {
+      expect(names(await book('t-flag-term2'))).toEqual([
+        'pool',
+        'a-plain',
+        'c-term2',
+      ]);
+    });
+
+    it('ranks a course linked through a term-1 elective as a sample course', async () => {
+      expect(names(await book('t-flag-elective'))).toEqual([
+        'c-elective',
+        'pool',
+        'a-plain',
+      ]);
     });
 
     it('leaves out disciplines without topics, in term 2, or of another profession', async () => {
