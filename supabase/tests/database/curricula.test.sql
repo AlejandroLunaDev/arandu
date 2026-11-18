@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(82);
+select plan(89);
 
 -- One institution (INEP 55) with census courses, and one staged page per case.
 insert into public.sources (id, adapter, url, label) overriding system value values
@@ -261,6 +261,34 @@ select is(staging.normalize_curriculum(9155), 1, 'a page with no shift loads wit
 update staging.curriculum_courses set shift = 'integral' where source_id = 9155;
 select is(staging.normalize_curriculum(9155), 2, 'a page that gains a shift reloads its row and drops the stale null one');
 select is((select array_agg(shift) from public.curriculum_subjects where course_id = 9252), array['integral'], 'only rows with the new shift remain');
+
+-- Loose names: content words only, used when no census name matches exactly. One city per case.
+insert into public.sources (id, adapter, url, label) overriding system value
+select n, 't_page', 'https://example.test/loose-' || n, 'loose ' || n from generate_series(9161, 9165) n;
+insert into public.courses (id, inep_code, institution_id, name, degree, city, source_id) overriding system value values
+  (9261, 990061, 9001, 'Química Com Habilitação Em Química Forense', 'bacharelado', 'Cidade Forense', 9001),
+  (9262, 990062, 9001, 'Letras - Habilitação Árabe', 'bacharelado', 'Cidade Letras', 9001),
+  (9263, 990063, 9001, 'Letras - Habilitação Árabe', 'licenciatura', 'Cidade Letras', 9001),
+  (9264, 990064, 9001, 'Gastronomia', 'tecnologico', 'Cidade Gastro', 9001),
+  (9265, 990065, 9001, 'Gastronomia', 'bacharelado', 'Cidade Gastro', 9001),
+  (9266, 990066, 9001, 'Química Ambiental', 'bacharelado', 'Cidade Exata', 9001),
+  (9267, 990067, 9001, 'Química - Ambiental', 'bacharelado', 'Cidade Exata', 9001),
+  (9268, 990068, 9001, 'Física - Aplicada', 'bacharelado', 'Cidade Ambigua', 9001),
+  (9269, 990069, 9001, 'Física Em Aplicada', 'bacharelado', 'Cidade Ambigua', 9001);
+insert into staging.curriculum_courses (source_id, institution_inep_code, name, city) values
+  (9161, 55, 'Bacharelado em Química - Habilitação em Química Forense', 'Cidade Forense'),
+  (9162, 55, 'Letras - Bacharelado - Habilitação: Árabe', 'Cidade Letras'),
+  (9163, 55, 'Gastronomia (Tecnólogo)', 'Cidade Gastro'),
+  (9164, 55, 'Química Ambiental', 'Cidade Exata'),
+  (9165, 55, 'Física Aplicada', 'Cidade Ambigua');
+
+select is(staging.loose_key('Química - Habilitação: Tecnológica - Ênfase: Alimentos'), staging.loose_key('Química - Habilitação Tecnológica - Ênfase Em Alimentos'), 'loose_key ignores colons and the joining word Em');
+select is(staging.loose_key('Matemática Aplicada e Computacional - Habilitação em Atuária'), staging.loose_key('Matemática Aplicada E Computacional Com Habilitação Em Atuária'), 'loose_key ignores Com, Em and hyphens');
+select is((select array_agg(id) from staging.curriculum_course_ids(9161, 'Cidade Forense') as t(id)), array[9261::bigint], 'Bacharelado em X - Habilitação em Y links to X Com Habilitação Em Y');
+select is((select array_agg(id) from staging.curriculum_course_ids(9162, 'Cidade Letras') as t(id)), array[9262::bigint], 'a mid-name Bacharelado links to the bacharelado course, not the licenciatura one');
+select is((select array_agg(id) from staging.curriculum_course_ids(9163, 'Cidade Gastro') as t(id)), array[9264::bigint], 'the (Tecnólogo) suffix links to the tecnologico course only');
+select is((select array_agg(id) from staging.curriculum_course_ids(9164, 'Cidade Exata') as t(id)), array[9266::bigint], 'an exact name match wins over a loose one');
+select is((select count(*)::int from staging.curriculum_course_ids(9165, 'Cidade Ambigua') as t(id)), 0, 'two census courses with the same loose key and no exact match stay unlinked');
 
 select * from finish();
 rollback;
