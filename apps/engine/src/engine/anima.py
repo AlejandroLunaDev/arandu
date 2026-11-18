@@ -16,7 +16,7 @@ COURSE_PAGE = re.compile(r"<loc>\s*(https://([^/<]+)/cursos/graduacao/([a-z0-9-]
 CANONICAL = re.compile(r'<link rel="canonical" href="https://([^/"]+)/')
 NUXT_DATA = re.compile(r'<script[^>]*id="__NUXT_DATA__"[^>]*>(.*?)</script>', re.S)
 WRAPPERS = {"Reactive", "ShallowReactive", "Ref", "ShallowRef"}
-SEMESTERS = re.compile(r"Semestres (\d+) - (\d+)")
+SEMESTERS = re.compile(r"Semestres? (\d+)(?: - (\d+))?")  # 'Semestres 1 - 2', or the last block's 'Semestre 7'
 
 
 def parse_sitemap(doc):
@@ -69,6 +69,8 @@ def parse_course(doc):
     units names the presencial units that matrix serves, so it links to their census courses by MEC campus.
     """
     html = doc.read().decode("utf-8")
+    if 'http-equiv="refresh" content="0; url=/404/"' in html:
+        raise ValueError("the sitemap lists a page that is gone: it redirects to /404/")
     host = CANONICAL.search(html)
     if not host or host[1] not in INSTITUTIONS:
         raise ValueError(f"unknown canonical host {host and host[1]}")
@@ -82,15 +84,21 @@ def parse_course(doc):
         for offer in campus["offers"]:
             if offer["modality"] == "Presencial" and (campus["city"] or "").strip():  # no city, no link: skipped
                 units.setdefault(offer["unit"]["title"], (campus["city"].strip(), set()))[1].add(offer["turn"] or "")
+    matrices = _revive(data, page["curriculums"])
+    # A Presencial matrix with no unit is the course's presencial matrix: it serves the presencial units that have
+    # none of their own. With two or more such matrices the page does not say which one, so none is used.
+    general = [m["curriculum_file"] for m in matrices if m["modality"] == "Presencial" and not m["unit"]]
+    own = {m["unit"] for m in matrices if m["modality"] == "Presencial" and m["unit"] in units}
+    pairs = [(m["curriculum_file"], m["unit"]) for m in matrices if m["modality"] == "Presencial" and m["unit"] in units]
+    if len(general) == 1:
+        pairs += [(general[0], unit) for unit in units if unit not in own]
     courses = {}  # (pdf, city) -> (turns, units)
-    for matrix in _revive(data, page["curriculums"]):
-        if matrix["modality"] == "Presencial" and matrix["unit"] in units:
-            city, turns = units[matrix["unit"]]
-            served = courses.setdefault((matrix["curriculum_file"], city), (set(), set()))
-            served[0].update(turns - {""})
-            served[1].add(matrix["unit"])
-    # Units with presencial offers but no matrix of their own, and matrices of units with no presencial offer,
-    # are left out: the page does not say which matrix the first serve or where the second are taught.
+    for pdf, unit in pairs:
+        city, turns = units[unit]
+        served = courses.setdefault((pdf, city), (set(), set()))
+        served[0].update(turns - {""})
+        served[1].add(unit)
+    # Matrices of units with no presencial offer are left out: the page does not say where they are taught.
     return INSTITUTIONS[host[1]], [(url, name, ", ".join(sorted(turns)) or None, city, sorted(served))
                                    for (url, city), (turns, served) in courses.items()]
 
@@ -118,7 +126,8 @@ def parse_curriculum(doc):
                     if name:
                         pending.append((name, int(total) if total.isdigit() and int(total) > 0 else None))
                     if label := SEMESTERS.search(cells[0]):  # the block's label sits in its last row
-                        first, last = int(label[1]), int(label[2])
+                        first = int(label[1])
+                        last = int(label[2] or first)
                         year = (first + 1) // 2 if (first + 1) // 2 == (last + 1) // 2 else None
                         subjects += [(first, year, name, hours, None, last if last > first else None)
                                      for name, hours in pending]

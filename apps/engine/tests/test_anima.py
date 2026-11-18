@@ -1,4 +1,5 @@
 import io
+import json
 import unittest
 from pathlib import Path
 
@@ -8,12 +9,30 @@ from tests.fakes import FakeConn
 FIXTURES = Path(__file__).parent / "fixtures" / "anima"
 USJT = (FIXTURES / "anima_usjt_administracao.html").read_text(encoding="utf-8")
 ANHEMBI = (FIXTURES / "anima_anhembi_psicologia.html").read_text(encoding="utf-8")
+ANHEMBI_COMEX = (FIXTURES / "anima_anhembi_comercio_exterior.html").read_text(encoding="utf-8")
+USJT_PSICOLOGIA = (FIXTURES / "anima_usjt_psicologia.html").read_text(encoding="utf-8")
 PDF = FIXTURES / "anima_usjt_administracao_butanta_presencial.pdf"
 MEDIAS = "https://estaticos.animaeducacao.com.br/medias/"
 
 
 def doc(text):
     return io.BytesIO(text.encode("utf-8"))
+
+
+def usjt_with(*matrices):
+    """The USJT administração page (presencial offers: Paulista, Butantã, Guarulhos, Mooca) with only these
+    (unit or None, modality, pdf name) matrices."""
+    head, _ = USJT.split('[65, 69, 73, 77]')
+    n = 64 + 1 + 4 * len(matrices)  # the curriculums list, then four nodes per matrix
+    nodes = [[64 + 1 + 4 * i for i in range(len(matrices))]]
+    for i, (unit, modality, pdf) in enumerate(matrices):
+        base = 65 + 4 * i
+        nodes += [{"unit": base + 1 if unit else 2, "modality": base + 2, "curriculum_file": base + 3},
+                  unit, modality, MEDIAS + pdf + ".pdf"]
+    nodes += [["Reactive", 3], {"state": 1}]
+    head = head.replace('"$sbreadcrumb-course": 81', f'"$sbreadcrumb-course": {n}').replace('["Reactive", 82]', f'["Reactive", {n + 1}]')
+    tail = json.dumps(nodes, ensure_ascii=False)[1:]  # the node list continues the head's
+    return head.rstrip().rstrip(",") + ", " + tail + "</script></body></html>"
 
 
 class ParseSitemapTest(unittest.TestCase):
@@ -78,6 +97,42 @@ class ParseCourseTest(unittest.TestCase):
         self.assertEqual(anima.parse_course(doc(USJT.replace('"Bacharelado"', '"Licenciatura"')))[1][0][1], "administração - Licenciatura")
         self.assertEqual(anima.parse_course(doc(USJT.replace('"Bacharelado"', '"Tecnólogo"')))[1][0][1], "administração")
 
+    def test_the_general_presencial_matrix_covers_the_uncovered_units_grouped_per_city(self):
+        got = anima.parse_course(doc(usjt_with((None, "Presencial", "geral"), (None, "EAD", "ead"))))[1]
+        self.assertEqual(sorted(got), [
+            (MEDIAS + "geral.pdf", "administração - Bacharelado", "Manhã, Noite", "SÃO PAULO", ["Butantã", "Mooca", "Paulista"]),
+            (MEDIAS + "geral.pdf", "administração - Bacharelado", "Noite", "GUARULHOS", ["Guarulhos"]),
+        ])
+
+    def test_a_unit_with_its_own_matrix_keeps_it_and_the_general_one_serves_the_rest(self):
+        got = anima.parse_course(doc(usjt_with((None, "Presencial", "geral"), ("Butantã", "Presencial", "butanta"))))[1]
+        self.assertEqual(sorted(got), [
+            (MEDIAS + "butanta.pdf", "administração - Bacharelado", "Noite", "SÃO PAULO", ["Butantã"]),
+            (MEDIAS + "geral.pdf", "administração - Bacharelado", "Manhã, Noite", "SÃO PAULO", ["Mooca", "Paulista"]),
+            (MEDIAS + "geral.pdf", "administração - Bacharelado", "Noite", "GUARULHOS", ["Guarulhos"]),
+        ])
+
+    def test_two_general_presencial_matrices_leave_the_uncovered_units_out(self):
+        got = anima.parse_course(doc(usjt_with((None, "Presencial", "a"), (None, "Presencial", "b"), ("Butantã", "Presencial", "butanta"))))[1]
+        self.assertEqual(got, [(MEDIAS + "butanta.pdf", "administração - Bacharelado", "Noite", "SÃO PAULO", ["Butantã"])])
+
+    def test_real_anhembi_page_with_a_general_matrix_serves_each_city(self):
+        pdf = MEDIAS + "9b5693ef-6aab-4ce8-a004-970a6ae1a853.pdf"
+        self.assertEqual(anima.parse_course(doc(ANHEMBI_COMEX))[1], [
+            (pdf, "comércio exterior", "Noite", "SOROCABA", ["Sorocaba"]),
+            (pdf, "comércio exterior", "Noite", "SÃO PAULO", ["Paulista"]),
+        ])
+
+    def test_real_usjt_page_with_only_a_unit_matrix_returns_only_that_unit(self):
+        self.assertEqual(anima.parse_course(doc(USJT_PSICOLOGIA))[1], [
+            (MEDIAS + "152cbbcc-d198-4fbd-993d-08e87059f3d5.pdf", "psicologia - Bacharelado", "Manhã, Noite", "SÃO PAULO", ["Butantã"]),
+        ])
+
+    def test_a_page_that_redirects_to_404_raises(self):
+        gone = '<html><head><meta http-equiv="refresh" content="0; url=/404/"></head></html>'
+        with self.assertRaisesRegex(ValueError, "gone: it redirects to /404/"):
+            anima.parse_course(doc(gone))
+
     def test_the_payload_fields_read_exclude_coordinators(self):
         self.assertNotIn("coordinator", USJT.lower())
 
@@ -98,6 +153,12 @@ class ParseCurriculumTest(unittest.TestCase):
         subjects = anima.parse_curriculum(io.BytesIO(PDF.read_bytes()))
         self.assertTrue(all(s[4] is None for s in subjects))
         self.assertNotIn("UNIDADES CURRICULARES", [s[2] for s in subjects])
+
+    def test_a_last_block_with_one_semester_has_no_range_and_its_year(self):
+        subjects = anima.parse_curriculum(io.BytesIO((FIXTURES / "anima_estetica_semestre_unico.pdf").read_bytes()))
+        self.assertEqual(len(subjects), 19)
+        self.assertEqual(subjects[-2:], [(7, 4, "Estágio curricular supervisionado", 230, None, None),
+                                         (7, 4, "Trabalho de Conclusão de Curso", 80, None, None)])
 
     def test_block_without_a_semestres_label_raises(self):
         with self.assertRaisesRegex(ValueError, "no 'Semestres' label"):

@@ -134,8 +134,8 @@ def _matriz_rows(pdf):
 
 
 NAME_HEAD = re.compile(r"(?i)disciplina|componente|atividade|unidade curricular")
-TERM_HEAD = re.compile(r"(?i)^(?:perfil|per[ií]odo|semestre)")
-HOURS_HEAD = re.compile(r"(?i)carga|^total|^ch\b")
+TERM_HEAD = re.compile(r"(?i)^(?:perfil|per[ií]odo|semestre)|^p$")  # 'P' heads the período column
+HOURS_HEAD = re.compile(r"(?i)carga|^total|^ch\b|^cht$")
 NOT_A_SUBJECT = re.compile(r"(?i)^(?:sub)?tota|^carga hor|^cr[eé]ditos|^per[ií]odo|^perfil|^semestre|^[\d\s()h,./-]+$")
 ORDINALS = "primeiro segundo terceiro quarto quinto sexto setimo oitavo nono decimo".split()
 
@@ -167,7 +167,9 @@ def _table_rows(pdf):
                 filled = {i: cell for i, cell in enumerate(row) if cell}
                 if not filled:
                     continue
-                name_col = next((i for i, c in filled.items() if NAME_HEAD.search(c) and len(c) < 45), None)
+                # 'Total da disciplina' heads an hours column, not the names
+                name_col = next((i for i, c in filled.items()
+                                 if NAME_HEAD.search(c) and not HOURS_HEAD.search(c) and len(c) < 45), None)
                 if name_col is not None and len(filled) >= 2 and not any(c.isdigit() for c in filled.values()):
                     columns = {
                         "name": name_col,
@@ -201,6 +203,9 @@ def parse_curriculum(doc):
         if not any(page.chars for page in pdf.pages):
             return []  # shortcut: outlined PDFs are skipped, add OCR when they are worth the cost
         subjects = _matriz_rows(pdf) or _table_rows(pdf)
+        chars = sum(len(page.chars) for page in pdf.pages)
+    if not subjects and chars < 600:  # a title over a scanned or drawn table
+        raise ValueError(f"the matriz is an image with only {chars} characters of text: it needs OCR")
     if not subjects:
         raise ValueError("no subject found in the matriz curricular PDF")
     terms = {term for term, *_ in subjects}

@@ -163,6 +163,24 @@ class TableMatrizTest(unittest.TestCase):
             "Geometria Analítica", "Cálculo Diferencial e Integral 1", "Introdução à Física",
             "Métodos de Física Experimental", "Introdução à Prática de Ensino de Física"])
 
+    def test_p_and_cht_headers_are_the_period_and_hours_columns(self):
+        subjects = ufscar.parse_curriculum(pdf("ufscar_economicas_p_cht.pdf"))
+        self.assertEqual(len(subjects), 74)
+        self.assertEqual(subjects[0], (1, 1, "CONTABILIDADE E ANÁLISE FINANCEIRA", 30, False))
+        self.assertEqual({s[0] for s in subjects}, set(range(1, 9)))
+
+    def test_total_da_disciplina_heads_hours_not_names(self):
+        subjects = ufscar.parse_curriculum(pdf("ufscar_ambiental_total_da_disciplina.pdf"))
+        self.assertEqual(len(subjects), 50)
+        self.assertEqual([s[2] for s in subjects if s[0] == 1], [
+            "Introdução à Engenharia Ambiental", "Desenvolvimento sustentável", "Tópicos de Matemática elementar",
+            "Biologia geral", "Ecologia geral e de populações", "Química geral",
+            "Desenho técnico assistido por computador"])
+
+    def test_a_matriz_that_is_an_image_raises_needing_ocr(self):
+        with self.assertRaisesRegex(ValueError, "image with only \d+ characters of text: it needs OCR"):
+            ufscar.parse_curriculum(pdf("ufscar_bia_image.pdf"))
+
     def test_year_is_two_semesters(self):
         years = {s[0]: s[1] for s in ufscar.parse_curriculum(pdf("ufscar_quimica_sao_carlos_p1.pdf"))}
         self.assertEqual(years, {1: 1, 2: 1, 3: 2})
