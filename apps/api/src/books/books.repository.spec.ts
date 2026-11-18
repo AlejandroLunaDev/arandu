@@ -873,3 +873,66 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
   });
 });
+
+// Needs public.story_facts (the story-facts migration, which seeds 10 rows). Own rows sit at positions 900+, which
+// the seed never uses, and are removed afterwards; assertions look only at them.
+describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
+  const sql = postgres(url ?? '', { max: 1, onnotice: () => {} });
+  const repository = new BooksRepository(sql);
+  const clean = () => sql`delete from public.story_facts where position >= 900`;
+  const mine = async () =>
+    (await repository.ownBook('produto')).facts.filter((f) =>
+      f.figure.startsWith('t-'),
+    );
+
+  beforeAll(async () => {
+    await clean();
+    // Inserted out of order on purpose.
+    await sql`insert into public.story_facts (book, position, figure, text, source_label, source_url, verified_on) values
+      ('produto', 903, 't-http', 'c', 'Label', 'http://insecure.test/x', '2026-01-01'),
+      ('produto', 901, 't-own', 'a', null, null, '2026-01-01'),
+      ('produto', 902, 't-nourl', 'b', 'Own count', null, '2026-01-01'),
+      ('produto', 904, 't-https', 'd', 'Label', 'https://ok.test/x', '2026-01-01'),
+      ('solucao', 901, 't-other-book', 'e', null, null, '2026-01-01')`;
+  });
+
+  afterAll(async () => {
+    await clean();
+    await sql.end();
+  });
+
+  it('orders the facts by position, only of the requested book', async () => {
+    const res = await repository.ownBook('produto');
+
+    expect(res.book).toBe('produto');
+    expect((await mine()).map((f) => f.figure)).toEqual([
+      't-own',
+      't-nourl',
+      't-http',
+      't-https',
+    ]);
+    expect(res.facts.map((f) => f.figure)).not.toContain('t-other-book');
+  });
+
+  it('maps no source label to a null source', async () => {
+    expect((await mine())[0]).toEqual({
+      figure: 't-own',
+      text: 'a',
+      source: null,
+    });
+  });
+
+  it('keeps a label without a url', async () => {
+    expect((await mine())[1].source).toEqual({ label: 'Own count', url: null });
+  });
+
+  it('turns a non-https url into null and keeps an https one', async () => {
+    const facts = await mine();
+
+    expect(facts[2].source).toEqual({ label: 'Label', url: null });
+    expect(facts[3].source).toEqual({
+      label: 'Label',
+      url: 'https://ok.test/x',
+    });
+  });
+});
