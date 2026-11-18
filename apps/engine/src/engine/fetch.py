@@ -13,6 +13,7 @@ RETRY_STATUSES = {429, 503}
 MAX_ATTEMPTS = 5
 
 _last_request: dict[str, float] = {}
+_robots: dict[str, urllib.robotparser.RobotFileParser | bool] = {}  # per host, read once per run
 
 
 def _open(url):
@@ -31,12 +32,12 @@ def _open(url):
             time.sleep(int(retry_after) if retry_after.isdigit() else 5 * 2**attempt)
 
 
-def allowed(url):
-    """Read the host's robots.txt, as every run must, and say whether it lets us fetch url."""
-    parts = urlsplit(url)
+def _read_robots(base):
     parser = urllib.robotparser.RobotFileParser()
     try:
-        with _open(f"{parts.scheme}://{parts.netloc}/robots.txt") as response:
+        with _open(f"{base}/robots.txt") as response:
+            if response.status != 200:
+                return False  # e.g. a 202 bot challenge: the host's rules can't be read, so don't fetch
             parser.parse(response.read().decode("utf-8", "replace").splitlines())
     except urllib.error.HTTPError as error:
         if error.code in (401, 403):
@@ -44,7 +45,17 @@ def allowed(url):
         if 400 <= error.code < 500:
             return True  # no robots.txt
         raise
-    return parser.can_fetch(USER_AGENT, url)
+    return parser
+
+
+def allowed(url):
+    """Read the host's robots.txt once per run, as every run must, and say whether it lets us fetch url."""
+    parts = urlsplit(url)
+    base = f"{parts.scheme}://{parts.netloc}"
+    if base not in _robots:
+        _robots[base] = _read_robots(base)
+    rules = _robots[base]
+    return rules if isinstance(rules, bool) else rules.can_fetch(USER_AGENT, url)
 
 
 def download(url, dest):
@@ -53,6 +64,8 @@ def download(url, dest):
         raise PermissionError(f"robots.txt disallows {url}")
     digest = hashlib.sha256()
     with _open(url) as response:
+        if response.status != 200:
+            raise RuntimeError(f"{url} answered HTTP {response.status} instead of the document")
         while chunk := response.read(1 << 20):
             digest.update(chunk)
             dest.write(chunk)

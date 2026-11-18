@@ -46,6 +46,7 @@ class FetchTest(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         fetch._last_request.clear()
+        fetch._robots.clear()
 
     def test_robots_disallow_raises_before_downloading(self):
         base, hits = self.serve({"/robots.txt": [(200, b"User-agent: *\nDisallow: /")], "/f.zip": [(200, BODY)]})
@@ -64,6 +65,30 @@ class FetchTest(unittest.TestCase):
     def test_missing_robots_txt_means_allowed(self):
         base, _ = self.serve({"/robots.txt": [(404, b"")]})
         self.assertTrue(fetch.allowed(f"{base}/f.zip"))
+
+    def test_robots_txt_is_read_once_per_host_for_the_whole_run(self):
+        base, hits = self.serve({"/robots.txt": [(200, b"User-agent: *\nDisallow: /private")]})
+        self.assertTrue(fetch.allowed(f"{base}/a"))
+        self.assertTrue(fetch.allowed(f"{base}/b"))
+        self.assertFalse(fetch.allowed(f"{base}/private/c"))  # the cached rules still apply
+        self.assertEqual(hits, ["/robots.txt"])
+
+    def test_a_non_200_robots_txt_such_as_a_202_challenge_means_not_allowed(self):
+        base, _ = self.serve({"/robots.txt": [(202, b"challenge")], "/f.zip": [(200, BODY)]})
+        self.assertFalse(fetch.allowed(f"{base}/f.zip"))
+        with self.assertRaises(PermissionError):
+            fetch.download(f"{base}/f.zip", BytesIO())
+
+    def test_forbidden_robots_txt_disallows_everything(self):
+        base, _ = self.serve({"/robots.txt": [(403, b"")]})
+        self.assertFalse(fetch.allowed(f"{base}/f.zip"))
+
+    def test_download_raises_on_a_non_200_response(self):
+        base, _ = self.serve({"/robots.txt": [(404, b"")], "/f.zip": [(202, b"come back later")]})
+        dest = BytesIO()
+        with self.assertRaisesRegex(RuntimeError, "HTTP 202"):
+            fetch.download(f"{base}/f.zip", dest)
+        self.assertEqual(dest.getvalue(), b"")
 
 
 if __name__ == "__main__":
