@@ -48,6 +48,13 @@ npm run db:types      # regenerate packages/db-types from the local database
 
 Copy `.env.example` to `.env` for the Supabase project values; `.env` is never committed.
 
+The engine runs by hand from its Docker image, with `DATABASE_URL` (the session pooler) in `.env`:
+
+```sh
+docker build -f apps/engine/Dockerfile -t arandu-engine .
+docker run --rm --env-file .env arandu-engine inep_census
+```
+
 Before each merge (there is no CI), run `npm run check`: build, typecheck, lint and tests of every workspace, the landing's tokens check and the database tests.
 
 ### Deploy

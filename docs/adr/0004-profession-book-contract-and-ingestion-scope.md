@@ -79,6 +79,15 @@ Institution logos are shown: the owner decided this on 2026-11-13 (product docs,
 | Photos and logos | From Wikimedia Commons, with licence and source, or `null`. A photo also carries its author |
 | Rotation | The API lists the professions with enough real data; the web picks which to show |
 
+### Professions and their categories
+
+Decided by the owner on 2026-11-17, after checking the 2024 census.
+
+- A profession is one INEP CINE course label (`CO_CINE_ROTULO`, `NO_CINE_ROTULO`), with the code and name exactly as INEP publishes them. Every institution that offers it shares that code, which is what links a course to its profession.
+- Professions are grouped by CINE's three area levels, also as published: área geral (10 in SP), específica (34) and detalhada (79). The future student enters through these categories.
+- A teacher-training label is its own profession: "Biologia formação de professor" sits under Educação, apart from "Biologia".
+- Some shelf names are categories, not professions: Engenharia covers 44 labels in SP, Letras 24 and Design 7.
+
 ### First ingestion scope
 
 The professions already on the shelf: Psicologia, Medicina, Engenharia, Letras, Filosofia, Economia, Biologia, História, Design, Música.
@@ -126,6 +135,5 @@ This replaces the product docs' first draft, which had the engine cover every co
   - USP forbids reproducing its portal content without written authorization; JupiterWeb and Fuvest publish no terms. Only facts are taken.
   - Mackenzie and FIAP publish no terms page. Unifesp's pages returned HTTP 403, so its terms are unread.
   - Wikimedia allows reuse under each file's licence, crediting the author, and requires bots to send a User-Agent with contact details.
-- How courses map to a profession. The proposal is INEP's CINE label (`NO_CINE_ROTULO`), not yet tested against the shelf's names.
 - The order of offerings inside a book. It must be neutral: no institution pays for placement.
 - How many institutions have a usable photo and logo on Commons.

@@ -1,1 +1,1 @@
-"""Arandu Reka ingestion engine. One adapter per source; adapters arrive with plan step 3."""
+"""Arandu Reka ingestion engine. One adapter per source (ADR-0004)."""
