@@ -11,6 +11,10 @@ from engine.html_table import rows
 BASE = "https://uspdigital.usp.br/jupiterweb/"
 INEP_CODE = 55  # USP's CO_IES in the INEP census
 ENCODING = "iso-8859-1"  # declared by every JupiterWeb page
+# Grades listed under the bare course name while the census has a bacharelado and a licenciatura of that name: the
+# grade page itself states the degree ("título de Bacharel/Bacharela em Enfermagem", read 2026-11-18).
+# shortcut: one entry by hand; add a page here only when its own text names the degree.
+STATED_DEGREE = {"listarGradeCurricular?codcg=7&codcur=7012&codhab=0&tipo=N": "Bacharelado"}
 
 
 def parse_courses(doc):
@@ -29,6 +33,8 @@ def parse_courses(doc):
             # Some units list the codes 'codcur codhab' first, then the name, e.g. 'Habilitação: Engenharia Civil'.
             cells = row[1:] if re.fullmatch(r"\d+ \d+", first) else row
             name = cells[0][0].removeprefix("Habilitação: ")
+            if degree := STATED_DEGREE.get(row[0][1]):
+                name = f"{degree} em {name}"
             courses.append((urljoin(BASE, row[0][1]), name, cells[1][0] if len(cells) > 1 else None, city))
     if not courses:
         raise ValueError("no course found on the course list")

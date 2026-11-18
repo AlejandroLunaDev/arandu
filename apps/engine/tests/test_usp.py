@@ -48,6 +48,14 @@ class ParseCoursesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "before any campus"):
             usp.parse_courses(doc(no_campus))
 
+    def test_stated_degree_prefixes_only_listed_grades(self):
+        def page(href):
+            return doc(f'<table><tr><td>Campus: São Paulo - Cidade</td></tr><tr><td><a href="{href}">Enfermagem</a></td><td>integral</td></tr></table>')
+
+        listed = "listarGradeCurricular?codcg=7&codcur=7012&codhab=0&tipo=N"
+        self.assertEqual(usp.parse_courses(page(listed))[0][1], "Bacharelado em Enfermagem")
+        self.assertEqual(usp.parse_courses(page("listarGradeCurricular?codcg=7&codcur=7099&codhab=0&tipo=N"))[0][1], "Enfermagem")
+
     def test_unit_with_several_degrees_of_one_course(self):
         courses = usp.parse_courses(io.BytesIO(PSICO))
         self.assertEqual(
