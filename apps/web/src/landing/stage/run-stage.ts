@@ -644,7 +644,11 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     document.documentElement.dataset.book = "";
     leafTurn?.kill();
     restDress();
-    book.reverse();
+    // Shut before it has moved, a reversed timeline never completes: put it back at once.
+    if (book.progress() > 0) return void book.reverse();
+    const shut = book.eventCallback("onReverseComplete");
+    book.kill();
+    shut?.();
   };
   // The page asks for a turn: the leaf lifts off the right half and lies down on the left, or back.
   // It carries the pages it turns over, and the halves under it show the spread it uncovers; done,

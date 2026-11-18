@@ -60,6 +60,8 @@ export function BookPages() {
   const timers = useRef<number[]>([]);
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const proofs = useRef<HTMLDivElement>(null);
+  /** The book open now: a slower answer for a book already shut never takes its place. */
+  const openSlug = useRef<string | null>(null);
 
   useEffect(() => {
     const onBook = (e: Event) => {
@@ -68,6 +70,7 @@ export function BookPages() {
       setOpened(next);
       setSpread(0);
       setTurning(false);
+      openSlug.current = next?.slug ?? null;
       // The book shows once its first pictures are in, every other one loading behind it; a slow
       // picture does not hold it past READY_WAIT.
       if (next?.slug)
@@ -75,10 +78,10 @@ export function BookPages() {
           (b) => {
             const urls = pictures(b);
             const wait = new Promise((done) => setTimeout(done, READY_WAIT));
-            void Promise.race([preload(urls.slice(0, 2)), wait]).then(() => setBook(b));
+            void Promise.race([preload(urls.slice(0, 2)), wait]).then(() => openSlug.current === next.slug && setBook(b));
             void preload(urls.slice(2));
           },
-          () => setFailed(next.slug),
+          () => openSlug.current === next.slug && setFailed(next.slug),
         );
     };
     addEventListener(BOOK_EVENT, onBook);
@@ -107,9 +110,11 @@ export function BookPages() {
     if (!printable || !el) return;
     let live = true;
     void (async () => {
-      await Promise.all([...el.querySelectorAll("img")].map((img) => img.decode().catch(() => {})));
       const fontEmbedCSS = await getFontEmbedCSS(el).catch(() => undefined);
       for (const [page, node] of [...el.querySelectorAll<HTMLElement>(`.${styles.page}`)].entries()) {
+        // Each page waits for its own pictures only: the first pages are drawn while later ones load.
+        await Promise.all([...node.querySelectorAll("img")].map((img) => img.decode().catch(() => {})));
+        if (!live) return;
         // A page that cannot be drawn stays blank paper on the 3D book; its print still shows open.
         const image = await toCanvas(node, { pixelRatio: PRINT_SHARPNESS, fontEmbedCSS }).catch(() => null);
         if (!live) return;
