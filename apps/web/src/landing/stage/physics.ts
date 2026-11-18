@@ -44,6 +44,8 @@ export type RoomPhysics = {
   edges(): { left: number; right: number };
   /** The nearest prop standing in the way of a walk at height y from x `from` to `to`: its span and top. */
   blocker(from: number, to: number, y: number): { min: number; max: number; top: number } | null;
+  /** The top (m) of the fixed thing under (x, z), from height y down (a plank, a seat, the floor); null over nothing. */
+  top(x: number, z: number, y: number): number | null;
   /**
    * The pointer went from `from` to `to` since the last frame, at velocity `v` (content frame, m/s):
    * if it passed by the hanging lamp's shade, it drags the lamp along.
@@ -138,25 +140,24 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
 
   const collider = (s: Shape, dx = 0, dy = 0, dz = 0) => {
     const desc =
-      s.kind === "box"
-        ? R.ColliderDesc.cuboid(...s.half)
-        : s.kind === "ball"
-          ? R.ColliderDesc.ball(s.r)
-          : R.ColliderDesc.cylinder(s.half, s.r);
-    return desc
-      .setTranslation(s.at[0] + dx, s.at[1] + dy, s.at[2] + dz)
-      .setDensity(s.density)
-      .setFriction(0.7)
-      .setRestitution(s.bounce ?? 0.05)
-      // A bouncy prop bounces off anything, however dead what it hits is.
-      .setRestitutionCombineRule(s.bounce ? R.CoefficientCombineRule.Max : R.CoefficientCombineRule.Average);
+      s.kind === "box" ? R.ColliderDesc.cuboid(...s.half) : s.kind === "ball" ? R.ColliderDesc.ball(s.r) : R.ColliderDesc.cylinder(s.half, s.r);
+    return (
+      desc
+        .setTranslation(s.at[0] + dx, s.at[1] + dy, s.at[2] + dz)
+        .setDensity(s.density)
+        .setFriction(0.7)
+        .setRestitution(s.bounce ?? 0.05)
+        // A bouncy prop bounces off anything, however dead what it hits is.
+        .setRestitutionCombineRule(s.bounce ? R.CoefficientCombineRule.Max : R.CoefficientCombineRule.Average)
+    );
   };
 
   // The wall every shelf hangs on, and the planks.
   world.createCollider(R.ColliderDesc.cuboid(30, 30, 0.05).setTranslation(0, 0, -WALL - 0.05), ground);
   for (const { object, shapes } of room.fixtures) {
-    const p = object.position;
-    for (const s of shapes) world.createCollider(collider(s, p.x, p.y, p.z), ground);
+    const { position: p, quaternion: q } = object;
+    const fixed = world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(p.x, p.y, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+    for (const s of shapes) world.createCollider(collider(s), fixed);
   }
 
   const dynamic = (object: THREE.Object3D, shapes: Shape[]) => {
@@ -199,6 +200,28 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     body.sleep();
     prop.pop = 0;
   };
+  // The pencils stand welded to their cup, so they move with it and never slip out of it, until a
+  // tap on the cup or on one of them lets them loose; once all are back in place, they are welded again.
+  const cup = [...props.values()].find((p) => p.object.userData.prop === "PencilCup");
+  const pencils = [...props.values()].filter((p) => /^Pencil(Amber|Violet)$/.test(String(p.object.userData.prop)));
+  let welds: RAPIER.ImpulseJoint[] = [];
+  const weld = () => {
+    if (!cup || welds.length) return;
+    const back = cup.home.q.clone().invert();
+    welds = pencils.map((p) => {
+      const a = p.home.p.clone().sub(cup.home.p).applyQuaternion(back);
+      const f = back.clone().multiply(p.home.q);
+      const joint = world.createImpulseJoint(R.JointData.fixed(a, f, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }), cup.body, p.body, false);
+      joint.setContactsEnabled(false);
+      return joint;
+    });
+  };
+  const unweld = (prop: Prop | undefined) => {
+    if (!prop || (prop !== cup && !pencils.includes(prop))) return;
+    for (const joint of welds) world.removeImpulseJoint(joint, true);
+    welds = [];
+  };
+  weld();
 
   const turned = new THREE.Quaternion();
   const away = ({ body, home: h }: Prop, shift = TAKE_SHIFT, turn = TAKE_TURN) => {
@@ -281,7 +304,10 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       const half = r.width / 2 / kx;
       const halfUp = (bottom - top) / 2 / ky;
       world.createCollider(
-        R.ColliderDesc.cuboid(half * 0.9, halfUp, 0.06).setDensity(300).setRestitution(0.2).setCollisionGroups(groups(LETTER, 0xffff)),
+        R.ColliderDesc.cuboid(half * 0.9, halfUp, 0.06)
+          .setDensity(300)
+          .setRestitution(0.2)
+          .setCollisionGroups(groups(LETTER, 0xffff)),
         body,
       );
       body.sleep();
@@ -345,7 +371,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     // The pinned scene's bottom, or the window's when the scene runs past it: the floor stays in sight.
     const below = Math.min(pin.getBoundingClientRect().bottom, innerHeight) - a.bottom;
     const ky = room.k * Math.cos(TILT);
-    bounds.bottom = -below / ky + FLOOR_UP;
+    bounds.bottom = room.ground ?? -below / ky + FLOOR_UP;
     bounds.top = (a.bottom - pin.getBoundingClientRect().top) / ky;
     bounds.left = -a.left / room.k;
     bounds.right = (innerWidth - a.left) / room.k;
@@ -384,6 +410,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
         body.setEnabled(true);
         home(prop);
         prop.pop = 1;
+        if (cup && [cup, ...pencils].every((p) => !p.glide && !away(p))) weld();
         continue;
       }
       const l = body.linvel();
@@ -404,8 +431,12 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       calm = 0;
       // One after another, a beat apart.
       let wait = 0;
+      // The cup and its pencils come back together, or the pencils would stand where the cup is not.
+      const group = cup ? [cup, ...pencils] : [];
+      const spilled = !welds.length && group.some((p) => away(p, KNOCKED_SHIFT, KNOCKED_TURN));
       for (const prop of props.values()) {
-        if (prop.taken || prop.glide || prop.pop < 1 || !away(prop, KNOCKED_SHIFT, KNOCKED_TURN)) continue;
+        const knocked = away(prop, KNOCKED_SHIFT, KNOCKED_TURN) || (spilled && group.includes(prop));
+        if (prop.taken || prop.glide || prop.pop < 1 || !knocked) continue;
         prop.body.setEnabled(false);
         prop.glide = { p: prop.object.position.clone(), q: prop.object.quaternion.clone(), t: wait };
         wait -= 0.15;
@@ -458,6 +489,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     poke(prop, at, speed) {
       const body = prop === pendant?.object ? lamp : props.get(prop)?.body;
       if (!body) return;
+      unweld(props.get(prop));
       calm = 0;
       const m = body.mass();
       body.applyImpulseAtPoint({ x: speed.x * m, y: speed.y * m, z: speed.z * m }, at, true);
@@ -465,6 +497,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     grab(object, point) {
       const prop = props.get(object);
       if (!prop || prop.taken || prop.glide || prop.pop < 1 || held) return false;
+      unweld(prop);
       const p = prop.body.translation();
       prop.body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
       held = { prop, off: new THREE.Vector3(p.x - point.x, p.y - point.y, 0), v: new THREE.Vector3(), at: point.clone(), t: performance.now() };
@@ -516,6 +549,11 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     },
     edges() {
       return { left: bounds.left, right: bounds.right };
+    },
+    top(x, z, y) {
+      const down = new R.Ray({ x, y, z }, { x: 0, y: -1, z: 0 });
+      const hit = world.castRay(down, 30, true, R.QueryFilterFlags.EXCLUDE_DYNAMIC | R.QueryFilterFlags.EXCLUDE_KINEMATIC);
+      return hit ? y - hit.timeOfImpact : null;
     },
     blocker(from, to, y) {
       const lo = Math.min(from, to);

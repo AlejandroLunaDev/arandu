@@ -251,7 +251,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     if (far < 0.005) return;
     yield* stand();
     yield* face(dx >= 0 ? RIGHT : LEFT);
-    for (let done = 0; done < far; ) {
+    for (let done = 0; done < far;) {
       const step = Math.min(SPEED * dt, far - done);
       done += step;
       pose.pos.x += (dx * step) / far;
@@ -269,7 +269,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     const from = pose.pos.clone();
     // Up to a higher place the arc rises enough to clear its edge, no more.
     const rise = height + Math.max(0, to.y - from.y) * 0.3;
-    for (let t = 0; t < 1; ) {
+    for (let t = 0; t < 1;) {
       t = Math.min(1, t + dt / JUMP);
       // The clip crouches until 0.38 and has landed by 0.78: in between he flies.
       const u = smooth(0.38, 0.78, t);
@@ -290,7 +290,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     sitTo = 1;
     while (pose.sit < 0.9) yield;
     busy = true;
-    for (let t = from; t < to; ) {
+    for (let t = from; t < to;) {
       t = Math.min(to, t + dt / TAP);
       pose.tap = t;
       yield;
@@ -306,7 +306,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     const p0 = o.position.clone();
     const q0 = o.quaternion.clone();
     const s0 = o.scale.x;
-    for (let t = 0; t < 1; ) {
+    for (let t = 0; t < 1;) {
       t = Math.min(1, t + dt / 0.55);
       const u = smooth(0, 1, t);
       o.position.lerpVectors(p0, p, u).y += 0.12 * Math.sin(Math.PI * u);
@@ -318,7 +318,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
 
   /** Opens the book from `from` to `to`: how far (rad) each half stands off lying flat open. */
   function* spread(book: THREE.Object3D, from: number, to: number, seconds: number): Doing {
-    for (let t = 0; t < 1; ) {
+    for (let t = 0; t < 1;) {
       t = Math.min(1, t + dt / seconds);
       openTo(book, from + (to - from) * smooth(0, 1, t));
       yield;
@@ -425,8 +425,9 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     yield* sitDown(r.face);
   }
 
-  /** He lies down where he sits, shuts his eyes and sleeps a long while. */
+  /** He goes to his bed, where the room has one, lies down, shuts his eyes and sleeps a long while. */
   function* sleep(r: Room): Doing {
+    if (r.bed) yield* goTo(r, r.bed.at.clone());
     yield* sitDown(r.face);
     try {
       lieTo = 1;
@@ -448,7 +449,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     yield* stand();
     const start = pose.yaw;
     const way = Math.random() < 0.5 ? 1 : -1;
-    for (let t = 0; t < 1; ) {
+    for (let t = 0; t < 1;) {
       t = Math.min(1, t + dt / 1.6);
       pose.yaw = start + way * 2 * Math.PI * smooth(0, 1, t);
       pose.stride += dt * 1.4;
@@ -466,6 +467,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
   /** The plank whose top is at height y, from one end to the other; null for the floor or the letters. */
   const plankAt = (r: Room, y: number) => {
     for (const { object: o, shapes } of r.fixtures) {
+      if (!String(o.userData.prop).startsWith("Shelf")) continue;
       const s = shapes[0];
       if (s?.kind === "box" && Math.abs(o.position.y - y) < 0.06) return { left: o.position.x - s.half[0], right: o.position.x + s.half[0] };
     }
@@ -477,7 +479,16 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
    * his plank and a hop off it; up, from right under it with a leap. Higher than he leaps, he does
    * not go.
    */
-  function* goTo(r: Room, spot: THREE.Vector3): Going {
+  function* goTo(r: Room, target: THREE.Vector3, hops = 3): Going {
+    const w = world(room);
+    // On the room's own floor he walks in front of the furniture, never behind it.
+    const spot = r.front !== null && target.y < (r.ground ?? 0) + 0.05 ? target.clone().setZ(Math.max(target.z, r.front)) : target;
+    // Where a jump comes down: on whatever is under that point, the sofa's seat first when it lies on his way.
+    const landing = (x: number) => {
+      const seat = r.bed && w ? w.top(x, r.bed.at.z, pose.pos.y - 0.05) : null;
+      if (r.bed && seat !== null && seat > spot.y + 0.12) return new THREE.Vector3(x, seat, r.bed.at.z);
+      return new THREE.Vector3(x, w?.top(x, spot.z, pose.pos.y - 0.05) ?? spot.y, spot.z);
+    };
     const dy = spot.y - pose.pos.y;
     if (Math.abs(dy) < 0.12) {
       yield* walkTo(spot.x, spot.z);
@@ -495,12 +506,20 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
         // Off the end, clearing whatever still stands between him and it.
         const off = edge + side * 0.25;
         const b = world(room)?.blocker(pose.pos.x, off, pose.pos.y);
-        yield* jump(new THREE.Vector3(off, spot.y, spot.z), b ? b.top - pose.pos.y + 0.08 : 0.1);
-      } else yield* jump(new THREE.Vector3(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4), spot.y, spot.z), 0.1);
+        yield* jump(landing(off), b ? b.top - pose.pos.y + 0.08 : 0.1);
+      } else yield* jump(landing(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4)), 0.1);
+      // He came down on something on his way: on from there.
+      if (pose.pos.y > spot.y + 0.12) return hops > 0 && (yield* goTo(r, spot, hops - 1));
       yield* walkTo(spot.x, spot.z);
       return true;
     }
     if (dy > LEAP_UP) return false;
+    // Up from the floor, by the front of the sofa's seat, never through it.
+    if (r.bed && hops > 0 && pose.pos.y < r.bed.at.y - 0.1 && spot.y > r.bed.at.y + 0.1) {
+      const on = new THREE.Vector3(clamp(spot.x, r.bed.from, r.bed.to), r.bed.at.y, r.bed.at.z);
+      if (!(yield* goTo(r, on, hops - 1))) return false;
+      return yield* goTo(r, spot, hops - 1);
+    }
     const to = plankAt(r, spot.y);
     const x = to ? clamp(spot.x, to.left + 0.12, to.right - 0.12) : spot.x;
     yield* walkTo(x);
@@ -515,7 +534,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
       busy = true;
       sitTo = 0;
       const y = pose.pos.y;
-      for (let t = 0; t < 1; ) {
+      for (let t = 0; t < 1;) {
         t = Math.min(1, t + dt / 0.5);
         pose.air = Math.sin(Math.PI * t);
         pose.leap = 0.4 + 0.4 * t;
@@ -557,6 +576,8 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
 
   /** He gets beside his toy, short of it, and faces it; false if it lies out of his reach. */
   function* reach(r: Room, p: THREE.Vector3): Going {
+    // On the floor he keeps to the front: a toy deep behind the furniture is out of his reach.
+    if (r.front !== null && p.y < (r.ground ?? 0) + 0.05 && Math.abs(p.z - r.front) > 0.5) return false;
     const side = p.x >= pose.pos.x ? 1 : -1;
     if (!(yield* goTo(r, new THREE.Vector3(p.x - side * 0.3, p.y, p.z)))) return false;
     yield* face(p.x >= pose.pos.x ? RIGHT : LEFT);

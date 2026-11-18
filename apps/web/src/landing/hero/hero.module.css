@@ -1,12 +1,43 @@
 /*
- * The copy: the phone, and beside it the brand over the pitch, centred on the phone. The motto runs
- * across the scene's foot (see Hero). Without room for the phone, the phone goes.
+ * The TV's title card: the brand over the pitch and the button. It is laid out at one size, 640 by
+ * 360 (the TV's 16:9), and run-stage lays it over the TV's screen: it sets [data-on-tv], where the
+ * card sits (--tv-x, --tv-y) and how much it scales (--tv-k). Without 3D, it stays in the page's flow.
  */
-.intro {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-8);
+.tv {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-5);
+}
+
+/* Until the room is up, its title card waits unseen (still read): no flash of it at the top of the page. */
+.tv:not([data-on-tv]) {
+  opacity: 0;
+}
+
+:global(.no3d) .tv {
+  opacity: 1;
+}
+
+.tv[data-on-tv] {
+  position: fixed;
+  z-index: 6;
+  top: 0;
+  left: 0;
+  width: 640px;
+  height: 360px;
+  padding: 0 48px;
+  translate: var(--tv-x) var(--tv-y);
+  scale: var(--tv-k);
+  transform-origin: 0 0;
+  /* A tap on the screen closes in on it (run-stage); once in, it is read, not tapped. */
+  cursor: pointer;
+}
+
+:global(html[data-zoom="tv"]) .tv {
+  cursor: auto;
 }
 
 /*
@@ -18,19 +49,89 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  margin: 0;
+  color: var(--text);
   font-family: var(--font-body);
-  font-size: 88px;
+  font-size: 92px;
   font-weight: 700;
   line-height: 0.76;
   letter-spacing: 0.02em;
+  /* The tight leading lets Reka's ink hang below the box: room for it before the pitch. */
+  padding-bottom: 0.16em;
 }
 
 .reka {
   margin-left: 0.18em;
 }
 
-.app {
-  --phone-width: 240px;
+/* The play button: round, in the screen's empty top right, beside the brand; it swells under the pointer. */
+.play {
+  position: absolute;
+  top: 104px;
+  right: 64px;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    scale 0.2s ease,
+    background 0.2s ease;
+}
+
+.play svg {
+  width: 34px;
+  height: 34px;
+  translate: 2px 0;
+}
+
+.play:hover,
+.play:focus-visible {
+  scale: 1.08;
+  background: color-mix(in srgb, var(--primary) 34%, transparent);
+}
+
+.play:focus-visible {
+  outline: 2px solid var(--violet-600);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play {
+    transition: none;
+  }
+}
+
+/* Playing, the video fills the screen; the title waits under it, unseen but still read. */
+.tv[data-playing] > :not(.video, .unplay) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.unplay {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.pitch {
+  max-width: 30rem;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
 }
 
 /* What the app is, read at a glance: a step up from the pitch, in the brand's color. */
@@ -40,36 +141,54 @@
   color: var(--primary);
 }
 
-.pitch {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-6);
-  max-width: 26rem;
-}
-
 /* The motto's words never break; each letter moves on its own (see stage/physics.ts). */
 .word {
   display: inline-block;
   white-space: nowrap;
 }
 
+/* A tap flicks a letter: it shows it takes one. */
 .letter {
   display: inline-block;
+  cursor: pointer;
 }
 
 /*
- * The room's footprint. --room-k is how many pixels the stage draws a metre with: the 3D room is
- * 1.8 m by 1.8 m, its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom).
- * --room-pendant 0 takes the hanging lamp out, where its cord would cross the copy.
+ * The room's footprint: as wide as the space allows at its own proportions (--room-aspect, which the
+ * stage sets), its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom).
  */
 .room {
-  --room-k: 260;
-  --room-pendant: 1;
   position: relative;
   flex: none;
-  width: calc(var(--room-k) * 1.8px);
-  height: calc(var(--room-k) * 1.8px);
+  width: min(100cqw, 100cqh * var(--room-aspect, 2.2));
+  aspect-ratio: var(--room-aspect, 2.2);
+}
+
+/* While the room loads, the cat's head, small, breathing in the middle of where it will stand. */
+.loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+:global(html:has([data-on-tv])) .loading,
+:global(.no3d) .loading {
+  display: none;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.4;
+    scale: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+  }
 }
 
 /* Without WebGL, the drawn cat sits on a plain plank where the 3D cat would. */
@@ -85,51 +204,66 @@
   display: block;
   position: absolute;
   bottom: 0;
-  left: calc(var(--room-k) * 0.8px);
-  width: calc(var(--room-k) * 0.7px);
+  left: 50%;
+  width: 40%;
   height: auto;
   translate: -50% 0;
 }
 
-@media (width < 1280px) {
-  .app {
-    --phone-width: 200px;
-  }
-
-  .brand {
-    font-size: 72px;
-  }
-
+/* On a phone the room is the tall one (stage/rooms.ts); in the page's flow, without the TV, the brand shrinks. */
+@media (width < 768px) {
   .room {
-    --room-k: 210;
-  }
-}
-
-@media (width < 1024px) {
-  .intro {
-    grid-template-columns: minmax(0, 1fr);
+    --room-layout: tall;
   }
 
-  .app {
-    display: none;
-  }
-
-  .brand {
+  .tv:not([data-on-tv]) .brand {
     font-size: 56px;
   }
+}
 
-  .room {
-    --room-k: 180;
+
+/*
+ * The TV switches off for an open book and back on once it is shut (run-stage shows the cat's head on
+ * the 3D screen meanwhile): the picture goes out at once, and comes back once the head has.
+ */
+.tv[data-on-tv] > * {
+  animation: picture-on 1.4s ease-out;
+}
+
+:global(html[data-book]) .tv {
+  pointer-events: none;
+}
+
+:global(html[data-book]) .tv > * {
+  animation: picture-off 0.2s ease-in forwards;
+}
+
+@keyframes picture-on {
+  0%,
+  75% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
   }
 }
 
-@media (width < 768px) {
-  .brand {
-    font-size: 40px;
+@keyframes picture-off {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv[data-on-tv] > * {
+    animation: none;
   }
 
-  .room {
-    --room-k: 185;
-    --room-pendant: 0;
+  :global(html[data-book]) .tv {
+    visibility: hidden;
+  }
+
+  :global(html[data-book]) .tv > * {
+    animation: none;
   }
 }

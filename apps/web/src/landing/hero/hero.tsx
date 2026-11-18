@@ -1,53 +1,30 @@
 import Image from "next/image";
 import { Fragment } from "react";
-import { AppScreen } from "../app-screen/app-screen";
-import { GITHUB_URL } from "../links";
 import { Scene } from "../scene/scene";
 import styles from "./hero.module.css";
+import { TvCard } from "./tv-card";
 
 const MOTTO = "A busca da sabedoria começa por você.";
 
-// The hero: a course's page in the app on a phone, beside the brand and the pitch, and the motto
-// across the bottom. On the right, the room where Arandu waits: the stage draws it in 3D, the page
-// only keeps its place in the layout. The motto's letters are the stage's too: each one is a body
-// that gives under a tap or the cat's paws, so screen readers get the sentence whole instead.
+// The hero: Arandu's room at night, across the whole screen, the motto under it. The stage draws the
+// room in 3D; the page only keeps its place in the layout. The brand and the pitch are the TV's title
+// card: real text, which run-stage lays over the TV's screen (without 3D, they sit above the room).
+// The motto's letters are the stage's too: each one is a body that gives under a tap or the cat's
+// paws, so screen readers get the sentence whole instead.
 export function Hero() {
   return (
     <Scene
       length="hero"
       labelledBy="hero-title"
-      copy={
-        <div className={styles.intro}>
-          <div data-reveal className={styles.app}>
-            <AppScreen
-              src="/screens/U2-Ficha-curso.html"
-              title="Tela do app: a ficha de um curso, com a nota de corte e a fonte"
-            />
-          </div>
-          <div className={styles.pitch}>
-            <h1 id="hero-title" data-reveal className={styles.brand}>
-              <span>Arandu</span>{" "}
-              <span className={`${styles.reka} text-primary`}>Reka</span>
-            </h1>
-            <p data-reveal className="type-body-lg text-pretty text-text-muted">
-              Um app de <strong className={styles.key}>orientação vocacional</strong> com inteligência artificial, onde quem quer entrar na universidade vive
-              uma carreira antes de escolher.
-            </p>
-            <div data-reveal className="flex flex-wrap items-center gap-2">
-              <a className="ar-btn ar-btn--primary" href={GITHUB_URL}>
-                Ver no GitHub
-              </a>
-            </div>
-          </div>
-        </div>
-      }
+      copy={<TvCard />}
       art={
         <span data-room="hero" className={styles.room}>
           <Image className={styles.fallback} src="/img/cat.svg" alt="" width={600} height={370} />
+          <Image className={styles.loading} src="/img/head.svg" alt="" width={32} height={32} priority />
         </span>
       }
       foot={
-        <p data-reveal className="type-display text-balance">
+        <p data-reveal data-theme="dark" className="type-display text-balance text-text">
           <span className="sr-only">{MOTTO}</span>
           <span aria-hidden="true">
             {MOTTO.split(" ").map((word, w) => (
