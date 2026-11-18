@@ -18,7 +18,7 @@ _last_request: dict[str, float] = {}
 _robots: dict[str, urllib.robotparser.RobotFileParser | bool] = {}  # per host, read once per run
 
 
-def _open(url):
+def _open(url, data=None, headers=None):
     host = urlsplit(url).netloc
     for attempt in range(MAX_ATTEMPTS):
         wait = _last_request.get(host, 0) + MIN_INTERVAL - time.monotonic()
@@ -26,7 +26,8 @@ def _open(url):
             time.sleep(wait)
         _last_request[host] = time.monotonic()
         try:
-            return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}), timeout=60)
+            request = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
+            return urllib.request.urlopen(request, timeout=60)
         except urllib.error.HTTPError as error:
             if error.code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS - 1:
                 raise
@@ -64,8 +65,8 @@ def allowed(url):
     return rules if isinstance(rules, bool) else rules.can_fetch(USER_AGENT, url)
 
 
-def download(url, dest):
-    """Stream url into the open binary file dest and return its SHA-256 hex digest."""
+def download(url, dest, data=None, headers=None):
+    """Stream url into the open binary file dest and return its SHA-256 hex digest. data makes it a POST."""
     if not allowed(url):
         raise PermissionError(f"robots.txt disallows {url}")
     for attempt in range(MAX_ATTEMPTS):
@@ -73,7 +74,7 @@ def download(url, dest):
         dest.seek(0)
         dest.truncate()
         try:
-            with _open(url) as response:
+            with _open(url, data, headers) as response:
                 if response.status != 200:
                     raise RuntimeError(f"{url} answered HTTP {response.status} instead of the document")
                 while chunk := response.read(1 << 20):

@@ -77,6 +77,27 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(dest.getvalue(), BODY)
         self.assertEqual(hits.count("/f.zip"), 2)
 
+    def test_data_and_headers_make_a_post_that_keeps_the_user_agent(self):
+        response = mock.MagicMock(status=200, length=0, read=mock.Mock(side_effect=[BODY, b""]),
+                                  __enter__=lambda self: self, __exit__=lambda *a: None)
+        dest = BytesIO()
+        with mock.patch.object(fetch, "allowed", return_value=True), \
+                mock.patch.object(fetch.urllib.request, "urlopen", return_value=response) as urlopen:
+            digest = fetch.download("http://x/q", dest, data=b"{}", headers={"X-Key": "k"})
+        request = urlopen.call_args.args[0]
+        self.assertEqual((request.get_method(), request.data), ("POST", b"{}"))
+        self.assertEqual(request.get_header("X-key"), "k")
+        self.assertEqual(request.get_header("User-agent"), fetch.USER_AGENT)
+        self.assertEqual((digest, dest.getvalue()), (hashlib.sha256(BODY).hexdigest(), BODY))
+
+    def test_without_data_the_request_is_a_get(self):
+        response = mock.MagicMock(status=200, length=0, read=mock.Mock(side_effect=[b""]),
+                                  __enter__=lambda self: self, __exit__=lambda *a: None)
+        with mock.patch.object(fetch, "allowed", return_value=True), \
+                mock.patch.object(fetch.urllib.request, "urlopen", return_value=response) as urlopen:
+            fetch.download("http://x/q", BytesIO())
+        self.assertEqual(urlopen.call_args.args[0].get_method(), "GET")
+
     def test_missing_robots_txt_means_allowed(self):
         base, _ = self.serve({"/robots.txt": [(404, b"")]})
         self.assertTrue(fetch.allowed(f"{base}/f.zip"))

@@ -4,13 +4,15 @@ MIN_ROWS_RATIO = 0.5  # fewer subjects than half the last load means the page fo
 
 
 def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_unit=False):
-    """Register each (url, name, shift, city) course page as a source of page_adapter and stage its course.
+    """Register each (url, name, shift, city[, units]) course page as a source of page_adapter and stage its course.
 
     The same url may repeat with other cities when one published curriculum serves several units. every_unit is
     only for sources that state one curriculum for all their units: it links to every census course of that name.
+    units lists the units a page states it serves; it links to their census courses through the MEC campus.
     """
     written = 0
-    for url, name, shift, city in courses:
+    for url, name, shift, city, *units in courses:
+        units = units[0] if units else None
         label = f"{label_prefix}: {name}" + (f" ({shift})" if shift else "")
         written += conn.execute(
             """insert into sources (adapter, url, label) values (%s, %s, %s)
@@ -19,15 +21,16 @@ def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_uni
         ).rowcount
         source_id = conn.execute("select id from sources where url = %s", (url,)).fetchone()[0]
         staged = conn.execute(
-            """insert into staging.curriculum_courses (source_id, institution_inep_code, name, city, shift, every_unit)
-               values (%s, %s, %s, %s, %s, %s)
+            """insert into staging.curriculum_courses (source_id, institution_inep_code, name, city, shift, every_unit, units)
+               values (%s, %s, %s, %s, %s, %s, %s)
                on conflict (source_id, city) do update
                  set institution_inep_code = excluded.institution_inep_code, name = excluded.name,
-                   shift = excluded.shift, every_unit = excluded.every_unit
+                   shift = excluded.shift, every_unit = excluded.every_unit, units = excluded.units
                  where (curriculum_courses.institution_inep_code, curriculum_courses.name, curriculum_courses.shift,
-                   curriculum_courses.every_unit)
-                   is distinct from (excluded.institution_inep_code, excluded.name, excluded.shift, excluded.every_unit)""",
-            (source_id, inep_code, name, city, shift, every_unit),
+                   curriculum_courses.every_unit, curriculum_courses.units)
+                   is distinct from (excluded.institution_inep_code, excluded.name, excluded.shift, excluded.every_unit,
+                   excluded.units)""",
+            (source_id, inep_code, name, city, shift, every_unit, units),
         ).rowcount
         written += staged
         if staged:  # the course changed, so its already-staged subjects may link elsewhere now

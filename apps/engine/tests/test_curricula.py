@@ -43,13 +43,18 @@ class LoadCoursesTest(unittest.TestCase):
     def test_the_same_url_with_two_cities_stages_one_source_in_both(self):
         conn = FakeConn([(42,), (0,), (42,), (0,)])  # source id, normalize count, per course
         curricula.load_courses(conn, "x_curriculum", 322, "UNIP", [("u", "Medicina", None, "SANTOS"), ("u", "Medicina", None, "CAMPINAS")])
-        self.assertEqual(self.staged(conn), [(42, 322, "Medicina", "SANTOS", None, False), (42, 322, "Medicina", "CAMPINAS", None, False)])
+        self.assertEqual(self.staged(conn), [(42, 322, "Medicina", "SANTOS", None, False, None), (42, 322, "Medicina", "CAMPINAS", None, False, None)])
 
     def test_every_unit_and_the_shift_are_passed_through_and_the_label_has_the_shift(self):
         conn = FakeConn([(42,), (0,)])
         curricula.load_courses(conn, "x", 1, "P", [("u", "N", "Noite", "C")], every_unit=True)
-        self.assertEqual(self.staged(conn), [(42, 1, "N", "C", "Noite", True)])
+        self.assertEqual(self.staged(conn), [(42, 1, "N", "C", "Noite", True, None)])
         self.assertEqual(conn.calls[0][1], ("x", "u", "P: N (Noite)"))
+
+    def test_units_are_staged_when_given_and_none_when_absent(self):
+        conn = FakeConn([(42,), (0,), (43,), (0,)])
+        curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "C", ["Butantã", "Mooca"]), ("v", "N", None, "C")])
+        self.assertEqual(self.staged(conn), [(42, 1, "N", "C", None, False, ["Butantã", "Mooca"]), (43, 1, "N", "C", None, False, None)])
 
     def test_a_changed_course_renormalizes_its_page_and_adds_both_counts(self):
         conn = FakeConn([(42,), (5,)])

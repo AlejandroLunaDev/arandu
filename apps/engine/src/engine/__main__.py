@@ -6,11 +6,12 @@ import tempfile
 
 import psycopg
 
-from engine import anima, fetch, fiap, ifsp, inep_census, mackenzie, ufabc, ufscar, umc, unifesp, unip, usp
+from engine import anima, fetch, fiap, ifsp, inep_census, mackenzie, mec_powerbi, ufabc, ufscar, umc, unifesp, unip, usp
 
 # Run order for 'all': each list adapter comes before the level it registers (<x>_courses before <x>_curriculum).
 ADAPTERS = {
     "inep_census": inep_census,
+    "mec_powerbi": mec_powerbi,  # names each course's campus, which Ânima's unit matrices link through
     "usp_courses": usp.courses,
     "usp_curriculum": usp.curriculum,
     "mackenzie_courses": mackenzie.courses,
@@ -52,7 +53,7 @@ def run(conn, name):
         for source_id, url, last_hash in sources:
             try:
                 with tempfile.TemporaryFile() as doc:
-                    digest = fetch.download(url, doc)
+                    digest = getattr(adapter, "download", fetch.download)(url, doc)
                     parsed = None
                     if digest != last_hash:
                         doc.seek(0)

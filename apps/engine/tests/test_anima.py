@@ -53,13 +53,13 @@ class ParseCourseTest(unittest.TestCase):
         # page lists presencial offers at Paulista, Butantã, Guarulhos and Mooca; only Butantã has a Presencial matrix
         self.assertEqual(
             anima.parse_course(doc(USJT)),
-            ((203, "São Judas"), [(MEDIAS + "d56a94d7-6660-46da-80f8-6b7a240fc443.pdf", "administração - Bacharelado", "Noite", "SÃO PAULO")]),
+            ((203, "São Judas"), [(MEDIAS + "d56a94d7-6660-46da-80f8-6b7a240fc443.pdf", "administração - Bacharelado", "Noite", "SÃO PAULO", ["Butantã"])]),
         )
 
     def test_shifts_of_a_unit_are_joined_sorted(self):
         self.assertEqual(
             anima.parse_course(doc(ANHEMBI)),
-            ((466, "Anhembi Morumbi"), [(MEDIAS + "6f89ba32-03ad-443a-9a7f-2eb769537173.pdf", "psicologia - Bacharelado", "Manhã, Noite", "SÃO PAULO")]),
+            ((466, "Anhembi Morumbi"), [(MEDIAS + "6f89ba32-03ad-443a-9a7f-2eb769537173.pdf", "psicologia - Bacharelado", "Manhã, Noite", "SÃO PAULO", ["Mooca"])]),
         )
 
     def test_ead_semipresencial_and_default_matrices_are_not_returned(self):

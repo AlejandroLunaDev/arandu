@@ -70,6 +70,13 @@ class RunTest(unittest.TestCase):
         self.assertEqual((db.ran, db.hashes), (["a", "b"], {1: "digest-a", 2: "digest-b"}))
         self.assertEqual(db.runs[0], {"adapter": "fake", "status": "succeeded", "rows": 4})
 
+    def test_an_adapter_with_its_own_download_is_used_instead_of_fetch_download(self):
+        db = FakeDb({"fake": [(1, "a", None)]})
+        ad = adapter(db)
+        ad.download = lambda url, dest: dest.write(b"own " + url.encode()) and "own-digest"
+        self.run_adapter(db, ad)  # run_adapter patches fetch.download with a different digest and body
+        self.assertEqual((db.ran, db.hashes), (["own a"], {1: "own-digest"}))
+
     def test_a_failing_source_does_not_stop_the_others_and_run_raises_listing_it(self):
         db = FakeDb({"fake": [(1, "a", None), (2, "bad", None), (3, "c", None)]})
         with self.assertRaises(RuntimeError) as caught:

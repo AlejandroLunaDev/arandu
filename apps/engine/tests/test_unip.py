@@ -101,7 +101,7 @@ class LoadTest(unittest.TestCase):
         conn = FakeConn([("UNIP, unidades do curso: Medicina",), ("https://unip.br/m.aspx",), (7,), (7,)])
         unip.units.load(conn, 1, ["CAMPINAS", "SANTOS"])
         staged = [c[1] for c in conn.calls if "staging.curriculum_courses" in c[0]]
-        self.assertEqual([p[2:] for p in staged], [("Medicina", "CAMPINAS", None, True), ("Medicina", "SANTOS", None, True)])
+        self.assertEqual([p[2:] for p in staged], [("Medicina", "CAMPINAS", None, True, None), ("Medicina", "SANTOS", None, True, None)])
         self.assertEqual({p[1] for p in staged}, {unip.INEP_CODE})
 
     def test_load_units_without_a_registered_page_raises(self):

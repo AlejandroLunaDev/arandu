@@ -64,7 +64,10 @@ def _revive(data, i):
 
 
 def parse_course(doc):
-    """Return ((CO_IES, label), [(pdf url, course name, shifts, city)]), one per presencial unit with its own matrix."""
+    """Return ((CO_IES, label), [(pdf url, course name, shifts, city, units)]) for the presencial units' own matrices.
+
+    units names the presencial units that matrix serves, so it links to their census courses by MEC campus.
+    """
     html = doc.read().decode("utf-8")
     host = CANONICAL.search(html)
     if not host or host[1] not in INSTITUTIONS:
@@ -79,14 +82,17 @@ def parse_course(doc):
         for offer in campus["offers"]:
             if offer["modality"] == "Presencial" and (campus["city"] or "").strip():  # no city, no link: skipped
                 units.setdefault(offer["unit"]["title"], (campus["city"].strip(), set()))[1].add(offer["turn"] or "")
-    courses = {}
+    courses = {}  # (pdf, city) -> (turns, units)
     for matrix in _revive(data, page["curriculums"]):
         if matrix["modality"] == "Presencial" and matrix["unit"] in units:
             city, turns = units[matrix["unit"]]
-            courses.setdefault(matrix["curriculum_file"], (name, ", ".join(sorted(turns - {""})) or None, city))
+            served = courses.setdefault((matrix["curriculum_file"], city), (set(), set()))
+            served[0].update(turns - {""})
+            served[1].add(matrix["unit"])
     # Units with presencial offers but no matrix of their own, and matrices of units with no presencial offer,
     # are left out: the page does not say which matrix the first serve or where the second are taught.
-    return INSTITUTIONS[host[1]], [(url, *offer) for url, offer in courses.items()]
+    return INSTITUTIONS[host[1]], [(url, name, ", ".join(sorted(turns)) or None, city, sorted(served))
+                                   for (url, city), (turns, served) in courses.items()]
 
 
 def parse_curriculum(doc):
