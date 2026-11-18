@@ -41,30 +41,42 @@ def parse_courses(doc):
     return [(url, name, None, city) for url, (name, city) in courses.items()]
 
 
+TAB = re.compile(r'href="#tab-content-([^"]+)"[^>]*>\s*([^<]*?)\s*<')
+ACTIVE_TAB = re.compile(r'class="nav-link active" href="#tab-content-([^"]+)"')
+
+
 def parse_curriculum(doc):
-    """Return (term, year, name, None, is_elective) for every subject of the active curriculum, per etapa."""
+    """Return (term, year, name, None, is_elective) for every subject of the active curriculum, per etapa.
+
+    Version tabs ('Currículo 2026', '2018', '2014 - 2017') each hold their own 'Nª Etapa' tabs; the selected version is
+    the active one. A page with one version may have no version tabs. Etapa panes list subjects as table rows or as
+    paragraphs, depending on the course.
+    """
     html = doc.read().decode("utf-8")
-    # One pane per etapa and curriculum version. The selected version is the active 'Currículo <year>' tab; its
-    # panel links the etapa panes of that version. A page with one version may have no version tabs.
-    versions = set(re.findall(r'id="tab-content-\d+a_etapa(\d+)"', html))
-    tab = re.search(r'class="nav-link active" href="#tab-content-(\d+)"', html)
-    if tab:
-        panel = html[html.find(f'id="tab-content-{tab[1]}"'):]
-        active = re.search(r"a_etapa(\d+)", panel)[1]
-    elif len(versions) == 1:
-        active = next(iter(versions))
-    else:
-        raise ValueError(f"no active curriculum version among {sorted(versions)}")
-    panes = re.split(r'<div id="tab-content-(\d+)a_etapa(\d+)"', html)
+    tabs = [(match.start(), match[1], match[2]) for match in TAB.finditer(html)]
+    etapas = {tab: int(match[1]) for _, tab, label in tabs if (match := re.fullmatch(r"(\d+)ª Etapa", label))}
+    first_etapa = min((pos for pos, tab, _ in tabs if tab in etapas), default=0)
+    # Version tabs come before the first etapa tab; later non-etapa tabs ('Optativas') sit inside a version.
+    versions = [tab for pos, tab, _ in tabs if tab not in etapas and pos < first_etapa]
+    start, end = 0, len(html)
+    if versions:
+        active = next((tab for tab in ACTIVE_TAB.findall(html) if tab in versions), None)
+        if active is None:
+            raise ValueError(f"no active curriculum version among {versions}")
+        start = html.index(f'id="tab-content-{active}"')
+        end = min([pos for tab in versions if (pos := html.find(f'id="tab-content-{tab}"')) > start] or [end])
     subjects = []
-    for term, version, pane in zip(panes[1::3], panes[2::3], panes[3::3]):
-        if version != active:
-            continue
-        for row in rows(pane.split('<div id="tab-content-')[0]):
-            if len(row) == 2 and row[0][0] and row[0][0] != "Disciplina":
-                name = row[0][0]
-                # Hours are left out: the page mixes units ('4' per subject, '440' for the internship) and states none.
-                subjects.append((int(term), (int(term) + 1) // 2, name, None, name.startswith("OPTATIVA")))
+    for tab, term in etapas.items():
+        pane_start = html.find(f'id="tab-content-{tab}"')
+        if not start <= pane_start < end:
+            continue  # an etapa of another version
+        stop = html.find('id="tab-content-', pane_start + 1)
+        pane = html[pane_start:stop if stop > 0 else None]
+        names = [row[0][0] for row in rows(pane) if len(row) == 2 and row[0][0] and row[0][0] != "Disciplina"]
+        names = names or [text for p in re.findall(r"<p>(.*?)</p>", pane, re.S) if (text := _text(p))]
+        # Hours are left out: the page mixes units ('4' per subject, '440' for the internship) and states none.
+        subjects += [(term, (term + 1) // 2, name, None, name.upper().startswith(("OPTATIVA", "ELETIVA")))
+                     for name in names]
     if not subjects:
         raise ValueError("no subject found on the matriz curricular")
     return subjects

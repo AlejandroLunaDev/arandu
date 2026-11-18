@@ -7,6 +7,7 @@ from engine import mackenzie
 FIXTURES = Path(__file__).parent / "fixtures" / "mackenzie"
 LIST = (FIXTURES / "mackenzie_course_list.html").read_text(encoding="utf-8")
 MATRIZ = (FIXTURES / "mackenzie_ciencia_da_computacao_matriz.html").read_text(encoding="utf-8")
+CIVIL = (FIXTURES / "engenharia_civil_matriz.html").read_text(encoding="utf-8")
 BASE = "https://www.mackenzie.br/graduacao/"
 TAB_2026 = '<a class="nav-link active" href="#tab-content-14874"'
 TAB_2018 = '<a class="nav-link " href="#tab-content-380043"'
@@ -108,9 +109,23 @@ class ParseCurriculumTest(unittest.TestCase):
         self.assertIn("FUNDAMENTOS DE CIÊNCIA DA COMPUTAÇÃO", {n for t, y, n, h, e in subjects})
         self.assertNotIn("BANCO DE DADOS I", {n for t, y, n, h, e in subjects})
 
+    def single_version_page(self):
+        # The 2018 section without its version tab: the etapa nav and the etapa panes, as a one-version page has them.
+        nav = MATRIZ.rindex("<ul", 0, MATRIZ.index('href="#tab-content-1a_etapa380039"'))
+        return MATRIZ[nav:]
+
     def test_a_single_version_page_without_tabs_works(self):
-        html = MATRIZ[MATRIZ.index('<div id="tab-content-1a_etapa51295"'):MATRIZ.index('<div id="tab-content-1a_etapa380039"')]
-        self.assertEqual(len(mackenzie.parse_curriculum(doc(html))), 12)
+        subjects = mackenzie.parse_curriculum(doc(self.single_version_page()))
+        self.assertEqual(len(subjects), 15)  # the 2018 panes hold 6 + 5 + 4 subjects
+        self.assertEqual({t for t, *_ in subjects}, {1, 2, 8})
+
+    def test_an_optativas_tab_after_the_etapas_is_not_a_version_and_its_subjects_are_left_out(self):
+        pane = '<div id="tab-content-optativa380039" class="tab-pane fade"><div class="mc-MatrizCurricular"><table><tbody><tr><th>ROBOTICA</th><th>40</th></tr></tbody></table></div></div>'
+        html = self.single_version_page().replace("</div></body></html>", pane + "</div></body></html>")
+        self.assertIn("ROBOTICA", html)
+        subjects = mackenzie.parse_curriculum(doc(html))
+        self.assertEqual(len(subjects), 15)
+        self.assertNotIn("ROBOTICA", {n for t, y, n, h, e in subjects})
 
     def test_entities_in_subject_names_are_unescaped(self):
         html = MATRIZ.replace("ÉTICA E CIDADANIA", "&Eacute;TICA &amp; CIDADANIA", 1)
@@ -124,6 +139,37 @@ class ParseCurriculumTest(unittest.TestCase):
         html = '<div id="tab-content-1a_etapa1" class="tab-pane fade active in"><table><tr><th>Disciplina</th><th>Carga</th></tr></table></div>'
         with self.assertRaisesRegex(ValueError, "no subject"):
             mackenzie.parse_curriculum(doc(html))
+
+
+class ParseParagraphCurriculumTest(unittest.TestCase):
+    """Layout with version tabs ('2018', '2014 - 2017') whose etapas list subjects as paragraphs."""
+
+    def setUp(self):
+        self.subjects = mackenzie.parse_curriculum(doc(CIVIL))
+
+    def test_only_the_active_2018_version_comes_through(self):
+        self.assertEqual({t for t, *_ in self.subjects}, {1, 2})
+        self.assertEqual(len(self.subjects), 18)
+
+    def test_first_etapa_runs_from_ciencia_tecnologia_to_eletiva_universal(self):
+        etapa_1 = [name for term, _, name, _, _ in self.subjects if term == 1]
+        self.assertEqual(etapa_1, [
+            "Ciência, Tecnologia e Sociedade nas Engenharias", "Ciências do Ambiente", "Ética e Cidadania",
+            "Física Geral e Experimental I", "Fundamentos de Matemática", "Linguagem de Programação",
+            "Química Geral", "Projetos Integradores I", "Eletiva Universal"])
+
+    def test_eletiva_universal_is_the_only_elective(self):
+        self.assertEqual([(t, n) for t, _, n, _, e in self.subjects if e],
+                         [(1, "Eletiva Universal"), (2, "Eletiva Universal")])
+
+    def test_second_etapa_is_year_one(self):
+        self.assertEqual({y for t, y, *_ in self.subjects if t == 2}, {1})
+
+    def test_no_subject_of_the_2014_2017_version_appears(self):
+        names = {name for _, _, name, _, _ in self.subjects}
+        for old in ("Álgebra Linear", "Topografia I", "Geometria Descritiva", "Computação, Algoritmos e Programação I"):
+            self.assertNotIn(old, names)
+        self.assertNotIn("", names)
 
 
 if __name__ == "__main__":
