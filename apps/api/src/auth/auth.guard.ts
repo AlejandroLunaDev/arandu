@@ -49,6 +49,8 @@ export class AuthGuard implements CanActivate {
       const { payload } = await jwtVerify(token, this.keys, {
         issuer: this.issuer,
         audience: 'authenticated',
+        // A few seconds of drift between this server's clock and Supabase's must not reject a fresh token.
+        clockTolerance: 5,
       });
       if (!payload.sub || payload.is_anonymous === true) throw new Error();
       request.userId = payload.sub;

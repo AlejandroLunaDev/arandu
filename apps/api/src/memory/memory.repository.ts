@@ -3,7 +3,7 @@ import type {
   AranduProfile,
   ChatMessage,
 } from '@arandu/contracts';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { SQL, type Sql } from '../platform/database/database.module.js';
 
 /** The memory's limit: Arandu's note on past sessions never grows past this. */
@@ -16,6 +16,33 @@ export type SessionKind = 'onboarding' | 'career';
 const SESSIONS_LISTED = 50;
 /** The newest messages of unsummarized sessions the summary reads; older ones are folded in without being read. */
 const MESSAGES_SUMMARIZED = 200;
+
+/** The person's account was deleted while their access token was still valid: they must sign in again. */
+export class PersonGoneError extends UnauthorizedException {
+  constructor() {
+    super('This account no longer exists');
+  }
+}
+
+// The foreign keys to auth.users: a write that breaks one is for a deleted account.
+const USER_KEYS = new Set([
+  'arandu_memories_user_id_fkey',
+  'arandu_sessions_user_id_fkey',
+]);
+
+async function asPerson<T>(write: Promise<T>): Promise<T> {
+  try {
+    return await write;
+  } catch (error) {
+    const { code, constraint_name } = error as {
+      code?: string;
+      constraint_name?: string;
+    };
+    if (code === '23503' && USER_KEYS.has(constraint_name ?? ''))
+      throw new PersonGoneError();
+    throw error;
+  }
+}
 
 /** Where Arandu's memory of each person lives: sessions, messages, the confirmed profile and the summary. */
 @Injectable()
@@ -48,9 +75,9 @@ export class MemoryRepository {
     kind: SessionKind,
     professionSlug: string | null = null,
   ): Promise<string> {
-    const [{ id }] = await this.sql<{ id: string }[]>`
+    const [{ id }] = await asPerson(this.sql<{ id: string }[]>`
       insert into public.arandu_sessions (user_id, kind, profession_slug)
-      values (${userId}, ${kind}, ${professionSlug}) returning id`;
+      values (${userId}, ${kind}, ${professionSlug}) returning id`);
     return id;
   }
 
@@ -81,9 +108,9 @@ export class MemoryRepository {
   }
 
   async saveProfile(userId: string, profile: AranduProfile): Promise<void> {
-    await this.sql`
+    await asPerson(this.sql`
       insert into public.arandu_memories (user_id, profile) values (${userId}, ${this.sql.json(profile as never)})
-      on conflict (user_id) do update set profile = excluded.profile, updated_at = now()`;
+      on conflict (user_id) do update set profile = excluded.profile, updated_at = now()`);
   }
 
   /** The person's sessions not yet folded into the summary, and their newest messages as one transcript. */
@@ -125,12 +152,14 @@ export class MemoryRepository {
     summary: string,
     sessionIds: string[],
   ): Promise<void> {
-    await this.sql.begin(async (tx) => {
-      await tx`
+    await asPerson(
+      this.sql.begin(async (tx) => {
+        await tx`
         insert into public.arandu_memories (user_id, summary) values (${userId}, ${summary.slice(0, SUMMARY_MAX)})
         on conflict (user_id) do update set summary = excluded.summary, updated_at = now()`;
-      await tx`update public.arandu_sessions set summarized_at = now() where id in ${tx(sessionIds)}`;
-    });
+        await tx`update public.arandu_sessions set summarized_at = now() where id in ${tx(sessionIds)}`;
+      }),
+    );
   }
 
   /** Forgets the person: their profile, summary, sessions and messages. Their account stays. */

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(16);
 
 -- Fixtures: a person, a profession to explore, and their memory, one career session and one message.
 insert into auth.users (id) values ('00000000-0000-4000-8000-000000000001');
@@ -15,6 +15,14 @@ select lives_ok($$insert into public.arandu_sessions (id, user_id, kind)
   'valid onboarding session');
 select lives_ok($$insert into public.arandu_messages (session_id, role, content)
   values ('00000000-0000-4000-8000-0000000000a1', 'user', 'Oi')$$, 'valid message');
+
+-- The API matches on these names to tell a deleted account from other errors.
+select is((select count(*)::int from pg_constraint
+  where conname = 'arandu_memories_user_id_fkey' and conrelid = 'public.arandu_memories'::regclass and contype = 'f'),
+  1, 'arandu_memories_user_id_fkey exists');
+select is((select count(*)::int from pg_constraint
+  where conname = 'arandu_sessions_user_id_fkey' and conrelid = 'public.arandu_sessions'::regclass and contype = 'f'),
+  1, 'arandu_sessions_user_id_fkey exists');
 
 -- Constraint violations.
 select throws_ok($$update public.arandu_memories set summary = repeat('a', 1501)$$, '23514', null,

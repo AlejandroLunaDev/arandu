@@ -8,6 +8,7 @@ import {
   USER_ID,
   withMemory,
 } from '../../test/http-app.js';
+import { PersonGoneError } from '../memory/memory.repository.js';
 import { OnboardingModule } from './onboarding.module.js';
 
 const ALL_TOPICS = [
@@ -55,6 +56,21 @@ describe('POST /arandu/onboarding', () => {
   const answer = (message = 'Oi') => post({ sessionId: SESSION_ID, message });
 
   afterEach(() => app.close());
+
+  it('401s with the filter body when the account no longer exists', async () => {
+    await start();
+    memory.createSession.mockRejectedValue(new PersonGoneError());
+
+    const res = await post({}).expect(401);
+
+    expect(res.body).toMatchObject({
+      statusCode: 401,
+      error: 'UNAUTHORIZED',
+      message: 'This account no longer exists',
+      path: '/arandu/onboarding',
+    });
+    expect(model.calls).toHaveLength(0);
+  });
 
   it('opens a session and records the first message of Arandu on {}', async () => {
     await start();

@@ -55,7 +55,7 @@ describe('AuthGuard', () => {
 
   const sign = (
     claims: Record<string, unknown> = {},
-    { key = privateKey, expires = '1h' } = {},
+    { key = privateKey, expires = '1h' as string | number } = {},
   ) =>
     new SignJWT({ ...claims })
       .setProtectedHeader({ alg: 'ES256', kid: KID })
@@ -106,6 +106,22 @@ describe('AuthGuard', () => {
   it('401s for an expired token', async () => {
     await expect(
       run(`Bearer ${await sign({}, { expires: '-1m' })}`).result,
+    ).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('accepts a token that expired 3 s ago (clock drift)', async () => {
+    const expires = Math.floor(Date.now() / 1000) - 3;
+
+    await expect(
+      run(`Bearer ${await sign({}, { expires })}`).result,
+    ).resolves.toBe(true);
+  });
+
+  it('401s for a token that expired 30 s ago', async () => {
+    const expires = Math.floor(Date.now() / 1000) - 30;
+
+    await expect(
+      run(`Bearer ${await sign({}, { expires })}`).result,
     ).rejects.toMatchObject({ status: 401 });
   });
 
