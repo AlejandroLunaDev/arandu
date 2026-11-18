@@ -1,16 +1,17 @@
 import io
 import json
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import psycopg
-from reportlab.pdfgen import canvas
 
 from engine import fatec
 from tests.fakes import FakeConn
 
 LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 BASE = "https://fatecexemplo.cps.sp.gov.br/wp-content/uploads/sites/9/2026/03/"
+FIXTURES = Path(__file__).parent / "fixtures" / "fatec"
 SUBJECTS = ["Algoritmos e Lógica", "Banco de Dados", "Engenharia de Software", "Inglês I"]
 
 
@@ -18,26 +19,9 @@ def media(*names):
     return io.BytesIO(json.dumps([{"source_url": BASE + n} for n in names]).encode())
 
 
-def pdf(*pages):
-    """A PDF whose pages are lists of (x, y, text) drawn with reportlab's built-in Helvetica."""
-    out = io.BytesIO()
-    pen = canvas.Canvas(out)
-    for page in pages:
-        for x, y, text in page:
-            pen.drawString(x, y, text)
-        pen.showPage()
-    pen.save()
-    out.seek(0)
-    return out
-
-
-def grid(subjects, headers=True):
-    cells = [(50, 700, "1º semestre"), (300, 700, "2º semestre"), (300, 680, "Cálculo (80 aulas)")] if headers else []
-    return cells + [(50, 680 - 20 * i, f"{name} (80 aulas)") for i, name in enumerate(subjects)]
-
-
-COVER = [(50, 780, "Projeto Pedagógico do Curso Superior de Tecnologia em Análise e Desenvolvimento de Sistemas")]
-EMENTARIO = [(50, 780 - 20 * i, name) for i, name in enumerate(SUBJECTS)]
+def pdf(name):
+    """A small PDF drawn once with reportlab and committed under tests/fixtures/fatec."""
+    return io.BytesIO((FIXTURES / name).read_bytes())
 
 
 class ParseMediaTest(unittest.TestCase):
@@ -64,25 +48,25 @@ class LoadMediaTest(unittest.TestCase):
 
 class ParseCurriculumTest(unittest.TestCase):
     def test_reads_the_first_semester_column_only(self):
-        title, subjects = fatec.parse_curriculum(pdf(COVER, grid(SUBJECTS), EMENTARIO))
+        title, subjects = fatec.parse_curriculum(pdf("fatec_ppc.pdf"))
         self.assertIn("Tecnologia em Análise e Desenvolvimento de Sistemas", title)
         self.assertEqual(subjects, [(1, 1, name, None, False) for name in SUBJECTS])
 
     def test_a_name_the_ppc_never_states_again_raises(self):
         with self.assertRaisesRegex(ValueError, "does not state again"):
-            fatec.parse_curriculum(pdf(COVER, grid(SUBJECTS), EMENTARIO[:3]))
+            fatec.parse_curriculum(pdf("fatec_ementario_missing_subject.pdf"))
 
     def test_too_few_subjects_raises(self):
         with self.assertRaisesRegex(ValueError, "2 subjects"):
-            fatec.parse_curriculum(pdf(COVER, grid(SUBJECTS[:2]), EMENTARIO))
+            fatec.parse_curriculum(pdf("fatec_two_subjects.pdf"))
 
     def test_no_semester_header_raises(self):
         with self.assertRaisesRegex(ValueError, "no 1º semestre column"):
-            fatec.parse_curriculum(pdf(COVER, grid(SUBJECTS, headers=False), EMENTARIO))
+            fatec.parse_curriculum(pdf("fatec_no_semester_header.pdf"))
 
     def test_a_placeholder_cell_is_not_a_subject(self):
         with self.assertRaisesRegex(ValueError, "not read cleanly"):
-            fatec.parse_curriculum(pdf(COVER, grid(SUBJECTS + ["Disciplina xxx"]), EMENTARIO))
+            fatec.parse_curriculum(pdf("fatec_placeholder_subject.pdf"))
 
 
 class LoadCurriculumLocalDbTest(unittest.TestCase):
