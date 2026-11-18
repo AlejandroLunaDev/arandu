@@ -111,9 +111,13 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "MugBand": (srgb("#6B3FA0"), 0.3, 0.0),
     "Coffee": (srgb("#3B2414"), 0.15, 0.0),
     "Steam": (srgb("#FBF8F1"), 1.0, 0.0),  # the web makes it a fading, rising wisp
-    "FrameWood": (srgb("#09090D"), 0.5, 0.0),
+    "FrameWood": (srgb("#9A6A2A"), 0.55, 0.0),  # warm oak, a shade lighter than the side table
     "FrameMat": (srgb("#F1EBDD"), 0.9, 0.0),
     "FrameArt": (srgb("#FBF8F1"), 0.8, 0.0),  # the picture, which the web draws on
+    "PlaqueArt": (srgb("#8A5A12"), 0.6, 0.0),  # the plaque's face, which the web draws on
+    "SignArt": (srgb("#8A5A12"), 0.6, 0.0),  # the motto sign's face, which the web draws on
+    "Twine": (srgb("#DDD3C0"), 0.95, 0.0),  # cream-300 string
+    "NailMetal": (srgb("#A9A2B4"), 0.3, 0.9),
     "NeonTube": (srgb("#F1EBDD"), 0.3, 0.0),  # cream-100, glowing white; the web makes it glow
     "NeonBorder": (srgb("#EF5D6C"), 0.3, 0.0),  # the palette's coral red, the sign's frame
     "NeonBacking": (srgb("#15131B"), 0.35, 0.0),  # smoked acrylic
@@ -1003,20 +1007,68 @@ def mug(coll):
 
 
 def frame(coll, name):
-    """A black gallery frame with a cream mat. The picture is one face, material "FrameArt", mapped to the
+    """An oak frame with a thin cream mat. The picture is one face, material "FrameArt", mapped to the
     full 0-1 UV square, u left to right and v up, for the web to draw on."""
     W, H = FRAMES[name]
-    B, DEPTH, MAT = 0.022, 0.03, 0.035
+    B, DEPTH, MAT = 0.03, 0.035, 0.016
     p = Part()
-    add_box(p, (W, DEPTH, B), (0, -DEPTH / 2, H / 2 - B / 2), "FrameWood", 0.003, seg=1)
-    add_box(p, (W, DEPTH, B), (0, -DEPTH / 2, -H / 2 + B / 2), "FrameWood", 0.003, seg=1)
-    add_box(p, (B, DEPTH, H - 2 * B), (W / 2 - B / 2, -DEPTH / 2, 0), "FrameWood", 0.003, seg=1)
-    add_box(p, (B, DEPTH, H - 2 * B), (-W / 2 + B / 2, -DEPTH / 2, 0), "FrameWood", 0.003, seg=1)
+    # The frame in one piece, a ring with its edges rounded, so its corners show no joins.
+    ring = []
+    for y in (-DEPTH, 0.0):
+        for hx, hz in ((W / 2, H / 2), (W / 2 - B, H / 2 - B)):
+            ring += [(-hx, y, -hz), (hx, y, -hz), (hx, y, hz), (-hx, y, hz)]
+    quads = []
+    for i in range(4):
+        j = (i + 1) % 4
+        quads += [(i, j, 4 + j, 4 + i), (8 + i, 12 + i, 12 + j, 8 + j), (i, 8 + i, 8 + j, j), (4 + i, 4 + j, 12 + j, 12 + i)]
+    p.add(*soft(ring, quads, 0.006), "FrameWood")
     add_box(p, (W - 2 * B, 0.004, H - 2 * B), (0, -0.006, 0), "FrameMat")
     x, z = W / 2 - B - MAT, H / 2 - B - MAT
     p.add([(-x, -0.0085, -z), (x, -0.0085, -z), (x, -0.0085, z), (-x, -0.0085, z)], [(0, 1, 2, 3)], "FrameArt",
           uvs=[[(0, 0), (1, 0), (1, 1), (0, 1)]])
     return face_front(p.build(name, coll, uv=True), "FrameArt")
+
+
+PLAQUE = (0.36, 0.15)  # width, height
+
+
+def github_plaque(coll):
+    """A small wooden plaque hanging on a string from a nail in the wall. Its front is one face, material
+    "PlaqueArt", mapped to the full 0-1 UV square, u left to right and v up, for the web to draw the link
+    to Arandu's code on. The origin is the middle of the board, its back on the wall at Y = 0."""
+    W, H = PLAQUE
+    D = 0.018
+    p = Part()
+    add_box(p, (W, D, H), (0, -D / 2, 0), "TableWood", 0.005)
+    x, z = W / 2 - 0.012, H / 2 - 0.012
+    p.add([(-x, -D - 0.0006, -z), (x, -D - 0.0006, -z), (x, -D - 0.0006, z), (-x, -D - 0.0006, z)], [(0, 1, 2, 3)], "PlaqueArt",
+          uvs=[[(0, 0), (1, 0), (1, 1), (0, 1)]])
+    nail = (0.0, -0.012, H / 2 + 0.085)
+    for sx in (-1, 1):  # the string, from two eyes on the board's top to the nail
+        p.add(*tube([(sx * W * 0.32, -D / 2, H / 2), nail], 0.0018, sides=6), "Twine")
+    add_lathe(p, [(0.0, 0.0), (0.0025, 0.0), (0.0025, 0.016), (0.007, 0.016), (0.007, 0.019), (0.0, 0.019)], "NailMetal",
+              Matrix.Translation((0, 0.0, H / 2 + 0.085)) @ Matrix.Rotation(math.radians(90), 4, "X"), seg=12)
+    return face_front(p.build("GithubPlaque", coll, uv=True), "PlaqueArt")
+
+
+MOTTO_SIGN = (0.74, 0.22, 0.09)  # width, height, string length
+
+
+def motto_sign(coll):
+    """A wooden sign hanging on two strings from the underside of a shelf, for the motto. Its front is
+    one face, material "SignArt", mapped to the full 0-1 UV square, u left to right and v up, for the web
+    to write on. The origin is where the strings meet the plank, at Z = 0: the sign hangs below it."""
+    W, H, L = MOTTO_SIGN
+    D = 0.016
+    top = -L
+    p = Part()
+    add_box(p, (W, D, H), (0, 0, top - H / 2), "TableWood", 0.005)
+    x, z0, z1, y = W / 2 - 0.012, top - H + 0.012, top - 0.012, -D / 2 - 0.0006
+    p.add([(-x, y, z0), (x, y, z0), (x, y, z1), (-x, y, z1)], [(0, 1, 2, 3)], "SignArt", uvs=[[(0, 0), (1, 0), (1, 1), (0, 1)]])
+    for sx in (-1, 1):  # the strings, from two eyes on the board's top straight up to two under the plank
+        p.add(*tube([(sx * W * 0.4, 0, top), (sx * W * 0.4, 0, -0.004)], 0.0018, sides=6), "Twine")
+        add_lathe(p, [(0.0, -0.006), (0.004, -0.006), (0.004, 0.0), (0.0, 0.0)], "NailMetal", Matrix.Translation((sx * W * 0.4, 0, 0)), seg=10)
+    return face_front(p.build("MottoSign", coll, uv=True), "SignArt")
 
 
 def neon_sign(coll):
@@ -1158,6 +1210,8 @@ LAYOUT = {  # where each prop stands in the Blender scene; the export puts every
     "StringLights": (-2.2, 3.0, 2.8),
     "FarolSantander": (4.3, 3.0, 0),
     "Tv": (-1.5, 4.5, 1.6),
+    "GithubPlaque": (4.6, 1.5, 1.2),
+    "MottoSign": (5.4, 1.5, 1.6),
 }
 
 
@@ -1188,7 +1242,7 @@ def build():
     props += [f(coll) for f in (desk, notebook, chair_gamer, sofa, paper_bin, trophy, grad_cap,
                                 pencil_cup, mug, neon_sign, string_lights, farol_santander, tv, side_table)]
     props += [paper_ball(coll, name) for name in PAPER_BALLS] + [pencil(coll, name) for name in PENCILS]
-    props += [frame(coll, name) for name in FRAMES]
+    props += [frame(coll, name) for name in FRAMES] + [github_plaque(coll), motto_sign(coll)]
     for obj in props:
         obj.location = LAYOUT[obj.name]
     tris = sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in coll.objects if o.type == "MESH")

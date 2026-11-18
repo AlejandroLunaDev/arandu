@@ -13,8 +13,9 @@ export function Reveals() {
     gsap.registerPlugin(ScrollTrigger);
     const ctx = gsap.context(() => {
       const [first, ...rest] = gsap.utils.toArray<HTMLElement>("[data-scene]");
-      if (first) {
-        gsap.from(first.querySelectorAll("[data-reveal]"), {
+      const copy = first?.querySelectorAll("[data-reveal]");
+      if (copy?.length) {
+        gsap.from(copy, {
           y: 16,
           opacity: 0,
           duration: 0.8,
@@ -27,12 +28,7 @@ export function Reveals() {
         const tl = gsap.timeline({
           scrollTrigger: { trigger: scene, start: "top 75%", end: "top 10%", scrub: 0.6 },
         });
-        tl.fromTo(
-          scene.querySelectorAll("[data-reveal]"),
-          { y: 24, opacity: 0 },
-          { y: 0, opacity: 1, stagger: 0.08, ease: "none" },
-          0,
-        );
+        tl.fromTo(scene.querySelectorAll("[data-reveal]"), { y: 24, opacity: 0 }, { y: 0, opacity: 1, stagger: 0.08, ease: "none" }, 0);
         const art = scene.querySelectorAll("[data-reveal-art]");
         if (art.length) tl.fromTo(art, { y: 60 }, { y: 0, ease: "none" }, 0);
       }

@@ -1,12 +1,12 @@
-import type { Book, BookSummary } from "@arandu/contracts";
+import type { Book, BookSummary, OwnBook } from "@arandu/contracts";
 
-// The shelf's books come from the API (GET /books, GET /books/:slug). Without NEXT_PUBLIC_API_URL
-// the shelf keeps its own titles and the books open blank.
+// The shelf's books come from the API (GET /books, GET /books/:slug), and Arandu's own two from
+// GET /books/own/:book. Without NEXT_PUBLIC_API_URL the shelf keeps its own titles and the books open blank.
 const API = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 
-/** The book that tells why Arandu exists: always on the shelf, written in the web, never fetched. */
+/** The book on the problem Arandu comes to solve: on the side table, its pages from GET /books/own/solucao. */
 export const RESEARCH = "Solução";
-/** The title of the book on what Arandu is: it stands by the research book, on the side table. */
+/** The book on what Arandu brings: by the research book, its pages from GET /books/own/produto. */
 export const PRODUCT = "Produto";
 
 /** What run-stage tells the page when a book is tapped and starts to open (a book) or starts to shut (null). */
@@ -83,14 +83,33 @@ const isBook = (body: unknown): body is Book => {
 
 export const listBooks = () => get("/books", isList);
 
-const books = new Map<string, Promise<Book>>();
-/** One book, fetched once per visit; a failed fetch is tried again next time. */
-export function getBook(slug: string) {
-  let book = books.get(slug);
-  if (!book) {
-    book = get(`/books/${encodeURIComponent(slug)}`, isBook);
-    book.catch(() => books.delete(slug));
-    books.set(slug, book);
+const isSource = (s: unknown) => {
+  const v = s as { label?: unknown; url?: unknown } | null;
+  return v === null || (typeof v?.label === "string" && (v.url === null || typeof v.url === "string"));
+};
+
+const isOwnBook = (body: unknown): body is OwnBook => {
+  const b = body as OwnBook | null;
+  return (
+    (b?.book === "produto" || b?.book === "solucao") &&
+    Array.isArray(b.facts) &&
+    b.facts.every((f) => typeof f?.figure === "string" && typeof f.text === "string" && isSource(f.source))
+  );
+};
+
+/** Fetched once per visit; a failed fetch is tried again next time. */
+function once<T>(cache: Map<string, Promise<T>>, key: string, fetchIt: () => Promise<T>) {
+  let p = cache.get(key);
+  if (!p) {
+    p = fetchIt();
+    p.catch(() => cache.delete(key));
+    cache.set(key, p);
   }
-  return book;
+  return p;
 }
+
+const books = new Map<string, Promise<Book>>();
+export const getBook = (slug: string) => once(books, slug, () => get(`/books/${encodeURIComponent(slug)}`, isBook));
+
+const own = new Map<string, Promise<OwnBook>>();
+export const getOwnBook = (book: OwnBook["book"]) => once(own, book, () => get(`/books/own/${book}`, isOwnBook));

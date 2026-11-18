@@ -1,11 +1,12 @@
 "use client";
 
-import type { Book, Offering, Source } from "@arandu/contracts";
+import type { Book, Offering, OwnBook, StoryFact } from "@arandu/contracts";
 import { getFontEmbedCSS, toCanvas } from "html-to-image";
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import {
   BOOK_EVENT,
   getBook,
+  getOwnBook,
   openHeight,
   pictured,
   pictures,
@@ -19,7 +20,6 @@ import {
   type OpenedBook,
   type PagePrint,
 } from "./book-data";
-import { ANSWER, FACTS, type Fact } from "./research";
 import styles from "./book-pages.module.css";
 
 /** How many first-year subjects a university's page shows, and how much of a sample subject's topics. */
@@ -33,9 +33,10 @@ const DEGREE: Record<NonNullable<Offering["course"]["degree"]>, string> = {
   bacharelado_licenciatura: "Bacharelado e licenciatura",
 };
 const CLOSING = "Com o Arandu, você vive um pedacinho dessa carreira antes de escolher.";
-/** What Arandu is, as the TV's title card says it (hero/tv-card.tsx). */
-const PITCH =
-  "Um app de orientação vocacional com inteligência artificial, onde quem quer entrar na universidade vive uma carreira antes de escolher.";
+/** The label over the first page of Arandu's own books. */
+const OWN_LABEL: Record<OwnBook["book"], string> = { produto: "O que o Arandu traz", solucao: "Por que o Arandu existe" };
+/** Which of Arandu's own books is open, if one is. */
+const ownOf = (b: OpenedBook) => (b?.product ? "produto" : b?.research ? "solucao" : null);
 /** Census and some grades write in capitals: shown in sentence case, the words as they are. */
 const calm = (text: string) => (text === text.toUpperCase() ? text.charAt(0) + text.slice(1).toLowerCase() : text);
 const KIND: Record<Offering["institution"]["kind"], string> = { public: "Pública", private: "Privada", special: "Especial" };
@@ -53,6 +54,7 @@ const PRINT_SHARPNESS = 2;
 export function BookPages() {
   const [opened, setOpened] = useState<OpenedBook>(null);
   const [book, setBook] = useState<Book | null>(null);
+  const [own, setOwn] = useState<OwnBook | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [spread, setSpread] = useState(0);
   const [turning, setTurning] = useState(false);
@@ -70,7 +72,13 @@ export function BookPages() {
       setOpened(next);
       setSpread(0);
       setTurning(false);
-      openSlug.current = next?.slug ?? null;
+      const ownKey = ownOf(next);
+      openSlug.current = next?.slug ?? ownKey;
+      if (ownKey)
+        getOwnBook(ownKey).then(
+          (b) => openSlug.current === ownKey && setOwn(b),
+          () => openSlug.current === ownKey && setFailed(ownKey),
+        );
       // The book shows once its first pictures are in, every other one loading behind it; a slow
       // picture does not hold it past READY_WAIT.
       if (next?.slug)
@@ -104,7 +112,9 @@ export function BookPages() {
   // (html-to-image) for run-stage to lay on the 3D pages, so opening, turning and shutting show print,
   // not blank paper. The pages are drawn from proofs laid out off screen, all at once.
   const shown = opened && book?.profession.slug === opened.slug ? book : null;
-  const printable = !!opened?.research || !!opened?.product || !!shown;
+  const ownKey = ownOf(opened);
+  const ownShown = ownKey && own?.book === ownKey ? own : null;
+  const printable = !!ownShown || !!shown;
   useEffect(() => {
     const el = proofs.current;
     if (!printable || !el) return;
@@ -124,27 +134,26 @@ export function BookPages() {
     return () => {
       live = false;
     };
-  }, [printable, shown, opened]);
+  }, [printable, shown, ownShown, opened]);
 
   if (!opened) return null;
-  const blank = !opened.research && !opened.product && !shown && (!opened.slug || failed === opened.slug);
-  const pages: ReactNode[] = opened.product
-    ? [<PitchPage key="pitch" />, <AnswerPage key="answer" />]
-    : opened.research
-      ? [...FACTS.map((fact, i) => <FactPage key={i} fact={fact} first={i === 0} />), <AnswerPage key="answer" />]
-      : shown
-        ? [
-            ...pictured(shown)
-              .slice(0, 1)
-              .map((o) => <OfferingPage key="u0" offering={o} profession={shown.profession.name} />),
-            <SamplePage key="sample" book={shown} />,
-            ...pictured(shown)
-              .slice(1)
-              .map((o, i) => <OfferingPage key={`u${i + 1}`} offering={o} profession={shown.profession.name} />),
-          ]
-        : [<Note key="wait" text={blank ? "Este livro não abriu agora. Tente de novo daqui a pouco." : "Abrindo o livro…"} />];
+  const key = opened.slug ?? ownKey;
+  const blank = !shown && !ownShown && (!key || failed === key);
+  const pages: ReactNode[] = ownShown
+    ? ownShown.facts.map((fact, i) => <FactPage key={i} fact={fact} label={i === 0 ? OWN_LABEL[ownShown.book] : null} />)
+    : shown
+      ? [
+          ...pictured(shown)
+            .slice(0, 1)
+            .map((o) => <OfferingPage key="u0" offering={o} profession={shown.profession.name} />),
+          <SamplePage key="sample" book={shown} />,
+          ...pictured(shown)
+            .slice(1)
+            .map((o, i) => <OfferingPage key={`u${i + 1}`} offering={o} profession={shown.profession.name} />),
+        ]
+      : [<Note key="wait" text={blank ? "Este livro não abriu agora. Tente de novo daqui a pouco." : "Abrindo o livro…"} />];
   // A last page left alone gets Arandu's word, so no spread ends on bare paper.
-  if (shown && pages.length % 2) pages.push(<Note key="end" text={CLOSING} />);
+  if ((shown || ownShown) && pages.length % 2) pages.push(<Note key="end" text={CLOSING} />);
   const spreads = Math.ceil(pages.length / 2);
   const proofSpreads = printable ? Array.from({ length: spreads }, (_, i) => pages.slice(i * 2, i * 2 + 2)) : [];
 
@@ -240,7 +249,7 @@ function Note({ text }: { text: string }) {
   );
 }
 
-function Cite({ source }: { source: Pick<Source, "label" | "url"> }) {
+function Cite({ source }: { source: { label: string; url: string | null } }) {
   const url = safeUrl(source.url);
   return (
     <p className={styles.src}>
@@ -364,41 +373,15 @@ function SamplePage({ book }: { book: Book }) {
   );
 }
 
-function FactPage({ fact, first }: { fact: Fact; first: boolean }) {
+// A page of Arandu's own books: a figure, what it means, and its source; Arandu's own statements have none.
+function FactPage({ fact, label }: { fact: StoryFact; label: string | null }) {
   return (
     <Card>
       <div className={styles.body}>
-        {first && <p className={styles.label}>Por que o Arandu existe</p>}
+        {label && <p className={styles.label}>{label}</p>}
         <p className={styles.figure}>{fact.figure}</p>
         <p className={styles.text}>{fact.text}</p>
-        <Cite source={fact.source} />
-      </div>
-    </Card>
-  );
-}
-
-// The product book's first page: what Arandu is, in the TV's words.
-function PitchPage() {
-  return (
-    <Card>
-      <div className={styles.body}>
-        <p className={styles.label}>O que é o Arandu</p>
-        <p className={styles.text}>{PITCH}</p>
-      </div>
-    </Card>
-  );
-}
-
-function AnswerPage() {
-  return (
-    <Card>
-      <div className={styles.body}>
-        <h3 className={styles.title}>{ANSWER.title}</h3>
-        {ANSWER.lines.map((line, i) => (
-          <p key={i} className={styles.text}>
-            {line}
-          </p>
-        ))}
+        {fact.source && <Cite source={fact.source} />}
       </div>
     </Card>
   );

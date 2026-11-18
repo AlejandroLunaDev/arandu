@@ -13,7 +13,7 @@
   height: 100vh;
   max-width: 1280px;
   margin: 0 auto;
-  padding: var(--nav-height) var(--space-6) 0;
+  padding: var(--space-6) var(--space-6) 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
@@ -45,59 +45,34 @@
   justify-self: end;
 }
 
-/* The foot runs across the scene's bottom, under the copy and the art, centred. */
-.pin:has(> .foot) {
-  grid-template-rows: minmax(0, 1fr) auto;
-}
-
-.foot {
-  grid-column: 1 / -1;
-  justify-self: center;
-  padding-bottom: var(--space-8);
-  text-align: center;
-}
-
 /*
  * The hero is Arandu's room at night, whatever the page's theme: one column, the room as large as the
- * space under the nav and over the motto allows, its floor's color behind it. Its copy is the TV's
+ * space allows, its floor's color behind it. Its copy is the TV's
  * title card (see hero), which leaves the flow once the stage lays it over the TV.
  */
 .hero {
   background: var(--ink-900);
 }
 
-/* Above the stage, so its copy and motto show over the room's wall; clicks pass through to the nav and the room. */
+/* Above the stage, so its copy shows over the room's wall; clicks pass through to the room. */
 .hero .pin {
   z-index: 6;
   pointer-events: none;
   max-width: none;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--space-4);
 }
 
 .hero .copy {
   max-width: none;
-}
-
-/* Close in on the shelves or the notebook, the motto steps aside for the way back to the room. */
-.hero .foot {
-  transition: opacity 0.3s ease;
-}
-
-:global(html[data-zoom]) .hero .foot {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hero .copy,
-.hero .foot {
   pointer-events: auto;
 }
 
+/* Centred in the screen: what the room leaves over splits above and below it, the floor's edge and the chair's feet showing under it. */
 .hero .art {
   container-type: size;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
 }
 
@@ -111,7 +86,7 @@
     grid-template-rows: auto minmax(0, 1fr);
     align-items: stretch;
     gap: var(--space-4);
-    padding: calc(var(--nav-height) + var(--space-4)) var(--space-4) var(--space-6);
+    padding: var(--space-4) var(--space-4) var(--space-6);
   }
 
   .copy {
@@ -127,13 +102,5 @@
 
   .flip .copy {
     justify-self: start;
-  }
-
-  .pin:has(> .foot) {
-    grid-template-rows: auto minmax(0, 1fr) auto;
-  }
-
-  .foot {
-    padding-bottom: 0;
   }
 }

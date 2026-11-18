@@ -229,7 +229,7 @@ function base(anchor: HTMLElement, face: number) {
 /** The furniture: it holds what falls on it, like the shelves, and never moves. */
 const FURNITURE = new Set<PropName>(["Desk", "ChairGamer", "Sofa", "SideTable", "PaperBin", "Mug", "Notebook"]);
 /** What only dresses the room: on the wall, or on the desk, out of the physics. */
-const DECOR = new Set<PropName>(["NeonSign", "StringLights", "Tv", "FrameTall", "FrameSquare"]);
+const DECOR = new Set<PropName>(["NeonSign", "StringLights", "Tv", "FrameTall", "FrameSquare", "GithubPlaque", "MottoSign"]);
 /** The frames hang larger than they were modelled, to read from across the room. */
 const FRAME_SCALE = 1.3;
 
@@ -273,6 +273,11 @@ function place(content: THREE.Object3D, kit: Kit, name: PropName, x: number, y: 
   return o;
 }
 
+/** How thick a shelf's plank is (build.py, shelf): what hangs under one hangs from this far below its top. */
+const SHELF_PLANK = 0.05;
+/** Where the motto's sign hangs from the middle shelf: x from its left end, z out from its middle; smaller on a phone. */
+const MOTTO_SIGN = { x: 1.15, z: 0.1, phone: 0.75 };
+
 /** The two books that are about Arandu itself, and not a course: what it is, and why it exists. */
 const ownBooks = (name: BookName): Array<[BookName, BookLook, string]> => [
   [name, LOOK.v6, PRODUCT],
@@ -308,7 +313,8 @@ function sideTable(kit: Kit, content: THREE.Object3D) {
  * the top one, short, with the plant over its edge and a few books. On a phone, with no side table,
  * Arandu's own two books lie on that pile.
  */
-function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: [number, number], top: [number, number], own: boolean) {
+function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: [number, number], top: [number, number], phone: boolean) {
+  const own = phone;
   const x0 = low[0] - 0.8;
   put(content, kit.make("ShelfLarge"), low[0], low[1]);
   const left = standBooks(kit, content, x0 + 0.1, low[1], [
@@ -345,6 +351,8 @@ function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: 
     ...(own ? ownBooks("BookShort") : []),
   ]);
   put(content, kit.make("LampMushroom"), x1 + 1.4, mid[1]);
+  // The motto hangs on two strings under the lamp's end of the plank, near its front edge.
+  put(content, kit.make("MottoSign"), x1 + MOTTO_SIGN.x, mid[1] - SHELF_PLANK, MOTTO_SIGN.z).scale.setScalar(phone ? MOTTO_SIGN.phone : 1);
 
   // The plant stands POT_EDGE (0.12 m) behind the shelf's front edge (0.17 m from its middle).
   const x2 = top[0] - 0.5;
@@ -401,6 +409,8 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     row = shelves(kit, content, [1, 0.35], [1, 1.1], [1, 1.85], true);
     place(content, kit, "NeonSign", 1, 2.6, ON_WALL);
     place(content, kit, "Tv", 1, 3.55, ON_WALL).scale.setScalar(1.75 / 2.2);
+    // The link to Arandu's code hangs from a nail under the TV's right corner.
+    place(content, kit, "GithubPlaque", 1.62, 2.86, ON_WALL);
   } else {
     place(content, kit, "ChairGamer", 0.85, 0, 0.72, 60);
     place(content, kit, "Desk", 2.15, 0, 0.32);
@@ -425,6 +435,8 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     // Two universities' photos on the wall left of the TV, over the chair.
     place(content, kit, "FrameTall", 0.42, 2.5, ON_WALL).scale.setScalar(FRAME_SCALE);
     place(content, kit, "FrameSquare", 0.9, 2.15, ON_WALL).scale.setScalar(FRAME_SCALE);
+    // The link to Arandu's code hangs from a nail under the TV's right corner, past the desk's end.
+    place(content, kit, "GithubPlaque", 3.22, 1.4, ON_WALL);
     place(content, kit, "NeonSign", 4.05, 2.5, ON_WALL);
     place(content, kit, "StringLights", 3.55, 3.22, ON_WALL);
     row = shelves(kit, content, [5.3, 1.45], [6.5, 2.2], [5.15, 2.85], false);
