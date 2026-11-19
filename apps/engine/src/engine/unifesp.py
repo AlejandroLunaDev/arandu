@@ -1,13 +1,25 @@
-"""Unifesp: each campus's course list and each course's active matriz curricular (UTF-8 HTML)."""
+"""Unifesp: each campus's course list and each course's active matriz curricular (UTF-8 HTML).
 
+The matriz links the course's list of curricular units; each first-termo unit offered there has a 'conteúdo
+programático' page whose ementa becomes the discipline's one topic, as Mackenzie's are (owner, 2026-11-19).
+"""
+
+import base64
+import datetime
+import hashlib
 import html as entities
+import io
+import json
 import re
+import tempfile
+import zipfile
 from types import SimpleNamespace
 
-from engine import curricula
+from engine import curricula, fetch
 from engine.html_table import rows
 
 INEP_CODE = 591  # Universidade Federal de São Paulo's CO_IES in the INEP census
+BASE = "https://cursos.siiu.unifesp.br"
 
 # The pages name the campus, not its city; five campuses carry their city's name, these two a region's.
 CITIES = {"BAIXADA SANTISTA": "Santos", "ZONA LESTE": "São Paulo"}
@@ -70,4 +82,72 @@ courses = SimpleNamespace(
     load=lambda conn, source_id, parsed: curricula.load_courses(
         conn, "unifesp_curriculum", INEP_CODE, "Unifesp, matriz curricular", parsed),
 )
-curriculum = SimpleNamespace(parse=parse_curriculum, load=curricula.load_subjects)
+UNIT_LIST = re.compile(r'href="(' + re.escape(BASE) + r'/graduacao/lista-unidades-curriculares\?[^"]+)"')
+OFFER = re.compile(r'data-url="(' + re.escape(BASE) + r'/graduacao/oferta/([^/"]+)/conteudo-programatico)"')
+UNIT_NAME = re.compile(r"<strong>Matéria: </strong>(.*?) \(\d+\)</p>")
+EMENTA = re.compile(r'<strong>Ementa</strong>\s*</div>\s*<div class="card-body[^"]*">(.*?)</div>\s*</div>\s*</div>', re.S)
+
+
+def _unit(key):
+    """The matéria id an offer url's base64 JSON key names."""
+    return json.loads(base64.b64decode(key + "=" * (-len(key) % 4)))["mater_id_mater"]
+
+
+def download_matriz(url, dest):
+    """Zip the matriz page and the conteúdo programático of each unit its course offers in the first termo.
+
+    Offers are listed per school year and semester: this year's first semester, else this year's annual offers
+    (semestre 0, as Medicina's), else last year's. The digest covers every page fetched.
+    shortcut: São José dos Campos's courses list no first-termo offer under any of these filters, so they get no
+    ementas; read their interdisciplinary entry course's list once one is found to hold them.
+    """
+    dest.seek(0)
+    dest.truncate()
+    with tempfile.TemporaryFile() as part:
+        digest = hashlib.sha256(fetch.download(url, part).encode())
+        part.seek(0)
+        page = part.read()
+        offers = {}
+        if listing := UNIT_LIST.search(page.decode("utf-8")):
+            year = datetime.date.today().year
+            for school_year, semester in ((year, 1), (year, 0), (year - 1, 1), (year - 1, 0)):
+                query = f"&filter_anoLetivo={school_year}&filter_semestre={semester}&filter_termo=1"
+                digest.update(fetch.download(entities.unescape(listing[1]) + query, part).encode())
+                part.seek(0)
+                for offer, key in OFFER.findall(part.read().decode("utf-8")):
+                    offers.setdefault(_unit(key), offer)  # one page per unit, whatever its class
+                if offers:
+                    break
+        with zipfile.ZipFile(dest, "w") as bundle:
+            bundle.writestr("page.html", page)
+            for n, offer in enumerate(offers.values()):
+                digest.update(fetch.download(offer, part).encode())
+                part.seek(0)
+                bundle.writestr(f"{n}.html", part.read())
+    return digest.hexdigest()
+
+
+def parse_page(doc):
+    """Return the matriz's subjects and (name, ementa) for each first-termo unit with one ementa."""
+    with zipfile.ZipFile(doc) as bundle:
+        subjects = parse_curriculum(io.BytesIO(bundle.read("page.html")))
+        first = {name for term, _, name, _, _ in subjects if term == 1}
+        found = {}
+        for item in bundle.namelist():
+            if item == "page.html":
+                continue
+            unit = bundle.read(item).decode("utf-8")
+            name, ementa = UNIT_NAME.search(unit), EMENTA.search(unit)
+            text = ementa and " ".join(entities.unescape(re.sub(r"<[^>]+>", " ", ementa[1])).split())
+            text = text and text.replace(" ¿ ", " – ")  # the site stores some dashes as '¿', which Portuguese never uses
+            if name and text and len(text) >= 30 and (name := " ".join(entities.unescape(name[1]).split())) in first:
+                found.setdefault(name, set()).add(text)
+    # Two ementas for one name (two units of that name in the termo) is not certain: the subject keeps none.
+    return subjects, sorted((name, texts.pop()) for name, texts in found.items() if len(texts) == 1)
+
+
+curriculum = SimpleNamespace(
+    download=download_matriz,
+    parse=parse_page,
+    load=lambda conn, source_id, parsed: curricula.load_described(conn, source_id, parsed, INEP_CODE, BASE),
+)
