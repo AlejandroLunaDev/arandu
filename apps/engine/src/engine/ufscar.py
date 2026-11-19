@@ -1,12 +1,14 @@
 """UFSCar ProGrad: course list, each course's campus pages, and each campus page's matriz curricular PDF (Plone)."""
 
 import html as entities
+import io
 import re
 from types import SimpleNamespace
 
 import pdfplumber
+import pypdfium2
 
-from engine import curricula
+from engine import curricula, ocr, vision
 
 INEP_CODE = 7  # Universidade Federal de São Carlos's CO_IES in the INEP census
 COURSES = "https://www.prograd.ufscar.br/pt-br/cursos/cursos-oferecidos/"
@@ -211,28 +213,118 @@ def _table_rows(pdf):
     return subjects
 
 
-def parse_curriculum(doc):
-    """Return (term, year, name, hours, is_elective) for every subject of a matriz PDF.
+TRANSCRIBE = """These images are the pages, in order, of one Brazilian university course's matriz curricular.
+Transcribe every curricular unit the matriz lists for each semester (also called perfil or período), in page order.
+Rules:
+- name: exactly as printed, with its capitalization and accents. Join a name wrapped over lines; drop a hyphen that
+  only splits a word at a line break. Leave out any subject code printed before the name.
+- term: the semester number the unit belongs to.
+- hours: the unit's total hours as printed (the Total or Carga Horária column), or null when none is printed.
+- elective: true when the matriz marks it optativa or eletiva.
+- Leave out totals, subtotals, headers, footnotes, and requisites.
+- Never guess: if a character is unreadable, write it as "?".
+Answer with JSON only: {"units": [{"term": 1, "name": "...", "hours": 60, "elective": false}]}"""
+MAX_PAGES = 12  # a longer PDF is a whole PPC: only its matriz pages are read
 
-    UFSCar matrices come in many layouts, so a PDF is kept only when every subject has a semester, the semesters run
-    1..n with no gap, and no name has its words glued together; anything else fails and is listed for review.
-    A PDF drawn as vector outlines has no text: it returns no subject and stays empty until OCR is added.
-    """
-    with pdfplumber.open(doc) as pdf:
-        if not any(page.chars for page in pdf.pages):
-            return []  # shortcut: outlined PDFs are skipped, add OCR when they are worth the cost
+
+def _read(data):
+    """The subjects the layout readers find in the PDF's text layer."""
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
         subjects = _matriz_rows(pdf) or _table_rows(pdf)
         chars = sum(len(page.chars) for page in pdf.pages)
     if not subjects and chars < 600:  # a title over a scanned or drawn table
-        raise ValueError(f"the matriz is an image with only {chars} characters of text: it needs OCR")
+        raise ValueError(f"the matriz is an image with only {chars} characters of text")
     if not subjects:
         raise ValueError("no subject found in the matriz curricular PDF")
+    if glued := [name for _, name, *_ in subjects if re.search(r"[a-zà-ú][A-ZÀ-Ú]|[a-zà-ú]\d", name)]:
+        raise ValueError(f"names with glued words, the text layer is not spaced: {glued[:3]}")
+    return _checked(subjects)
+
+
+def _spaced(name):
+    """A transcribed name with the spaces its PDF dropped ('dasSaúde', 'Térmicas1') put back.
+
+    shortcut: a capital starts a new word only after a lowercase connective or a 5+ letter word, so 'DevOps' and
+    'MedBE' stay whole but 'PowerPoint' would split; widen the rule if such a name shows up.
+    """
+    name = re.sub(r"(?<=[a-zà-ú])(?=\d)", " ", name)
+    return re.sub(r"\b([a-zà-ú]{2,}|[A-ZÀ-Ú][a-zà-ú]{4,})(?=[A-ZÀ-Ú][a-zà-ú])", r"\1 ", name)
+
+
+def _matriz_pages(texts):
+    """The pages to transcribe: all of a matriz, or a PPC's pages headed Matriz Curricular and the one after each."""
+    if len(texts) <= MAX_PAGES:
+        return list(range(len(texts)))
+    heads = [i for i, text in enumerate(texts) if re.search(r"(?i)matriz curricular", text[:300]) and "....." not in text]
+    pages = sorted({j for i in heads for j in (i, i + 1) if j < len(texts)})
+    if not pages or len(pages) > MAX_PAGES:
+        raise ValueError(f"a {len(texts)}-page PDF with {len(pages)} matriz pages: none read")
+    return pages
+
+
+def _transcribed(data):
+    """The matriz as a vision model reads its pages, kept only when a second reading confirms every word of every name.
+
+    The second reading is the PDF's own text layer when it has one, else Tesseract's OCR of the same pages. A name
+    with a word the second reading does not hold fails the whole matriz: a wrong name is worse than a missing grade.
+    """
+    texts = [page.get_textpage().get_text_range() for page in pypdfium2.PdfDocument(data)]
+    pages = _matriz_pages(texts)
+    images = ocr.render(data, 150)
+    units = vision.read_json(TRANSCRIBE, [images[i] for i in pages])["units"]
+    layer = " ".join(texts[i] for i in pages)
+    if len(layer.split()) >= 100:
+        words = layer.split()
+        seen = {ocr.key(w) for w in words} | {ocr.key(a + b) for a, b in zip(words, words[1:])}
+        spaceless = ocr.key(layer)  # a layer that glues words ('EstruturaeFuncionamento') still holds them
+        confirmed = lambda word: ocr.confirmed(word, seen) or (len(word) >= 4 and word in spaceless)
+    else:
+        seen = set().union(*(ocr.words(image) for dpi in ocr.DPIS for i, image in enumerate(ocr.render(data, dpi))
+                             if i in pages))
+        confirmed = lambda word: ocr.confirmed(word, seen)
+    subjects, unconfirmed = [], []
+    for unit in units:
+        name, term, hours = _spaced(" ".join(str(unit.get("name") or "").split())), unit.get("term"), unit.get("hours")
+        if term is None and unit.get("elective"):
+            continue  # an elective listed apart from the semesters: it belongs to none of them
+        if not isinstance(term, int) or term < 1 or not (hours is None or isinstance(hours, int)):
+            raise ValueError(f"the transcription gave no semester or hours for {name!r}: {unit}")
+        if not name or "?" in name or not all(confirmed(w) for w in map(ocr.key, name.split()) if w):
+            unconfirmed.append(name)
+        subjects.append((term, name, hours, bool(unit.get("elective"))))
+    if unconfirmed:
+        raise ValueError(f"the second reading does not confirm {len(unconfirmed)} names: {unconfirmed[:3]}")
+    if not subjects:
+        raise ValueError("the transcription found no subject")
+    return subjects
+
+
+def _checked(subjects):
+    """(term, year, name, hours, is_elective) rows, once every subject has a semester and the semesters run 1..n."""
     terms = {term for term, *_ in subjects}
     if None in terms or terms != set(range(1, max(terms) + 1)):
         raise ValueError(f"semesters {sorted(terms, key=lambda t: t or 0)} are not 1..n: the layout was not read")
-    if glued := [name for _, name, *_ in subjects if re.search(r"[a-zà-ú][A-ZÀ-Ú]|[a-zà-ú]\d", name)]:
-        raise ValueError(f"names with glued words, the text layer is not spaced: {glued[:3]}")
-    return [(term, (term + 1) // 2, name, hours, elective) for term, name, hours, elective in subjects]
+    # A unit printed with 0 hours ('Projeto integrador 1') has its hours elsewhere in the matriz: they stay unknown.
+    return [(term, (term + 1) // 2, name, hours or None, elective) for term, name, hours, elective in subjects]
+
+
+def parse_curriculum(doc):
+    """Return (term, year, name, hours, is_elective) for every subject of a matriz PDF.
+
+    UFSCar matrices come in many layouts. The layout readers come first; a matriz they cannot read (an unknown layout,
+    an image or outlined text, a text layer pdfminer cannot decode) is transcribed by a vision model and kept only
+    when a second reading confirms it. Anything else fails and is listed for review.
+    shortcut: a matriz that keeps failing is transcribed again on every run, as its hash only updates on success; cache
+    the transcription by digest if those runs grow costly.
+    """
+    data = doc.read()
+    try:
+        return _read(data)
+    except Exception as layout:  # pdfminer raises AttributeError on some text layers ('PSKeyword' has no 'decode')
+        try:
+            return _checked(_transcribed(data))
+        except ValueError as transcription:
+            raise ValueError(f"{layout}; transcribed: {transcription}") from transcription
 
 
 courses = SimpleNamespace(parse=parse_list, load=lambda conn, source_id, parsed: _register(conn, "ufscar_course", parsed))

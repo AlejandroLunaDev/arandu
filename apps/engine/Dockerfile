@@ -3,6 +3,8 @@
 
 FROM python:3.12-slim
 WORKDIR /app
+# Tesseract confirms the matrices a vision model transcribes from images (ufscar.py)
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por \n    && rm -rf /var/lib/apt/lists/*
 COPY apps/engine/pyproject.toml ./
 COPY apps/engine/src src
 RUN pip install --no-cache-dir .

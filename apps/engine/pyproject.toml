@@ -3,7 +3,7 @@ name = "engine"
 version = "0.1.0"
 description = "Arandu ingestion engine: fetches public São Paulo higher-education data into Supabase (ADR-0003, ADR-0004)."
 requires-python = ">=3.12"
-dependencies = ["certifi==2024.2.2", "pdfplumber==0.11.10", "psycopg[binary]==3.3.9"]
+dependencies = ["certifi==2024.2.2", "pdfplumber==0.11.10", "pillow==13.0.0", "psycopg[binary]==3.3.9", "pypdfium2==5.15.2"]
 
 [build-system]
 requires = ["hatchling"]
