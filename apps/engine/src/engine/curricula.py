@@ -78,5 +78,5 @@ def load_described(conn, source_id, parsed, inep_code, base):
                      source_id = excluded.source_id
                  where (disciplines.name, disciplines.topics, disciplines.program, disciplines.source_id)
                    is distinct from (excluded.name, excluded.topics, excluded.program, excluded.source_id)""",
-            (code, name, [description], program[0] if program else None, source_id, inep_code)).rowcount
+            (code, name, [description], (program[0] or None) if program else None, source_id, inep_code)).rowcount
     return written + load_subjects(conn, source_id, subjects)
