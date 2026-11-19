@@ -341,6 +341,10 @@ class FallbackTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "layout; transcribed: second"):
             self.parse({"side_effect": ValueError("second")})
 
+    def test_a_non_value_error_from_the_transcription_keeps_both_reasons(self):
+        with self.assertRaisesRegex(ValueError, "layout; transcribed: .*units"):
+            self.parse({"side_effect": KeyError("units")})
+
     def test_zero_hours_become_none(self):
         self.assertEqual(self.parse({"return_value": [(1, "Projeto integrador 1", 0, False)]}),
                          [(1, 1, "Projeto integrador 1", None, False)])
