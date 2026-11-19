@@ -1,0 +1,29 @@
+# Arandu
+
+> Arandu é um app de orientação vocacional com inteligência artificial, feito no Brasil. Um gato preto e curioso, também chamado Arandu, conversa com a pessoa, entende do que ela gosta e a ajuda a escolher um curso superior, com dados reais das universidades de São Paulo e com matérias reais do curso para experimentar antes de decidir.
+
+"Arandu" vem do guarani e quer dizer sabedoria. O lema do app é "A busca da sabedoria começa por você."
+
+## Para quem é
+
+- Para qualquer pessoa que está escolhendo um curso superior no Brasil, de qualquer idade: quem acabou o ensino médio, quem quer trocar de curso e quem quer mudar de área depois de anos de trabalho.
+- O Arandu ajuda a escolher, não decide pela pessoa. A decisão é sempre de quem usa.
+
+## Como funciona
+
+1. **Conhecer a pessoa:** o Arandu faz perguntas rápidas, uma de cada vez, sobre matérias, interesses e tempo livre.
+2. **Mostrar cursos que combinam:** cada curso vem com dados reais e com a fonte: as matérias da grade curricular, onde estudar e as formas de entrar, como SISU e ProUni, com a nota de corte como contexto.
+3. **Experimentar antes de escolher:** a pessoa experimenta uma ou duas matérias reais do primeiro semestre do curso. A inteligência artificial transforma essas matérias numa experiência feita para ela: o Arandu conta algo novo sobre a profissão, propõe um exercício e responde às perguntas.
+4. **Decidir:** a pessoa pode continuar, testar outro curso ou voltar para um anterior.
+
+## Dados
+
+- As grades e as ementas vêm das páginas públicas das universidades de São Paulo.
+- As formas de entrada e as notas de corte vêm de dados públicos do MEC e do INEP.
+- O Arandu não inventa dados: quando um dado não existe, ele não aparece.
+
+## Links
+
+- [Site do Arandu](https://aranduvocacional.com): a apresentação do app, com o quarto do Arandu em 3D.
+- [Código no GitHub](https://github.com/AlejandroLunaDev/arandu): o código público do app, da API e do motor de dados.
+- [Alejandro Luna](https://alejandrolunadev.site/es): quem criou o Arandu.
