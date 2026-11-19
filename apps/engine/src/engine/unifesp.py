@@ -21,7 +21,11 @@ BASE = "https://cursos.siiu.unifesp.br"
 
 # The pages name the campus, not its city; five campuses carry their city's name, these two a region's.
 CITIES = {"BAIXADA SANTISTA": "Santos", "ZONA LESTE": "São Paulo"}
-NAME_SHIFT = re.compile(r"(.+?) - (INTEGRAL|MATUTINO|VESPERTINO|NOTURNO)")
+NAME_SHIFT = re.compile(r"(.+?)(?: - | )(INTEGRAL|MATUTINO|VESPERTINO|NOTURNO)")
+# 'HISTÓRIA BACHARELADO' names its degree with no separator: the census match reads it only as ' - BACHARELADO'.
+DEGREE = re.compile(r" (BACHARELADO|LICENCIATURA)$")
+# 'CURSO SUPERIOR DE TECNOLOGIA OFTÁLMICA' drops the 'EM' the census match expects before the course's own name.
+TECHNOLOGY = re.compile(r"^CURSO SUPERIOR DE TECNOLOGIA (?!EM )")
 CAMPUS = re.compile(r"<strong>Campus: </strong>([^<]+)</p>")
 MATRIX = re.compile(r'<span>\d+ - ([^<]+)</span>\s*<a\s+href="([^"]+)"')
 TERM = re.compile(r"<strong>(\d+)&ordm; Termo</strong>")
@@ -38,6 +42,7 @@ def parse_courses(doc):
         if not campus or len(active) != 1:
             continue  # no single active matriz (all phased out or inactive): nothing current to show
         name, shift = (match[1], match[2]) if (match := NAME_SHIFT.fullmatch(label)) else (label, None)
+        name = TECHNOLOGY.sub("CURSO SUPERIOR DE TECNOLOGIA EM ", DEGREE.sub(r" - \1", name))
         city = campus[1].strip()
         courses.append((entities.unescape(active[0]), name, shift, CITIES.get(city, city)))
     if not courses:
