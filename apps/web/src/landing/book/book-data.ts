@@ -1,4 +1,4 @@
-import type { Book, BookSummary, OwnBook } from "@arandu/contracts";
+import type { Book, BookSummary, OwnBook, StoryFact } from "@arandu/contracts";
 
 // The shelf's books come from the API (GET /books, GET /books/:slug), and Arandu's own two from
 // GET /books/own/:book. Without NEXT_PUBLIC_API_URL the shelf keeps its own titles and the books open blank.
@@ -88,12 +88,17 @@ const isSource = (s: unknown) => {
   return v === null || (typeof v?.label === "string" && (v.url === null || typeof v.url === "string"));
 };
 
+const isFact = (f: StoryFact | null) =>
+  (f?.figure === null || typeof f?.figure === "string") && typeof f.text === "string" && isSource(f.source);
+
+// Its pages in reading order, at least one.
 const isOwnBook = (body: unknown): body is OwnBook => {
   const b = body as OwnBook | null;
   return (
     (b?.book === "produto" || b?.book === "solucao") &&
-    Array.isArray(b.facts) &&
-    b.facts.every((f) => typeof f?.figure === "string" && typeof f.text === "string" && isSource(f.source))
+    Array.isArray(b.pages) &&
+    b.pages.length > 0 &&
+    b.pages.every((p) => typeof p?.title === "string" && Array.isArray(p.facts) && p.facts.every(isFact))
   );
 };
 

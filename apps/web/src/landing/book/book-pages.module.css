@@ -13,6 +13,9 @@
   scale: var(--k, 1);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* The pages' row takes the whole height: the proofs' holder (book-pages.tsx) falls into a second, empty
+     row, which would otherwise share the free height and leave short pages short of the 3D ones. */
+  grid-template-rows: minmax(0, 1fr);
   column-gap: 8px;
   padding: 1px 1px 11px;
   color: var(--text);
@@ -108,9 +111,77 @@
   text-overflow: ellipsis;
 }
 
+/* Arandu's own books: long sections, so small print, and what still does not fit scrolls. */
+.own {
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  /* The turning corners' room stays outside what scrolls, so no line runs under the page count. */
+  padding-bottom: 8px;
+  margin-bottom: 36px;
+}
+
+.fact {
+  display: grid;
+  gap: 1px;
+}
+
 .text {
-  font-size: 12px;
-  line-height: 17px;
+  font-size: 10.5px;
+  line-height: 14px;
+}
+
+.text strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* A paragraph's shares, one thin bar each on a 0 to 100 track: what it measures over the bar, the share beside it.
+   Every track is the page's width, so the charts share one scale on every screen. */
+.bars {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 1px 8px;
+  margin: 2px 0 4px;
+}
+
+/* Two to a page, so each charted paragraph stands apart from the next. */
+.fact:has(.bars) {
+  margin-bottom: 12px;
+}
+
+.chart {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+}
+
+.bars .cap {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.track {
+  display: block;
+  border-radius: 0 3px 3px 0;
+  background: var(--surface-raised);
+}
+
+.bar {
+  fill: var(--primary);
+}
+
+.value {
+  text-align: end;
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .note {
@@ -118,14 +189,6 @@
   color: var(--text-muted);
   font-size: 12px;
   line-height: 17px;
-}
-
-.figure {
-  color: var(--primary);
-  font-family: var(--font-display);
-  font-size: 30px;
-  line-height: 36px;
-  font-weight: 700;
 }
 
 .photo {
@@ -227,6 +290,38 @@
   line-height: 15px;
 }
 
+/* The product book's screens of the app: three phones side by side, each over its step. */
+.screens {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: auto 0;
+}
+
+.screens figure {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.screens img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+
+.screens figcaption {
+  text-align: center;
+}
+
+/* One paragraph describing the subject, not a list: no indent. */
+.about {
+  display: block;
+  padding-left: 0;
+}
+
 /* What does not fit gives way; the source always shows. */
 .body > section {
   min-height: 0;
@@ -241,7 +336,8 @@
   line-height: 14px;
 }
 
-.subject .src {
+.subject .src,
+.fact .src {
   margin-top: 0;
 }
 
