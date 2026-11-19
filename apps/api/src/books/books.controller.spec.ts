@@ -39,9 +39,13 @@ describe('Books HTTP', () => {
   beforeEach(async () => {
     repository.list.mockReset().mockResolvedValue([]);
     repository.book.mockReset().mockResolvedValue(book);
-    repository.ownBook
-      .mockReset()
-      .mockImplementation(async (b: string) => ({ book: b, facts: [] }));
+    repository.ownBook.mockReset().mockImplementation(async (b: string) => ({
+      book: b,
+      pages: [
+        { title: 't', facts: [] },
+        { title: 'u', facts: [] },
+      ],
+    }));
     const moduleRef = await Test.createTestingModule({
       // The same limits, guard order and pipe as AppModule, with no sign-in at all.
       imports: [RateLimitModule, BooksModule],
@@ -138,7 +142,13 @@ describe('Books HTTP', () => {
       async (b) => {
         const res = await get(`/books/own/${b}`).expect(200);
 
-        expect(res.body).toEqual({ book: b, facts: [] });
+        expect(res.body).toEqual({
+          book: b,
+          pages: [
+            { title: 't', facts: [] },
+            { title: 'u', facts: [] },
+          ],
+        });
         expect(repository.ownBook).toHaveBeenCalledWith(b);
       },
     );

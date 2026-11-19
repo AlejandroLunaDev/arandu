@@ -3,6 +3,7 @@ import type {
   BookSummary,
   Offering,
   OwnBook,
+  StoryPage,
   SampleSubject,
   Source,
 } from '@arandu/contracts';
@@ -249,19 +250,28 @@ export class BooksRepository {
     }));
   }
 
-  /** A landing's own book, its facts in page order. Only an https link is served: the page renders it as a link. */
+  /** A landing's own book, one spread. Only an https link is served: the page renders it as a link. */
   async ownBook(book: OwnBook['book']): Promise<OwnBook> {
     const rows = await this.sql<
       {
-        figure: string;
-        text: string;
+        page: number;
+        title: string;
+        figure: string | null;
+        text: string | null;
         source_label: string | null;
         source_url: string | null;
+        verified_on: Date | null;
       }[]
-    >`select figure, text, source_label, source_url from public.story_facts where book = ${book} order by position`;
-    return {
-      book,
-      facts: rows.map((row) => ({
+    >`select p.page, p.title, f.figure, f.text, f.source_label, f.source_url, f.verified_on
+      from public.story_pages p
+      left join public.story_facts f on f.book = p.book and f.page = p.page
+      where p.book = ${book}
+      order by p.page, f.position`;
+    const pages: StoryPage[] = [];
+    for (const row of rows) {
+      if (pages.length < row.page) pages.push({ title: row.title, facts: [] });
+      if (row.text === null) continue; // a page with no facts yet
+      pages[row.page - 1].facts.push({
         figure: row.figure,
         text: row.text,
         source: row.source_label
@@ -270,9 +280,14 @@ export class BooksRepository {
               url: row.source_url?.startsWith('https://')
                 ? row.source_url
                 : null,
+              verifiedOn: row.verified_on!.toISOString().slice(0, 10),
             }
           : null,
-      })),
-    };
+      });
+    }
+    // The table allows pages 1 and 2 only; a missing one is a data error, not an empty page.
+    if (pages.length !== 2)
+      throw new Error(`Own book "${book}" has ${pages.length} pages, not 2`);
+    return { book, pages: [pages[0], pages[1]] };
   }
 }
