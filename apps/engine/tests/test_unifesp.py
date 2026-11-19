@@ -1,13 +1,30 @@
+import base64
+import datetime
+import hashlib
 import io
+import json
 import unittest
+import urllib.error
+import zipfile
 from pathlib import Path
+from unittest import mock
+
+import psycopg
 
 from engine import unifesp
 
 FIXTURES = Path(__file__).parent / "fixtures" / "unifesp"
 LIST = (FIXTURES / "unifesp_campus_1_courses.html").read_text(encoding="utf-8")
 MATRIX = (FIXTURES / "unifesp_matrix_1671.html").read_text(encoding="utf-8")
+UNIT = (FIXTURES / "unifesp_conteudo_programatico.html").read_text(encoding="utf-8")  # real: DANÇA E EXPRESSÃO CORPORAL (9750)
 URL = "https://cursos.siiu.unifesp.br/graduacao/curso/matriz-curricular/"
+LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+MATRIZ_URL = "https://cursos.siiu.unifesp.br/graduacao/curso/matriz-curricular/abc/detalhes"
+LIST_URL = "https://cursos.siiu.unifesp.br/graduacao/lista-unidades-curriculares?filter_campi=5&filter_curso=1671"
+THIS_YEAR = datetime.date.today().year
+FIRST = "CÁLCULO EM UMA VARIÁVEL"  # a real first-termo name of the 1671 matriz fixture
+SECOND_TERM = next(n for t, _, n, _, _ in unifesp.parse_curriculum(io.BytesIO(MATRIX.encode())) if t == 2)
+LONG = "Estudo dos limites, derivadas e integrais de funções reais de uma variável, com aplicações."
 
 
 def doc(text):
@@ -98,6 +115,232 @@ class UnpublishedStructureTest(unittest.TestCase):
         page = (FIXTURES / "unifesp_abi_complementar.html").read_text(encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "only a 'Formação complementar' pool, with no termo"):
             unifesp.parse_curriculum(doc(page))
+
+
+def offer(mater, turno="I", pad=True):
+    key = base64.b64encode(json.dumps({"mater_id_mater": str(mater), "turno": turno}).encode()).decode()
+    return f"{unifesp.BASE}/graduacao/oferta/{key if pad else key.rstrip('=')}/conteudo-programatico"
+
+
+def listing(*urls):
+    return "".join(f'<button data-url="{u}">x</button>' for u in urls)
+
+
+def unit_page(name, ementa=LONG, code=1):
+    page = UNIT.replace("DANÇA E EXPRESSÃO CORPORAL (9750)", f"{name} ({code})")
+    tag = '<p class="card-text quebra-texto mb-0">'
+    start = page.index(tag, page.index("<strong>Ementa</strong>")) + len(tag)
+    return page[:start] + ementa + page[page.index("</p>", start):]
+
+
+def bundle(matriz, *units):
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("page.html", matriz)
+        for n, unit in enumerate(units):
+            z.writestr(f"{n}.html", unit)
+    out.seek(0)
+    return out
+
+
+class UnitKeyTest(unittest.TestCase):
+    def test_padded_and_unpadded_base64_give_the_same_matter_id(self):
+        for mater in (9750, 97500, 1):
+            with self.subTest(mater):
+                padded, bare = offer(mater).split("/")[-2], offer(mater, pad=False).split("/")[-2]
+                self.assertEqual(unifesp._unit(padded), str(mater))
+                self.assertEqual(unifesp._unit(bare), str(mater))
+
+    def test_the_real_offer_key_without_padding_is_read(self):
+        key = "eyJtYXRlcl9pZF9tYXRlciI6Ijk3NTAiLCJzZXJpZV9hbm9fbGV0aXZvIjoiMjAyNiIsInNlcmllX3NlcmllIjoiMSIsInNlcmllX3NlbWVzdHJlIjoiMSIsInNlcmllX2N1cnNvX2lkX2N1cnNvIjoiNzgwIiwidHVybm8iOiJJIn0"
+        self.assertEqual(unifesp._unit(key), "9750")
+
+
+class ParsePageTest(unittest.TestCase):
+    def pairs(self, *units, matriz=MATRIX):
+        return unifesp.parse_page(bundle(matriz, *units))
+
+    def test_first_termo_name_keeps_its_ementa_and_the_subjects_are_the_matriz(self):
+        subjects, pairs = self.pairs(unit_page(FIRST))
+        self.assertEqual(subjects, unifesp.parse_curriculum(doc(MATRIX)))
+        self.assertEqual(pairs, [(FIRST, LONG)])
+
+    def test_the_real_page_gives_its_exact_ementa(self):
+        matriz = MATRIX.replace(FIRST, "DANÇA E EXPRESSÃO CORPORAL")
+        _, pairs = self.pairs(UNIT, matriz=matriz)
+        self.assertEqual(pairs, [("DANÇA E EXPRESSÃO CORPORAL", "Estudo da dança como tema da cultura corporal contemporânea; Estudo do ritmo e suas relações com a expressão do movimento humano. Reconhecimento da dança como prática de atuação para o profissional da Educação Física e Saúde.")])
+
+    def test_a_unit_of_a_later_termo_is_ignored(self):
+        self.assertEqual(self.pairs(unit_page(SECOND_TERM))[1], [])
+
+    def test_a_name_missing_from_the_matriz_is_ignored(self):
+        self.assertEqual(self.pairs(unit_page("OUTRA COISA"))[1], [])
+
+    def test_two_different_ementas_for_one_name_are_dropped(self):
+        self.assertEqual(self.pairs(unit_page(FIRST), unit_page(FIRST, LONG + " Outra."))[1], [])
+
+    def test_the_same_ementa_twice_is_kept_once(self):
+        self.assertEqual(self.pairs(unit_page(FIRST), unit_page(FIRST))[1], [(FIRST, LONG)])
+
+    def test_a_short_ementa_is_dropped_and_thirty_chars_is_kept(self):
+        self.assertEqual(self.pairs(unit_page(FIRST, "x" * 29))[1], [])
+        self.assertEqual(self.pairs(unit_page(FIRST, "x" * 30))[1], [(FIRST, "x" * 30)])
+
+    def test_inverted_question_mark_becomes_a_dash_and_entities_and_tags_are_cleaned(self):
+        _, pairs = self.pairs(unit_page(FIRST, "Limites ¿ derivadas &amp; <b>integrais</b>   de funções reais."))
+        self.assertEqual(pairs, [(FIRST, "Limites – derivadas & integrais de funções reais.")])
+
+    def test_a_page_without_name_or_ementa_is_skipped(self):
+        self.assertEqual(self.pairs("<html></html>", unit_page(FIRST).replace("Ementa", "Outro"))[1], [])
+
+    def test_only_page_html_gives_the_subjects_and_no_pairs(self):
+        subjects, pairs = self.pairs()
+        self.assertEqual((subjects, pairs), (unifesp.parse_curriculum(doc(MATRIX)), []))
+
+    def test_pairs_are_sorted_by_name(self):
+        other = next(n for t, _, n, _, _ in unifesp.parse_curriculum(doc(MATRIX)) if t == 1 and n != FIRST)
+        names = [n for n, _ in self.pairs(unit_page(FIRST), unit_page(other))[1]]
+        self.assertEqual(names, sorted([FIRST, other]))
+
+    def test_a_matriz_without_structure_still_raises(self):
+        with self.assertRaises(ValueError):
+            self.pairs(matriz=(FIXTURES / "unifesp_no_structure.html").read_text(encoding="utf-8"))
+
+
+def query(year, semester):
+    return f"&filter_anoLetivo={year}&filter_semestre={semester}&filter_termo=1"
+
+
+class DownloadMatrizTest(unittest.TestCase):
+    MATRIZ = f'<a href="{LIST_URL.replace("&", "&amp;")}">unidades</a>'
+
+    def run_download(self, matriz, bodies, errors=None):
+        """bodies maps a url or a url suffix to its text; every url fetched is recorded."""
+        seen = []
+
+        def fake(url, dest, **kw):
+            seen.append(url)
+            if errors and url in errors:
+                raise errors[url]
+            body = (matriz if url == MATRIZ_URL else next(b for k, b in bodies.items() if url.endswith(k))).encode()
+            dest.seek(0)
+            dest.truncate()
+            dest.write(body)
+            return hashlib.sha256(body).hexdigest()
+
+        dest = io.BytesIO()
+        with mock.patch.object(unifesp.fetch, "download", side_effect=fake):
+            digest = unifesp.download_matriz(MATRIZ_URL, dest)
+        return digest, zipfile.ZipFile(io.BytesIO(dest.getvalue())), seen
+
+    def test_first_semester_with_offers_stops_there(self):
+        a = offer(1)
+        _, z, seen = self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): listing(a), a: "unit a"})
+        self.assertEqual(seen, [MATRIZ_URL, LIST_URL + query(THIS_YEAR, 1), a])
+        self.assertEqual(z.namelist(), ["page.html", "0.html"])
+        self.assertEqual(z.read("0.html"), b"unit a")
+        self.assertEqual(z.read("page.html"), self.MATRIZ.encode())
+
+    def test_empty_semester_1_falls_back_to_semester_0(self):
+        a = offer(2)
+        _, z, seen = self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): "none", query(THIS_YEAR, 0): listing(a), a: "unit"})
+        self.assertEqual(seen, [MATRIZ_URL, LIST_URL + query(THIS_YEAR, 1), LIST_URL + query(THIS_YEAR, 0), a])
+        self.assertEqual(z.namelist(), ["page.html", "0.html"])
+
+    def test_falls_back_to_last_year_in_order_when_this_year_is_empty(self):
+        a = offer(3)
+        order = [query(THIS_YEAR, 1), query(THIS_YEAR, 0), query(THIS_YEAR - 1, 1), query(THIS_YEAR - 1, 0)]
+        for n in (3, 4):
+            with self.subTest(n):
+                bodies = {q: "none" for q in order[:n - 1]} | {order[n - 1]: listing(a), a: "u"}
+                _, z, seen = self.run_download(self.MATRIZ, bodies)
+                self.assertEqual(seen[1:-1], [LIST_URL + q for q in order[:n]])
+                self.assertEqual(len(z.namelist()), 2)
+
+    def test_no_offer_under_any_filter_gives_only_page_html(self):
+        order = [query(THIS_YEAR, 1), query(THIS_YEAR, 0), query(THIS_YEAR - 1, 1), query(THIS_YEAR - 1, 0)]
+        _, z, seen = self.run_download(self.MATRIZ, {q: "none" for q in order})
+        self.assertEqual(z.namelist(), ["page.html"])
+        self.assertEqual(len(seen), 5)
+
+    def test_one_unit_across_two_classes_is_fetched_once(self):
+        a1, a2, b = offer(10, "I"), offer(10, "N", pad=False), offer(11)
+        self.assertNotEqual(a1, a2)
+        _, z, seen = self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): listing(a1, a2, b), a1: "a", b: "b"})
+        self.assertEqual(seen[2:], [a1, b])
+        self.assertEqual([z.read(n) for n in z.namelist()[1:]], [b"a", b"b"])
+
+    def test_a_page_without_a_list_link_gives_only_page_html_and_one_fetch(self):
+        digest, z, seen = self.run_download("<html></html>", {})
+        self.assertEqual((z.namelist(), seen), (["page.html"], [MATRIZ_URL]))
+        self.assertEqual(digest, hashlib.sha256(hashlib.sha256(b"<html></html>").hexdigest().encode()).hexdigest())
+
+    def test_the_digest_changes_when_a_unit_page_changes_and_not_otherwise(self):
+        a = offer(1)
+        bodies = {query(THIS_YEAR, 1): listing(a), a: "v1"}
+        self.assertEqual(self.run_download(self.MATRIZ, bodies)[0], self.run_download(self.MATRIZ, bodies)[0])
+        self.assertNotEqual(self.run_download(self.MATRIZ, bodies)[0], self.run_download(self.MATRIZ, bodies | {a: "v2"})[0])
+
+    def test_the_digest_changes_when_the_matriz_page_changes(self):
+        empty = {"&filter_termo=1": "none"}
+        self.assertNotEqual(self.run_download(self.MATRIZ + " ", empty)[0], self.run_download(self.MATRIZ, empty)[0])
+
+    def test_an_error_fetching_a_unit_page_propagates(self):
+        a = offer(1)
+        err = urllib.error.HTTPError(a, 500, "boom", {}, None)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): listing(a)}, errors={a: err})
+
+    def test_an_error_fetching_the_listing_propagates(self):
+        url = LIST_URL + query(THIS_YEAR, 1)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_download(self.MATRIZ, {}, errors={url: urllib.error.HTTPError(url, 503, "x", {}, None)})
+
+    def test_dest_is_rewritten_from_scratch(self):
+        dest = io.BytesIO(b"stale bytes that must go" * 50)
+        with mock.patch.object(unifesp.fetch, "download", side_effect=lambda u, d, **k: (d.write(b"<html></html>"), "h")[1]):
+            unifesp.download_matriz(MATRIZ_URL, dest)
+        self.assertEqual(zipfile.ZipFile(io.BytesIO(dest.getvalue())).namelist(), ["page.html"])
+
+
+class CurriculumLocalDbTest(unittest.TestCase):
+    def setUp(self):
+        try:
+            self.conn = psycopg.connect(LOCAL_DB, connect_timeout=2)
+        except psycopg.OperationalError as error:
+            self.skipTest(f"local Supabase is not reachable: {error}")
+        self.addCleanup(self.conn.close)  # never committed: closing rolls everything back
+        run = self.conn.execute
+        base = run("insert into sources (adapter, url, label, last_fetched_at) values ('inep_census', 'https://example.test/unifesp-census', 'c', now()) returning id").fetchone()[0]
+        run("""insert into institutions (inep_code, name, kind, source_id) values (591, 'Unifesp', 'public', %s)
+               on conflict (inep_code) do nothing""", (base,))
+        run("""insert into courses (inep_code, institution_id, name, degree, shift, duration_years, city, source_id)
+               select 9990591, id, 'Teste', 'bacharelado', 'integral', 4, 'São Paulo', %s
+               from institutions where inep_code = 591""", (base,))
+        unifesp.courses.load(self.conn, 0, [(MATRIZ_URL, "Teste", "INTEGRAL", "São Paulo")])
+        self.source = run("select id from sources where url = %s", (MATRIZ_URL,)).fetchone()[0]
+        self.parsed = unifesp.parse_page(bundle(MATRIX, unit_page(FIRST)))
+
+    def test_load_stores_unifesp_disciplines_links_the_matching_subject_and_a_rerun_changes_nothing(self):
+        unifesp.curriculum.load(self.conn, self.source, self.parsed)
+        found = dict(self.conn.execute(
+            "select d.code, d.topics from public.disciplines d join public.institutions i on i.id = d.institution_id "
+            "where d.source_id = %s and i.inep_code = 591", (self.source,)).fetchall())
+        self.assertEqual(found, {f"graduacao/curso/matriz-curricular/abc/detalhes#{FIRST}": [LONG]})
+        linked = self.conn.execute(
+            "select name from public.curriculum_subjects where source_id = %s and discipline_id is not null", (self.source,)).fetchall()
+        self.assertEqual(linked, [(FIRST,)])
+        self.assertEqual(unifesp.curriculum.load(self.conn, self.source, self.parsed), 0)
+
+
+class WiringTest(unittest.TestCase):
+    def test_curriculum_adapter_wires_download_parse_and_a_described_load(self):
+        self.assertIs(unifesp.curriculum.download, unifesp.download_matriz)
+        self.assertIs(unifesp.curriculum.parse, unifesp.parse_page)
+        with mock.patch.object(unifesp.curricula, "load_described", return_value=3) as load:
+            self.assertEqual(unifesp.curriculum.load("conn", 9, "parsed"), 3)
+        load.assert_called_once_with("conn", 9, "parsed", 591, unifesp.BASE)
+
 
 if __name__ == "__main__":
     unittest.main()
