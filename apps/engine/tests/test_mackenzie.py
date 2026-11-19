@@ -220,6 +220,13 @@ class ComponenteCurricularHeaderTest(unittest.TestCase):
         self.assertEqual(mackenzie.parse_curriculum(doc(html)), [(1, 1, "Cálculo", None, False)])
 
 
+class ParagraphLabelTest(unittest.TestCase):
+    def test_a_paragraph_ending_in_a_colon_is_a_label_not_a_subject(self):
+        html = ('<a href="#tab-content-1a_etapa1">1ª Etapa</a><div id="tab-content-1a_etapa1" class="tab-pane fade active in">'
+                '<p><b>Período(s) Oferecido(s):</b></p><p>Cálculo</p><p>Física</p></div>')
+        self.assertEqual([s[2] for s in mackenzie.parse_curriculum(doc(html))], ["Cálculo", "Física"])
+
+
 def links(*hrefs):
     return "".join(f'<a href="{h}">x</a>' for h in hrefs)
 
