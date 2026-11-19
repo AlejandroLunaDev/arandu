@@ -271,14 +271,34 @@ isOneToOne: false
                   ]
                 },"story_facts": {
                   Row: {
-                    "book": string,"figure": string,"id": number,"position": number,"source_label": string | null,"source_url": string | null,"text": string,"verified_on": string
+                    "book": string,"figure": string | null,"id": number,"page": number,"position": number,"source_label": string | null,"source_url": string | null,"text": string,"verified_on": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "book": string,"figure": string,"id"?: never,"position": number,"source_label"?: string | null,"source_url"?: string | null,"text": string,"verified_on": string
+                    "book": string,"figure"?: string | null,"id"?: never,"page": number,"position": number,"source_label"?: string | null,"source_url"?: string | null,"text": string,"verified_on": string
                   }
                   Update: {
-                    "book"?: string,"figure"?: string,"id"?: never,"position"?: number,"source_label"?: string | null,"source_url"?: string | null,"text"?: string,"verified_on"?: string
+                    "book"?: string,"figure"?: string | null,"id"?: never,"page"?: number,"position"?: number,"source_label"?: string | null,"source_url"?: string | null,"text"?: string,"verified_on"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "story_facts_book_page_fkey"
+      columns: ["book", "page"]
+      isOneToOne: false
+      referencedRelation: "story_pages"
+      referencedColumns: ["book", "page"]
+    }
+                  ]
+                },"story_pages": {
+                  Row: {
+                    "book": string,"page": number,"title": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "book": string,"page": number,"title": string
+                  }
+                  Update: {
+                    "book"?: string,"page"?: number,"title"?: string
                   }
                   Relationships: [
 

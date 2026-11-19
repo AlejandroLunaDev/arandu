@@ -26,9 +26,13 @@ describe('Books (e2e)', () => {
       .overrideProvider(BooksRepository)
       .useValue({
         list: vi.fn().mockResolvedValue([]),
-        ownBook: vi
-          .fn()
-          .mockImplementation(async (b: string) => ({ book: b, facts: [] })),
+        ownBook: vi.fn().mockImplementation(async (b: string) => ({
+          book: b,
+          pages: [
+            { title: 't', facts: [] },
+            { title: 'u', facts: [] },
+          ],
+        })),
         book: vi
           .fn()
           .mockImplementation(async (slug: string) =>
@@ -65,7 +69,13 @@ describe('Books (e2e)', () => {
       .get('/books/own/produto')
       .expect(200);
 
-    expect(res.body).toEqual({ book: 'produto', facts: [] });
+    expect(res.body).toEqual({
+      book: 'produto',
+      pages: [
+        { title: 't', facts: [] },
+        { title: 'u', facts: [] },
+      ],
+    });
     expect(res.headers['cache-control']).toBe('public, max-age=21600');
     await request(app.getHttpServer()).get('/books/own/xyz').expect(404);
   });

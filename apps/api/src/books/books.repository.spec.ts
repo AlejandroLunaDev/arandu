@@ -873,66 +873,182 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
   });
 });
-
-// Needs public.story_facts (the story-facts migration, which seeds 10 rows). Own rows sit at positions 900+, which
-// the seed never uses, and are removed afterwards; assertions look only at them.
+// Needs public.story_pages and public.story_facts as the story-pages migration leaves them (4 pages, 18 facts). Every
+// test that changes them does it inside a transaction that is rolled back, so the tables stay exactly as seeded.
 describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   const sql = postgres(url ?? '', { max: 1, onnotice: () => {} });
   const repository = new BooksRepository(sql);
-  const clean = () => sql`delete from public.story_facts where position >= 900`;
-  const mine = async () =>
-    (await repository.ownBook('produto')).facts.filter((f) =>
-      f.figure.startsWith('t-'),
-    );
 
-  beforeAll(async () => {
-    await clean();
-    // Inserted out of order on purpose.
-    await sql`insert into public.story_facts (book, position, figure, text, source_label, source_url, verified_on) values
-      ('produto', 903, 't-http', 'c', 'Label', 'http://insecure.test/x', '2026-01-01'),
-      ('produto', 901, 't-own', 'a', null, null, '2026-01-01'),
-      ('produto', 902, 't-nourl', 'b', 'Own count', null, '2026-01-01'),
-      ('produto', 904, 't-https', 'd', 'Label', 'https://ok.test/x', '2026-01-01'),
-      ('solucao', 901, 't-other-book', 'e', null, null, '2026-01-01')`;
+  class Rollback extends Error {}
+  /** Runs `fn` in a transaction and always rolls it back; resolves with what `fn` returned. */
+  const rolledBack = async <T>(
+    fn: (tx: postgres.TransactionSql) => Promise<T>,
+  ): Promise<T> => {
+    let out: T | undefined;
+    await sql
+      .begin(async (tx) => {
+        out = await fn(tx);
+        throw new Rollback();
+      })
+      .catch((e) => {
+        if (!(e instanceof Rollback)) throw e;
+      });
+    return out as T;
+  };
+  const insertFact = (
+    tx: postgres.TransactionSql,
+    row: { page: number; position: number; label?: string; url?: string },
+  ) => tx`insert into public.story_facts
+    (book, page, position, text, source_label, source_url, verified_on)
+    values ('solucao', ${row.page}, ${row.position}, 't', ${row.label ?? null}, ${row.url ?? null}, '2026-01-01')`;
+
+  // A transaction runs the same queries as the pool; the repository only types it as the pool.
+  const inTx = (tx: postgres.TransactionSql) =>
+    new BooksRepository(tx as unknown as postgres.Sql);
+
+  afterAll(() => sql.end());
+
+  it('has the migration seed: 4 pages and 18 facts', async () => {
+    const [{ pages, facts }] = await sql<{ pages: number; facts: number }[]>`
+      select (select count(*)::int from public.story_pages) as pages,
+             (select count(*)::int from public.story_facts) as facts`;
+
+    expect({ pages, facts }).toEqual({ pages: 4, facts: 18 });
   });
 
-  afterAll(async () => {
-    await clean();
-    await sql.end();
-  });
+  it('serves the solucao spread', async () => {
+    const { book, pages } = await repository.ownBook('solucao');
 
-  it('orders the facts by position, only of the requested book', async () => {
-    const res = await repository.ownBook('produto');
-
-    expect(res.book).toBe('produto');
-    expect((await mine()).map((f) => f.figure)).toEqual([
-      't-own',
-      't-nourl',
-      't-http',
-      't-https',
+    expect(book).toBe('solucao');
+    expect(pages.map((p) => p.title)).toEqual([
+      'O problema',
+      'Por que acontece',
     ]);
-    expect(res.facts.map((f) => f.figure)).not.toContain('t-other-book');
+    expect(pages.map((p) => p.facts.length)).toEqual([4, 3]);
+    expect(pages[0].facts[0].figure).toBe('24,8%');
+    expect(pages[0].facts.map((f) => f.figure)).toEqual([
+      '24,8%',
+      '60%',
+      '25%',
+      '7,4 milhões',
+    ]);
+    const source = pages[0].facts[0].source;
+    expect(source?.label).toBe('Semesp, Mapa do Ensino Superior, 16ª ed.');
+    expect(source?.url).toMatch(/^https:\/\//);
+    expect(source?.verifiedOn).toBe('2026-11-19');
+    for (const f of pages[1].facts) {
+      expect(f.figure).toBeNull();
+      expect(f.source).toBeNull();
+    }
   });
 
-  it('maps no source label to a null source', async () => {
-    expect((await mine())[0]).toEqual({
-      figure: 't-own',
-      text: 'a',
-      source: null,
+  it('serves the produto spread', async () => {
+    const { pages } = await repository.ownBook('produto');
+
+    expect(pages.map((p) => p.title)).toEqual([
+      'Experimentar antes de escolher',
+      'Feito com dados reais',
+    ]);
+    expect(pages.map((p) => p.facts.length)).toEqual([6, 5]);
+    const grades = pages[1].facts.find((f) => f.figure === '+66 mil');
+    expect(grades?.source?.label).toBeTruthy();
+    expect(grades?.source?.url).toBeNull();
+  });
+
+  it('keeps a non-https url out of the page', async () => {
+    const fact = await rolledBack(async (tx) => {
+      await insertFact(tx, {
+        page: 2,
+        position: 99,
+        label: 'L',
+        url: 'http://insecure.test/x',
+      });
+      return (await inTx(tx).ownBook('solucao')).pages[1].facts[3];
+    });
+
+    expect(fact.source).toEqual({
+      label: 'L',
+      url: null,
+      verifiedOn: '2026-01-01',
     });
   });
 
-  it('keeps a label without a url', async () => {
-    expect((await mine())[1].source).toEqual({ label: 'Own count', url: null });
+  it('returns facts [] for a page with no facts', async () => {
+    const pages = await rolledBack(async (tx) => {
+      await tx`delete from public.story_facts where book = 'solucao' and page = 2`;
+      return (await inTx(tx).ownBook('solucao')).pages;
+    });
+
+    expect(pages[1]).toEqual({ title: 'Por que acontece', facts: [] });
+    expect(pages[0].facts).toHaveLength(4);
   });
 
-  it('turns a non-https url into null and keeps an https one', async () => {
-    const facts = await mine();
-
-    expect(facts[2].source).toEqual({ label: 'Label', url: null });
-    expect(facts[3].source).toEqual({
-      label: 'Label',
-      url: 'https://ok.test/x',
+  it('throws when a page is missing', async () => {
+    const result = rolledBack(async (tx) => {
+      await tx`delete from public.story_facts where book = 'solucao' and page = 2`;
+      await tx`delete from public.story_pages where book = 'solucao' and page = 2`;
+      return inTx(tx)
+        .ownBook('solucao')
+        .then(
+          () => 'resolved',
+          (e: Error) => e.message,
+        );
     });
+
+    await expect(result).resolves.toMatch(/has 1 pages, not 2/);
+  });
+
+  it('throws the pages message, not a TypeError, when page 1 is missing but page 2 has facts', async () => {
+    const result = rolledBack(async (tx) => {
+      await tx`delete from public.story_facts where book = 'produto' and page = 1`;
+      await tx`delete from public.story_pages where book = 'produto' and page = 1`;
+      return inTx(tx)
+        .ownBook('produto')
+        .then(
+          () => 'resolved',
+          (e: Error) => `${e.constructor.name}: ${e.message}`,
+        );
+    });
+
+    await expect(result).resolves.toMatch(/^Error: .*has 1 pages, not 2/);
+  });
+
+  describe('constraints', () => {
+    it('rejects a fact on page 3', async () => {
+      await expect(
+        rolledBack((tx) => insertFact(tx, { page: 3, position: 1 })),
+      ).rejects.toThrow();
+    });
+
+    it('rejects a fact on a missing page', async () => {
+      await expect(
+        rolledBack(async (tx) => {
+          await tx`delete from public.story_facts where book = 'solucao' and page = 2`;
+          await tx`delete from public.story_pages where book = 'solucao' and page = 2`;
+          await insertFact(tx, { page: 2, position: 1 });
+        }),
+      ).rejects.toThrow(/foreign key/);
+    });
+
+    it('rejects a duplicate (book, page, position)', async () => {
+      await expect(
+        rolledBack((tx) => insertFact(tx, { page: 1, position: 1 })),
+      ).rejects.toThrow(/duplicate key/);
+    });
+
+    it('rejects a source_url without a source_label', async () => {
+      await expect(
+        rolledBack((tx) =>
+          insertFact(tx, { page: 1, position: 50, url: 'https://x.test/' }),
+        ),
+      ).rejects.toThrow(/check constraint/);
+    });
+  });
+
+  it('left the story tables as seeded', async () => {
+    const [{ facts }] = await sql<{ facts: number }[]>`
+      select count(*)::int as facts from public.story_facts`;
+
+    expect(facts).toBe(18);
   });
 });
