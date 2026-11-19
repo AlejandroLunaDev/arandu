@@ -96,12 +96,12 @@ def parse_curriculum(doc):
         pane_start = html.find(f'id="tab-content-{tab}"')
         if not start <= pane_start < end or (suffix and not tab.endswith(suffix)):
             continue  # an etapa of another version
-        stop = html.find('id="tab-content-', pane_start + 1)
-        pane = html[pane_start:stop if stop > 0 else None]
+        # The last pane ends where the page's sidebar ('Sobre o Curso': type, duration, fee) begins.
+        stop = min((pos for marker in ('id="tab-content-', "<aside") if (pos := html.find(marker, pane_start + 1)) > 0),
+                   default=None)
+        pane = html[pane_start:stop]
         names = [row[0][0] for row in rows(pane) if len(row) == 2 and row[0][0] and row[0][0] not in HEADERS]
-        # A paragraph ending in ':' labels what follows ('Período(s) Oferecido(s):'), it is not a subject.
-        names = names or [text for p in re.findall(r"<p>(.*?)</p>", pane, re.S)
-                          if (text := _text(p)) and not text.endswith(":")]
+        names = names or [text for p in re.findall(r"<p>(.*?)</p>", pane, re.S) if (text := _text(p))]
         # Hours are left out: the page mixes units ('4' per subject, '440' for the internship) and states none.
         subjects += [(term, (term + 1) // 2, name, None, name.upper().startswith(("OPTATIVA", "ELETIVA")))
                      for name in names]

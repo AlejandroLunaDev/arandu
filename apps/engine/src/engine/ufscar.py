@@ -136,7 +136,7 @@ def _matriz_rows(pdf):
 NAME_HEAD = re.compile(r"(?i)disciplina|componente|atividade|unidade curricular")
 TERM_HEAD = re.compile(r"(?i)^(?:perfil|per[ií]odo|semestre)|^p$")  # 'P' heads the período column
 HOURS_HEAD = re.compile(r"(?i)carga|^total|^ch\b|^cht$")
-WRAP_END = re.compile(r"\s(?:e|de|da|do|das|dos|em|na|no|a|o|para|com)$")  # a name cut before its last words
+ORDINAL = re.compile(r"\d{1,2}\s*[°º]")
 NOT_A_SUBJECT = re.compile(r"(?i)^(?:sub-?)?tota|^disciplinas obrigat|^carga[- ]hor|^cr[eé]ditos|^per[ií]odo|^perfi[ls]|^semestre|^[\d\s()h,./°º-]+$")
 ORDINALS = "primeiro segundo terceiro quarto quinto sexto setimo oitavo nono decimo".split()
 
@@ -192,14 +192,12 @@ def _table_rows(pdf):
                     numbered = any(cell.isdigit() for cell in row)
                     # Only a subject row (it has credits or hours) is shifted; a wrapped name's tail has no numbers.
                     if spill and not spill.isdigit() and numbered:
-                        if not name:
+                        if not name or ORDINAL.fullmatch(name):  # '2°' | 'Metodologia científica': the term's mark
                             name = spill
                         elif len(name) == 1 and spill[0].islower():
                             name += spill
-                    elif spill and not name and not numbered and wrapped and (
-                            spill.startswith("(") or WRAP_END.search(subjects[-1][1])):
-                        # The tail of the shifted name just above ('Estágio ... Ginecologia e' | 'Obstetrícia'); a
-                        # name that ends on a full word may be a subject of its own on the next row, so it stays.
+                    elif spill and not name and not numbered and wrapped:
+                        # The tail of the shifted name just above ('Estágio ... Ginecologia e' | 'Obstetrícia').
                         last = subjects[-1]
                         subjects[-1] = (last[0], f"{last[1]} {spill}", *last[2:])
                         continue
