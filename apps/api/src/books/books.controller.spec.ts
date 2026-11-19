@@ -44,6 +44,7 @@ describe('Books HTTP', () => {
       pages: [
         { title: 't', facts: [] },
         { title: 'u', facts: [] },
+        { title: 'v', facts: [] },
       ],
     }));
     const moduleRef = await Test.createTestingModule({
@@ -147,6 +148,7 @@ describe('Books HTTP', () => {
           pages: [
             { title: 't', facts: [] },
             { title: 'u', facts: [] },
+            { title: 'v', facts: [] },
           ],
         });
         expect(repository.ownBook).toHaveBeenCalledWith(b);

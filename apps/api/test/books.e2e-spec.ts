@@ -31,6 +31,7 @@ describe('Books (e2e)', () => {
           pages: [
             { title: 't', facts: [] },
             { title: 'u', facts: [] },
+            { title: 'v', facts: [] },
           ],
         })),
         book: vi
@@ -74,6 +75,7 @@ describe('Books (e2e)', () => {
       pages: [
         { title: 't', facts: [] },
         { title: 'u', facts: [] },
+        { title: 'v', facts: [] },
       ],
     });
     expect(res.headers['cache-control']).toBe('public, max-age=21600');

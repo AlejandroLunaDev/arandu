@@ -873,7 +873,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
   });
 });
-// Needs public.story_pages and public.story_facts as the story-pages migration leaves them (4 pages, 18 facts). Every
+// Needs public.story_pages and public.story_facts as the full-text migration leaves them (7 pages, 28 facts). Every
 // test that changes them does it inside a transaction that is rolled back, so the tables stay exactly as seeded.
 describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   const sql = postgres(url ?? '', { max: 1, onnotice: () => {} });
@@ -901,6 +901,14 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   ) => tx`insert into public.story_facts
     (book, page, position, text, source_label, source_url, verified_on)
     values ('solucao', ${row.page}, ${row.position}, 't', ${row.label ?? null}, ${row.url ?? null}, '2026-01-01')`;
+  const deletePage = async (
+    tx: postgres.TransactionSql,
+    book: string,
+    page: number,
+  ) => {
+    await tx`delete from public.story_facts where book = ${book} and page = ${page}`;
+    await tx`delete from public.story_pages where book = ${book} and page = ${page}`;
+  };
 
   // A transaction runs the same queries as the pool; the repository only types it as the pool.
   const inTx = (tx: postgres.TransactionSql) =>
@@ -908,50 +916,55 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
 
   afterAll(() => sql.end());
 
-  it('has the migration seed: 4 pages and 18 facts', async () => {
+  it('has the migration seed: 7 pages and 28 facts', async () => {
     const [{ pages, facts }] = await sql<{ pages: number; facts: number }[]>`
       select (select count(*)::int from public.story_pages) as pages,
              (select count(*)::int from public.story_facts) as facts`;
 
-    expect({ pages, facts }).toEqual({ pages: 4, facts: 18 });
+    expect({ pages, facts }).toEqual({ pages: 7, facts: 28 });
   });
 
-  it('serves the solucao spread', async () => {
+  it('serves the solucao book in three pages', async () => {
     const { book, pages } = await repository.ownBook('solucao');
 
     expect(book).toBe('solucao');
     expect(pages.map((p) => p.title)).toEqual([
       'O problema',
       'Por que acontece',
+      'Como o Arandu resolve',
     ]);
-    expect(pages.map((p) => p.facts.length)).toEqual([4, 3]);
-    expect(pages[0].facts[0].figure).toBe('24,8%');
-    expect(pages[0].facts.map((f) => f.figure)).toEqual([
-      '24,8%',
-      '60%',
-      '25%',
-      '7,4 milhões',
-    ]);
+    expect(pages.map((p) => p.facts.length)).toEqual([4, 2, 5]);
+    expect(pages[0].facts[0].figure).toBeNull();
+    expect(pages[0].facts[0].text).toMatch(
+      /^Escolher uma carreira universitária é difícil/,
+    );
     const source = pages[0].facts[0].source;
     expect(source?.label).toBe('Semesp, Mapa do Ensino Superior, 16ª ed.');
     expect(source?.url).toMatch(/^https:\/\//);
     expect(source?.verifiedOn).toBe('2026-11-19');
-    for (const f of pages[1].facts) {
-      expect(f.figure).toBeNull();
-      expect(f.source).toBeNull();
-    }
+    expect(pages[1].facts[0].figure).toBe(
+      'Escolhe-se sem ter experimentado a carreira.',
+    );
+    expect(pages[1].facts[0].source).toBeNull();
   });
 
-  it('serves the produto spread', async () => {
+  it('serves the produto book in four pages', async () => {
     const { pages } = await repository.ownBook('produto');
 
     expect(pages.map((p) => p.title)).toEqual([
-      'Experimentar antes de escolher',
+      'O produto',
+      'Como funciona',
+      'Princípios que não mudam',
       'Feito com dados reais',
     ]);
-    expect(pages.map((p) => p.facts.length)).toEqual([6, 5]);
-    const grades = pages[1].facts.find((f) => f.figure === '+66 mil');
-    expect(grades?.source?.label).toBeTruthy();
+    expect(pages.map((p) => p.facts.length)).toEqual([1, 5, 5, 6]);
+    expect(pages[3].facts[0].text).toBe('Hoje a base do Arandu reúne:');
+    expect(pages[3].facts[0].source).toBeNull();
+    const grades = pages[3].facts.find(
+      (f) =>
+        f.source?.label ===
+        'Grades publicadas pelas próprias instituições, cada uma com seu link',
+    );
     expect(grades?.source?.url).toBeNull();
   });
 
@@ -963,7 +976,7 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
         label: 'L',
         url: 'http://insecure.test/x',
       });
-      return (await inTx(tx).ownBook('solucao')).pages[1].facts[3];
+      return (await inTx(tx).ownBook('solucao')).pages[1].facts[2];
     });
 
     expect(fact.source).toEqual({
@@ -983,48 +996,56 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
     expect(pages[0].facts).toHaveLength(4);
   });
 
-  it('throws when a page is missing', async () => {
-    const result = rolledBack(async (tx) => {
-      await tx`delete from public.story_facts where book = 'solucao' and page = 2`;
-      await tx`delete from public.story_pages where book = 'solucao' and page = 2`;
-      return inTx(tx)
-        .ownBook('solucao')
-        .then(
-          () => 'resolved',
-          (e: Error) => e.message,
-        );
+  it('returns the one page left, titled with its own title, when page 1 is gone', async () => {
+    const pages = await rolledBack(async (tx) => {
+      await deletePage(tx, 'solucao', 1);
+      await deletePage(tx, 'solucao', 3);
+      return (await inTx(tx).ownBook('solucao')).pages;
     });
 
-    await expect(result).resolves.toMatch(/has 1 pages, not 2/);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].title).toBe('Por que acontece');
   });
 
-  it('throws the pages message, not a TypeError, when page 1 is missing but page 2 has facts', async () => {
+  it('throws when a book has no pages', async () => {
     const result = rolledBack(async (tx) => {
-      await tx`delete from public.story_facts where book = 'produto' and page = 1`;
-      await tx`delete from public.story_pages where book = 'produto' and page = 1`;
+      for (const page of [1, 2, 3]) await deletePage(tx, 'solucao', page);
       return inTx(tx)
-        .ownBook('produto')
+        .ownBook('solucao')
         .then(
           () => 'resolved',
           (e: Error) => `${e.constructor.name}: ${e.message}`,
         );
     });
 
-    await expect(result).resolves.toMatch(/^Error: .*has 1 pages, not 2/);
+    await expect(result).resolves.toMatch(/^Error: .*has no pages/);
   });
 
   describe('constraints', () => {
-    it('rejects a fact on page 3', async () => {
+    it('rejects page 0', async () => {
       await expect(
-        rolledBack((tx) => insertFact(tx, { page: 3, position: 1 })),
-      ).rejects.toThrow();
+        rolledBack(
+          (tx) =>
+            tx`insert into public.story_pages (book, page, title) values ('solucao', 0, 'x')`,
+        ),
+      ).rejects.toThrow(/check constraint/);
+    });
+
+    it('accepts page 3', async () => {
+      const [row] = await rolledBack(async (tx) => {
+        await deletePage(tx, 'solucao', 3);
+        return tx<{ page: number }[]>`
+          insert into public.story_pages (book, page, title)
+          values ('solucao', 3, 'x') returning page`;
+      });
+
+      expect(row.page).toBe(3);
     });
 
     it('rejects a fact on a missing page', async () => {
       await expect(
         rolledBack(async (tx) => {
-          await tx`delete from public.story_facts where book = 'solucao' and page = 2`;
-          await tx`delete from public.story_pages where book = 'solucao' and page = 2`;
+          await deletePage(tx, 'solucao', 2);
           await insertFact(tx, { page: 2, position: 1 });
         }),
       ).rejects.toThrow(/foreign key/);
@@ -1045,10 +1066,23 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
     });
   });
 
-  it('left the story tables as seeded', async () => {
-    const [{ facts }] = await sql<{ facts: number }[]>`
-      select count(*)::int as facts from public.story_facts`;
+  it('carries no phrase the owner dropped', async () => {
+    const [{ n }] = await sql<{ n: number }[]>`
+      select (select count(*)::int from public.story_facts
+              where text ilike any (array['%vivido%', '%viver a carreira%', '%dos outros%'])
+                 or figure ilike any (array['%vivido%', '%viver a carreira%', '%dos outros%'])
+                 or source_label ilike any (array['%vivido%', '%viver a carreira%', '%dos outros%']))
+           + (select count(*)::int from public.story_pages
+              where title ilike any (array['%vivido%', '%viver a carreira%', '%dos outros%'])) as n`;
 
-    expect(facts).toBe(18);
+    expect(n).toBe(0);
+  });
+
+  it('left the story tables as seeded', async () => {
+    const [{ pages, facts }] = await sql<{ pages: number; facts: number }[]>`
+      select (select count(*)::int from public.story_pages) as pages,
+             (select count(*)::int from public.story_facts) as facts`;
+
+    expect({ pages, facts }).toEqual({ pages: 7, facts: 28 });
   });
 });
