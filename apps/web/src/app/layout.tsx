@@ -9,7 +9,7 @@ const lexend = Lexend({ variable: "--font-lexend", subsets: ["latin"] });
 const bricolage = Bricolage_Grotesque({ variable: "--font-bricolage", subsets: ["latin"], weight: "700" });
 
 export const metadata: Metadata = {
-  title: "Arandu ·Orientação vocacional com inteligência artificial",
+  title: "Arandu · Orientação vocacional com inteligência artificial",
   description:
     "Um app de orientação vocacional com inteligência artificial, onde quem quer entrar na universidade vive uma carreira antes de escolher.",
 };
