@@ -1,6 +1,11 @@
+import hashlib
 import io
 import unittest
+import zipfile
 from pathlib import Path
+from unittest import mock
+
+import psycopg
 
 from engine import mackenzie
 
@@ -10,7 +15,10 @@ MATRIZ = (FIXTURES / "mackenzie_ciencia_da_computacao_matriz.html").read_text(en
 DESIGN = (FIXTURES / "mack_design.html").read_text(encoding="utf-8")
 FARMACIA = (FIXTURES / "mack_farmacia.html").read_text(encoding="utf-8")
 CIVIL = (FIXTURES / "engenharia_civil_matriz.html").read_text(encoding="utf-8")
+DIREITO = (FIXTURES / "direito_matriz.html").read_text(encoding="utf-8")
+DIREITO_PDF = (FIXTURES / "direito_1_etapa.pdf").read_bytes()
 BASE = "https://www.mackenzie.br/graduacao/"
+LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 TAB_2026 = '<a class="nav-link active" href="#tab-content-14874"'
 TAB_2018 = '<a class="nav-link " href="#tab-content-380043"'
 
@@ -201,6 +209,228 @@ class ParsePageLayoutsTest(unittest.TestCase):
         html = FARMACIA.replace("Currículo 2026", "Currículo novo").replace("Currículo 2014-2017", "Currículo antigo")
         with self.assertRaisesRegex(ValueError, "no version names a year"):
             mackenzie.parse_curriculum(doc(html))
+
+
+class ComponenteCurricularHeaderTest(unittest.TestCase):
+    def test_a_componente_curricular_header_row_is_not_a_subject(self):
+        html = ('<a href="#tab-content-1a_etapa1">1ª Etapa</a><div id="tab-content-1a_etapa1" class="tab-pane fade active in"><table>'
+                '<tr><th>Componente Curricular</th><th>Carga</th></tr>'
+                '<tr><th>Cálculo</th><th>4</th></tr></table></div>')
+        self.assertEqual(mackenzie.parse_curriculum(doc(html)), [(1, 1, "Cálculo", None, False)])
+
+
+def links(*hrefs):
+    return "".join(f'<a href="{h}">x</a>' for h in hrefs)
+
+
+class EmentaPdfsTest(unittest.TestCase):
+    def test_first_etapa_file_names_are_found_absolute_and_deduplicated(self):
+        names = ("1__Etapa.pdf", "1a_etapa2017-2A.pdf", "ETAPA_1.pdf", "Ementas_1_Etapa_-_ADM.pdf")
+        html = links(*(f"/fileadmin/x/{n}" for n in names)) + links("/fileadmin/x/1__Etapa.pdf")
+        self.assertEqual(mackenzie.ementa_pdfs(html), [f"https://www.mackenzie.br/fileadmin/x/{n}" for n in names])
+
+    def test_other_etapas_and_non_ementa_links_are_left_out(self):
+        html = links("/a/2_Etapa.pdf", "/a/11_Etapa.pdf", "/a/biblioteca_1_etapa.pdf", "/a/codigo_1_etapa.pdf",
+                     "/a/regulamento_1_etapa.pdf", "/a/manual_1_etapa.pdf", "/a/calendario_1_etapa.pdf",
+                     "/a/ebook_1_etapa.pdf", "/a/1__Etapa.pdf")
+        self.assertEqual(mackenzie.ementa_pdfs(html), ["https://www.mackenzie.br/a/1__Etapa.pdf"])
+
+    def test_without_a_first_etapa_link_it_falls_back_to_ementa_ppc_plano(self):
+        html = links("/a/2_Etapa.pdf", "/a/Ementario.pdf", "/a/ementa-curso.pdf", "/a/PPC.pdf", "/a/plano.pdf",
+                     "/a/ementa_biblioteca.pdf", "/a/outro.pdf")
+        self.assertEqual(mackenzie.ementa_pdfs(html), [f"https://www.mackenzie.br/a/{n}" for n in
+                                                       ("Ementario.pdf", "ementa-curso.pdf", "PPC.pdf", "plano.pdf")])
+
+    def test_no_pdf_links_give_none(self):
+        self.assertEqual(mackenzie.ementa_pdfs("<a href='/x.html'>x</a>"), [])
+
+
+class DownloadPageTest(unittest.TestCase):
+    def run_download(self, page, bodies):
+        def fake(url, dest, **kw):
+            body = page if url.endswith("matriz") else bodies[url]
+            dest.seek(0)
+            dest.truncate()
+            dest.write(body)
+            return hashlib.sha256(body).hexdigest()
+        dest = io.BytesIO()
+        with mock.patch.object(mackenzie.fetch, "download", side_effect=fake) as download:
+            digest = mackenzie.download_page("https://www.mackenzie.br/x/matriz", dest)
+        return digest, zipfile.ZipFile(io.BytesIO(dest.getvalue())), download
+
+    def test_zip_holds_the_page_and_one_pdf_per_link_and_the_digest_covers_all(self):
+        page = links("/a/1__Etapa.pdf", "/a/ETAPA_1.pdf").encode()
+        bodies = {"https://www.mackenzie.br/a/1__Etapa.pdf": b"%PDF-one", "https://www.mackenzie.br/a/ETAPA_1.pdf": b"%PDF-two"}
+        digest, bundle, download = self.run_download(page, bodies)
+        self.assertEqual(bundle.namelist(), ["page.html", "0.pdf", "1.pdf"])
+        self.assertEqual((bundle.read("page.html"), bundle.read("0.pdf"), bundle.read("1.pdf")), (page, b"%PDF-one", b"%PDF-two"))
+        self.assertEqual(download.call_count, 3)
+        expected = hashlib.sha256(hashlib.sha256(page).hexdigest().encode())
+        for body in (b"%PDF-one", b"%PDF-two"):
+            expected.update(hashlib.sha256(body).hexdigest().encode())
+        self.assertEqual(digest, expected.hexdigest())
+
+    def test_a_changed_pdf_changes_the_digest(self):
+        page = links("/a/1__Etapa.pdf").encode()
+        url = "https://www.mackenzie.br/a/1__Etapa.pdf"
+        self.assertNotEqual(self.run_download(page, {url: b"%PDF-a"})[0], self.run_download(page, {url: b"%PDF-b"})[0])
+
+    def test_a_page_without_pdfs_zips_only_the_page(self):
+        digest, bundle, _ = self.run_download(b"<html></html>", {})
+        self.assertEqual(bundle.namelist(), ["page.html"])
+
+
+EMENTA = "Estudo dos fundamentos da conduta etica e da cidadania na vida profissional."
+
+
+class EmentasTest(unittest.TestCase):
+    def run_ementas(self, lines, *names):
+        return list(mackenzie._ementas(lines, {mackenzie._key(n).replace(" ", ""): n for n in names}))
+
+    def test_heading_before_the_label_names_the_subject(self):
+        lines = ["Componente Curricular", "Ética e Cidadania", "Ementa", EMENTA, "Objetivos", "ignored"]
+        self.assertEqual(self.run_ementas(lines, "Ética e Cidadania"), [("eticaecidadania", EMENTA)])
+
+    def test_inline_ementa_text_and_trailing_objetivos_are_cut(self):
+        lines = ["Disciplina: Ética e Cidadania", "Ementa: " + EMENTA + " Objetivos conhecer tudo", "Bibliografia"]
+        self.assertEqual(self.run_ementas(lines, "Ética e Cidadania"), [("eticaecidadania", EMENTA)])
+
+    def test_body_runs_over_lines_until_a_heading_line(self):
+        lines = ["Ética e Cidadania", "Ementa", "Estudo dos fundamentos da conduta", "etica e da cidadania na vida.",
+                 "Conteúdo programático", "x"]
+        self.assertEqual(self.run_ementas(lines, "Ética e Cidadania"),
+                         [("eticaecidadania", "Estudo dos fundamentos da conduta etica e da cidadania na vida.")])
+
+    def test_spaced_letters_in_headings_still_match(self):
+        text = "Análise da especificidade da abordagem antropológica do direito."
+        lines = ["Componente Curricular", "A NTROPOLOGIA JURÍDICA", "Ementa", text, "Objetivo"]
+        self.assertEqual(self.run_ementas(lines, "Antropologia Jurídica"), [("antropologiajuridica", text)])
+
+    def test_a_name_inside_a_longer_named_one_yields_to_it(self):
+        lines = ["Disciplina", "Ética e Cidadania I", "Ementa", EMENTA, "Objetivo"]
+        self.assertEqual(self.run_ementas(lines, "Ética e Cidadania", "Ética e Cidadania I"),
+                         [("eticaecidadaniai", EMENTA)])
+
+    def test_two_unrelated_names_in_one_heading_yield_nothing(self):
+        lines = ["Disciplina", "Cálculo Física", "Ementa", EMENTA, "Objetivo"]
+        self.assertEqual(self.run_ementas(lines, "Cálculo", "Física"), [])
+
+    def test_the_two_readings_naming_different_subjects_yield_nothing(self):
+        # the last 10 lines name Física only; the 4 lines from the last label, further back, name Cálculo only
+        lines = ["Disciplina", "Cálculo"] + ["x"] * 10 + ["Física", "Ementa", EMENTA, "Objetivo"]
+        self.assertEqual(self.run_ementas(lines, "Cálculo", "Física"), [])
+
+    def test_the_label_reading_alone_can_name_the_subject(self):
+        lines = ["Disciplina", "Cálculo"] + ["x"] * 12 + ["Ementa", EMENTA, "Objetivo"]
+        self.assertEqual(self.run_ementas(lines, "Cálculo"), [("calculo", EMENTA)])
+
+    def test_length_bounds_30_to_1500(self):
+        head = ["Disciplina", "Cálculo", "Ementa"]
+        self.assertEqual(self.run_ementas(head + ["a" * 29], "Cálculo"), [])
+        self.assertEqual(len(self.run_ementas(head + ["a" * 30], "Cálculo")), 1)
+        self.assertEqual(len(self.run_ementas(head + ["a" * 1500], "Cálculo")), 1)
+        self.assertEqual(self.run_ementas(head + ["a" * 1501], "Cálculo"), [])
+
+    def test_an_unknown_subject_is_ignored(self):
+        self.assertEqual(self.run_ementas(["Disciplina", "Química", "Ementa", EMENTA], "Cálculo"), [])
+
+    def test_a_second_block_does_not_read_the_first_blocks_heading(self):
+        lines = ["Disciplina", "Cálculo", "Ementa", EMENTA, "Objetivo",
+                 "Disciplina", "Física", "Ementa", EMENTA + " dois", "Objetivo"]
+        self.assertEqual(self.run_ementas(lines, "Cálculo", "Física"),
+                         [("calculo", EMENTA), ("fisica", EMENTA + " dois")])
+
+
+def bundle_of(page, *pdfs):
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("page.html", page)
+        for n, data in enumerate(pdfs):
+            z.writestr(f"{n}.pdf", data)
+    out.seek(0)
+    return out
+
+
+class ParsePageTest(unittest.TestCase):
+    def setUp(self):
+        self.subjects, self.ementas = mackenzie.parse_page(bundle_of(DIREITO, DIREITO_PDF))
+
+    def test_the_real_direito_pdf_gives_one_ementa_per_first_etapa_subject(self):
+        first = sorted(n for t, _, n, _, e in self.subjects if t == 1 and not e)
+        self.assertEqual(len(first), 10)
+        self.assertEqual([n for n, _ in self.ementas], first)
+        self.assertTrue(all(30 <= len(e) <= 1500 for _, e in self.ementas))
+        self.assertTrue(dict(self.ementas)["ANTROPOLOGIA JURÍDICA"].startswith(
+            "Análise da especificidade da abordagem antropológica do direito."))
+
+    def test_subjects_are_the_curriculum_of_the_page(self):
+        self.assertEqual(self.subjects, mackenzie.parse_curriculum(doc(DIREITO)))
+
+    def test_a_non_pdf_entry_is_skipped(self):
+        subjects, ementas = mackenzie.parse_page(bundle_of(DIREITO, b"<html>not found</html>"))
+        self.assertEqual((subjects, ementas), (self.subjects, []))
+
+    def test_the_same_text_in_two_pdfs_counts_once(self):
+        self.assertEqual(mackenzie.parse_page(bundle_of(DIREITO, DIREITO_PDF, DIREITO_PDF))[1], self.ementas)
+
+    def test_a_name_with_two_different_texts_gets_none(self):
+        texts = iter(["um texto de ementa bem longo para passar do minimo.", "outro texto de ementa bem longo para passar."])
+        with mock.patch.object(mackenzie, "_ementas", side_effect=lambda lines, names: [("antropologiajuridica", next(texts))]):
+            _, ementas = mackenzie.parse_page(bundle_of(DIREITO, DIREITO_PDF, DIREITO_PDF))
+        self.assertEqual(ementas, [])
+
+    def test_electives_and_later_terms_are_not_described(self):
+        with mock.patch.object(mackenzie, "_ementas", return_value=[]) as found:
+            mackenzie.parse_page(bundle_of(CIVIL, DIREITO_PDF))
+        names = found.call_args.args[1]
+        self.assertIn("eticaecidadania", names)
+        self.assertNotIn("eletivauniversal", names)
+        self.assertNotIn("bancodedadosi", names)
+
+
+class LoadDescribedLocalDbTest(unittest.TestCase):
+    URL = BASE + "sao-paulo-higienopolis/direito/matriz-curricular"
+
+    def setUp(self):
+        try:
+            self.conn = psycopg.connect(LOCAL_DB, connect_timeout=2)
+        except psycopg.OperationalError as error:
+            self.skipTest(f"local Supabase is not reachable: {error}")
+        self.addCleanup(self.conn.close)  # never committed: closing rolls everything back
+        run = self.conn.execute
+        base = run("insert into sources (adapter, url, label, last_fetched_at) values ('inep_census', 'https://example.test/mack-census', 'c', now()) returning id").fetchone()[0]
+        run("""insert into institutions (inep_code, name, kind, source_id) values (22, 'Mackenzie', 'private', %s)
+               on conflict (inep_code) do nothing""", (base,))
+        run("""insert into courses (inep_code, institution_id, name, degree, shift, duration_years, city, source_id)
+               select 9990022, id, 'Direito', 'bacharelado', 'noturno', 5, 'São Paulo', %s
+               from institutions where inep_code = 22""", (base,))
+        mackenzie.courses.load(self.conn, 0, [(self.URL, "Direito", None, "São Paulo")])
+        self.source = run("select id from sources where url = %s", (self.URL,)).fetchone()[0]
+        self.parsed = mackenzie.parse_page(bundle_of(DIREITO, DIREITO_PDF))
+
+    def disciplines(self):
+        return dict(self.conn.execute("select code, topics from public.disciplines where source_id = %s", (self.source,)).fetchall())
+
+    def test_load_stores_each_ementa_links_the_first_etapa_subjects_and_a_rerun_changes_nothing(self):
+        mackenzie.curriculum.load(self.conn, self.source, self.parsed)
+        found = self.disciplines()
+        self.assertEqual(len(found), 10)
+        code = "graduacao/sao-paulo-higienopolis/direito/matriz-curricular#ANTROPOLOGIA JURÍDICA"
+        self.assertEqual(found[code], [dict(self.parsed[1])["ANTROPOLOGIA JURÍDICA"]])
+        linked = self.conn.execute(
+            "select count(*) from public.curriculum_subjects where source_id = %s and term = 1 and discipline_id is not null",
+            (self.source,)).fetchone()[0]
+        self.assertEqual(linked, 10)
+        self.assertEqual(mackenzie.curriculum.load(self.conn, self.source, self.parsed), 0)
+
+
+class WiringTest(unittest.TestCase):
+    def test_curriculum_adapter_wires_download_parse_and_a_described_load(self):
+        self.assertIs(mackenzie.curriculum.download, mackenzie.download_page)
+        self.assertIs(mackenzie.curriculum.parse, mackenzie.parse_page)
+        with mock.patch.object(mackenzie.curricula, "load_described", return_value=3) as load:
+            self.assertEqual(mackenzie.curriculum.load("conn", 9, "parsed"), 3)
+        load.assert_called_once_with("conn", 9, "parsed", 22, mackenzie.BASE)
 
 
 if __name__ == "__main__":

@@ -54,3 +54,28 @@ def load_subjects(conn, source_id, subjects):
             for subject in subjects:
                 copy.write_row((source_id, *subject, None)[:7])  # 5-tuples have no term_to
     return conn.execute("select staging.normalize_curriculum(%s)", (source_id,)).fetchone()[0]
+
+
+def load_described(conn, source_id, parsed, inep_code, base):
+    """Store a page's (name, description) pairs as disciplines of that page, then load its subjects.
+
+    staging.link_disciplines then links each subject to the discipline of its own page with the same name. The page
+    publishes no subject code, and one name can carry another description in another course: the code is the page's
+    path plus the name, so each page keeps its own.
+    """
+    subjects, descriptions = parsed
+    url = conn.execute("select url from sources where id = %s", (source_id,)).fetchone()[0]
+    path = url.removeprefix(base).strip("/")
+    codes = [f"{path}#{name}" for name, _ in descriptions]
+    written = conn.execute(
+        "delete from public.disciplines where source_id = %s and not (code = any(%s))", (source_id, codes)).rowcount
+    for code, (name, description) in zip(codes, descriptions):
+        written += conn.execute(
+            """insert into public.disciplines (institution_id, code, name, topics, source_id)
+               select id, %s, %s, %s, %s from public.institutions where inep_code = %s
+               on conflict (institution_id, code) do update
+                 set name = excluded.name, topics = excluded.topics, source_id = excluded.source_id
+                 where (disciplines.name, disciplines.topics, disciplines.source_id)
+                   is distinct from (excluded.name, excluded.topics, excluded.source_id)""",
+            (code, name, [description], source_id, inep_code)).rowcount
+    return written + load_subjects(conn, source_id, subjects)
