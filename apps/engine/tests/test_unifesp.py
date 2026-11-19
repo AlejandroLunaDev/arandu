@@ -62,6 +62,20 @@ class ParseCoursesTest(unittest.TestCase):
         got = unifesp.parse_courses(doc(LIST.replace("BIOMEDICINA - INTEGRAL", "BIOMEDICINA")))
         self.assertEqual(got[0][1:3], ("BIOMEDICINA", None))
 
+    def test_degree_and_shift_without_separators_are_normalised(self):
+        for label, name, shift in (
+            ("HISTÓRIA BACHARELADO - NOTURNO", "HISTÓRIA - BACHARELADO", "NOTURNO"),
+            ("FILOSOFIA LICENCIATURA - VESPERTINO", "FILOSOFIA - LICENCIATURA", "VESPERTINO"),
+            ("GEOGRAFIA BACHARELADO MATUTINO", "GEOGRAFIA - BACHARELADO", "MATUTINO"),
+            ("CURSO SUPERIOR DE TECNOLOGIA OFTÁLMICA - MATUTINO", "CURSO SUPERIOR DE TECNOLOGIA EM OFTÁLMICA", "MATUTINO"),
+            ("CURSO SUPERIOR DE TECNOLOGIA EM RADIOLOGIA - INTEGRAL", "CURSO SUPERIOR DE TECNOLOGIA EM RADIOLOGIA", "INTEGRAL"),
+            ("MEDICINA - INTEGRAL", "MEDICINA", "INTEGRAL"),
+            ("PEDAGOGIA", "PEDAGOGIA", None),
+        ):
+            with self.subTest(label):
+                got = unifesp.parse_courses(doc(LIST.replace("BIOMEDICINA - INTEGRAL", label)))
+                self.assertEqual(got[0][1:3], (name, shift))
+
     def test_list_without_an_active_course_raises(self):
         with self.assertRaisesRegex(ValueError, "no course"):
             unifesp.parse_courses(doc(LIST.replace("ATIVA", "INATIVA").replace("ININATIVA", "INATIVA")))
