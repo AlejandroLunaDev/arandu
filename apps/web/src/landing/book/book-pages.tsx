@@ -443,11 +443,15 @@ const chartOf = (text: string) => CHARTS.find((chart) => chart.bars.every((bar) 
 
 // A section with charts gives each chart a page of its own, the plain paragraphs after it beside it, so nothing is cramped.
 const roomy = (page: StoryPage) =>
-  page.facts.reduce<StoryPage[]>((parts, fact, i) => {
-    if (i === 0 || chartOf(fact.text)) parts.push({ ...page, facts: [fact] });
-    else parts[parts.length - 1].facts.push(fact);
-    return parts;
-  }, []);
+  page.facts.reduce<StoryPage[]>(
+    (parts, fact, i) => {
+      if (i > 0 && chartOf(fact.text)) parts.push({ ...page, facts: [fact] });
+      else parts[parts.length - 1].facts.push(fact);
+      return parts;
+    },
+    // A page with no paragraphs yet still shows its title.
+    [{ ...page, facts: [] }],
+  );
 
 // The text reads the same shares out, so the chart is not read twice.
 function Bars({ text }: { text: string }) {
