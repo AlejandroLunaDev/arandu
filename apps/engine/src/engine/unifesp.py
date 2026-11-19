@@ -10,6 +10,7 @@ import html as entities
 import io
 import re
 import tempfile
+import unicodedata
 import zipfile
 from types import SimpleNamespace
 
@@ -146,7 +147,8 @@ def _card(match):
     lines = (" ".join(entities.unescape(re.sub(r"<[^>]+>", " ", line)).split())
              for line in re.split(r"<br\s*/?>", match[1]))
     lines = (re.sub(r"¿([^¿\s][^¿]*?)¿", r"“\1”", re.sub(r"(^| )¿ ", r"\1– ", line)) for line in lines if line)
-    return "\n".join(lines)
+    # Some units type an accent as a spacing ´ after its vowel ('filoso´ficas'): it becomes the accented vowel.
+    return unicodedata.normalize("NFC", re.sub(r"(?<=[aeiouAEIOU])´", "́", "\n".join(lines)))
 
 
 def parse_page(doc):
