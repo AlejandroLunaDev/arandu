@@ -323,7 +323,7 @@ def parse_curriculum(doc):
     except Exception as layout:  # pdfminer raises AttributeError on some text layers ('PSKeyword' has no 'decode')
         try:
             return _checked(_transcribed(data))
-        except ValueError as transcription:
+        except Exception as transcription:  # a network or model failure too: the run lists both reasons
             raise ValueError(f"{layout}; transcribed: {transcription}") from transcription
 
 
