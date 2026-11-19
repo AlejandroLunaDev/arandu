@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import io
 import json
+import re
 import unittest
 import urllib.error
 import zipfile
@@ -156,55 +157,107 @@ class UnitKeyTest(unittest.TestCase):
         self.assertEqual(unifesp._unit(key), "9750")
 
 
+DANCE_PROGRAM = [  # the real unit's Conteúdo Programático card: one line per <br>, blank lines dropped
+    "- Arte e poéticas do corpo;",
+    "- A dança como linguagem: a prosa e a poética;",
+    "- As motivações da dança: social, étnica e artística;",
+    "- Os estudos do movimento a partir das teorias modernas da dança;",
+    "- O movimento humano: esforços, dinâmicas, planos, espaços;",
+    "- Os sentidos e das relações do corpo com o espaço;",
+    "- Educação somática: a dança e a saúde;",
+    "- Percepção rítmica e apreciação musical;",
+    "- O ritmo e a musicalidade;",
+    "- Propriedades do som e da música;",
+    "- Ritmo, melodia e harmonia;",
+    "- Compasso musical;",
+    "- Educação rítmica.",
+    "Metodologias de ensino:",
+    "1) Vivências presenciais de dança;",
+    "2) Aulas práticas acerca das pedagogias dança;",
+    "3) Trabalhos práticos em grupo;",
+    "4) Apresentações coletivas.",
+    "Em caso de suspensão parcial ou total de encontros presenciais:",
+    "1) envio de videoaulas;",
+    "2) atividades a serem realizadas à distância pelos estudantes;",
+    "3) encontros virtuais síncronos via Google Meet para discussão.",
+    "Os encontros síncronos também serão gravados e disponibilizados via email da turma e/ou Google Classroom.",
+]
+PROGRAM = "\n".join(DANCE_PROGRAM)  # unit_page keeps the fixture's card, so every built page carries it
+
+
 class ParsePageTest(unittest.TestCase):
-    def pairs(self, *units, matriz=MATRIX):
+    def triples(self, *units, matriz=MATRIX):
         return unifesp.parse_page(bundle(matriz, *units))
 
-    def test_first_termo_name_keeps_its_ementa_and_the_subjects_are_the_matriz(self):
-        subjects, pairs = self.pairs(unit_page(FIRST))
+    def test_first_termo_name_keeps_its_ementa_and_program_and_the_subjects_are_the_matriz(self):
+        subjects, triples = self.triples(unit_page(FIRST))
         self.assertEqual(subjects, unifesp.parse_curriculum(doc(MATRIX)))
-        self.assertEqual(pairs, [(FIRST, LONG)])
+        self.assertEqual(triples, [(FIRST, LONG, PROGRAM)])
 
-    def test_the_real_page_gives_its_exact_ementa(self):
+    def test_the_real_page_gives_its_exact_ementa_and_program_lines(self):
         matriz = MATRIX.replace(FIRST, "DANÇA E EXPRESSÃO CORPORAL")
-        _, pairs = self.pairs(UNIT, matriz=matriz)
-        self.assertEqual(pairs, [("DANÇA E EXPRESSÃO CORPORAL", "Estudo da dança como tema da cultura corporal contemporânea; Estudo do ritmo e suas relações com a expressão do movimento humano. Reconhecimento da dança como prática de atuação para o profissional da Educação Física e Saúde.")])
+        _, triples = self.triples(UNIT, matriz=matriz)
+        self.assertEqual(triples, [("DANÇA E EXPRESSÃO CORPORAL", "Estudo da dança como tema da cultura corporal contemporânea; Estudo do ritmo e suas relações com a expressão do movimento humano. Reconhecimento da dança como prática de atuação para o profissional da Educação Física e Saúde.", PROGRAM)])
+        self.assertEqual(len(triples[0][2].split("\n")), 23)
+
+    def test_a_unit_without_a_conteudo_card_has_program_none(self):
+        no_content = unit_page(FIRST).replace("<strong>Conteúdo Programático</strong>", "<strong>Outro</strong>")
+        self.assertEqual(self.triples(no_content)[1], [(FIRST, LONG, None)])
 
     def test_a_unit_of_a_later_termo_is_ignored(self):
-        self.assertEqual(self.pairs(unit_page(SECOND_TERM))[1], [])
+        self.assertEqual(self.triples(unit_page(SECOND_TERM))[1], [])
 
     def test_a_name_missing_from_the_matriz_is_ignored(self):
-        self.assertEqual(self.pairs(unit_page("OUTRA COISA"))[1], [])
+        self.assertEqual(self.triples(unit_page("OUTRA COISA"))[1], [])
 
     def test_two_different_ementas_for_one_name_are_dropped(self):
-        self.assertEqual(self.pairs(unit_page(FIRST), unit_page(FIRST, LONG + " Outra."))[1], [])
+        self.assertEqual(self.triples(unit_page(FIRST), unit_page(FIRST, LONG + " Outra."))[1], [])
 
-    def test_the_same_ementa_twice_is_kept_once(self):
-        self.assertEqual(self.pairs(unit_page(FIRST), unit_page(FIRST))[1], [(FIRST, LONG)])
+    def test_two_different_programs_for_one_name_are_dropped(self):
+        other = unit_page(FIRST).replace("- Educação rítmica.", "- Outra coisa.")
+        self.assertEqual(self.triples(unit_page(FIRST), other)[1], [])
+
+    def test_the_same_ementa_and_program_twice_is_kept_once(self):
+        self.assertEqual(self.triples(unit_page(FIRST), unit_page(FIRST))[1], [(FIRST, LONG, PROGRAM)])
 
     def test_a_short_ementa_is_dropped_and_thirty_chars_is_kept(self):
-        self.assertEqual(self.pairs(unit_page(FIRST, "x" * 29))[1], [])
-        self.assertEqual(self.pairs(unit_page(FIRST, "x" * 30))[1], [(FIRST, "x" * 30)])
+        self.assertEqual(self.triples(unit_page(FIRST, "x" * 29))[1], [])
+        self.assertEqual(self.triples(unit_page(FIRST, "x" * 30))[1], [(FIRST, "x" * 30, PROGRAM)])
 
     def test_inverted_question_mark_becomes_a_dash_and_entities_and_tags_are_cleaned(self):
-        _, pairs = self.pairs(unit_page(FIRST, "Limites ¿ derivadas &amp; <b>integrais</b>   de funções reais."))
-        self.assertEqual(pairs, [(FIRST, "Limites – derivadas & integrais de funções reais.")])
+        _, triples = self.triples(unit_page(FIRST, "Limites ¿ derivadas &amp; <b>integrais</b>   de funções reais."))
+        self.assertEqual(triples, [(FIRST, "Limites – derivadas & integrais de funções reais.", PROGRAM)])
 
     def test_a_page_without_name_or_ementa_is_skipped(self):
-        self.assertEqual(self.pairs("<html></html>", unit_page(FIRST).replace("Ementa", "Outro"))[1], [])
+        self.assertEqual(self.triples("<html></html>", unit_page(FIRST).replace("Ementa", "Outro"))[1], [])
 
-    def test_only_page_html_gives_the_subjects_and_no_pairs(self):
-        subjects, pairs = self.pairs()
-        self.assertEqual((subjects, pairs), (unifesp.parse_curriculum(doc(MATRIX)), []))
+    def test_only_page_html_gives_the_subjects_and_no_triples(self):
+        subjects, triples = self.triples()
+        self.assertEqual((subjects, triples), (unifesp.parse_curriculum(doc(MATRIX)), []))
 
-    def test_pairs_are_sorted_by_name(self):
+    def test_triples_are_sorted_by_name(self):
         other = next(n for t, _, n, _, _ in unifesp.parse_curriculum(doc(MATRIX)) if t == 1 and n != FIRST)
-        names = [n for n, _ in self.pairs(unit_page(FIRST), unit_page(other))[1]]
+        names = [n for n, *_ in self.triples(unit_page(FIRST), unit_page(other))[1]]
         self.assertEqual(names, sorted([FIRST, other]))
 
     def test_a_matriz_without_structure_still_raises(self):
         with self.assertRaises(ValueError):
-            self.pairs(matriz=(FIXTURES / "unifesp_no_structure.html").read_text(encoding="utf-8"))
+            self.triples(matriz=(FIXTURES / "unifesp_no_structure.html").read_text(encoding="utf-8"))
+
+
+class CardTest(unittest.TestCase):
+    def card(self, html):
+        return unifesp._card(re.search("(.*)", html, re.S))
+
+    def test_no_match_is_empty(self):
+        self.assertEqual(unifesp._card(None), "")
+
+    def test_the_inverted_question_marks_become_dashes_and_quotes_and_a_lone_one_stays(self):
+        html = "¿ Concepções:<br />O Módulo ¿dos tecidos aos sistemas¿, eixo ¿O Ser¿<br/>L¿Hôpital ¿ x"
+        self.assertEqual(self.card(html), "– Concepções:\nO Módulo “dos tecidos aos sistemas”, eixo “O Ser”\nL¿Hôpital – x")
+
+    def test_one_line_per_br_with_tags_entities_and_whitespace_cleaned_and_empty_lines_dropped(self):
+        self.assertEqual(self.card("a  <b>b</b> &amp; c<br>\n<br />\t<BR/>d"), "a b & c\nd")
 
 
 def query(year, semester):
@@ -323,14 +376,24 @@ class CurriculumLocalDbTest(unittest.TestCase):
 
     def test_load_stores_unifesp_disciplines_links_the_matching_subject_and_a_rerun_changes_nothing(self):
         unifesp.curriculum.load(self.conn, self.source, self.parsed)
-        found = dict(self.conn.execute(
-            "select d.code, d.topics from public.disciplines d join public.institutions i on i.id = d.institution_id "
-            "where d.source_id = %s and i.inep_code = 591", (self.source,)).fetchall())
-        self.assertEqual(found, {f"graduacao/curso/matriz-curricular/abc/detalhes#{FIRST}": [LONG]})
+        found = {code: (topics, program) for code, topics, program in self.conn.execute(
+            "select d.code, d.topics, d.program from public.disciplines d join public.institutions i on i.id = d.institution_id "
+            "where d.source_id = %s and i.inep_code = 591", (self.source,)).fetchall()}
+        self.assertEqual(found, {f"graduacao/curso/matriz-curricular/abc/detalhes#{FIRST}": ([LONG], PROGRAM)})
         linked = self.conn.execute(
             "select name from public.curriculum_subjects where source_id = %s and discipline_id is not null", (self.source,)).fetchall()
         self.assertEqual(linked, [(FIRST,)])
         self.assertEqual(unifesp.curriculum.load(self.conn, self.source, self.parsed), 0)
+
+    def test_a_changed_program_rewrites_one_row_and_a_program_less_unit_stores_null(self):
+        unifesp.curriculum.load(self.conn, self.source, self.parsed)
+        subjects, (name, ementa, program) = self.parsed[0], self.parsed[1][0]
+        changed = program + chr(10) + '- Nova linha.'
+        self.assertEqual(unifesp.curriculum.load(self.conn, self.source, (subjects, [(name, ementa, changed)])), 1)
+        stored = lambda: self.conn.execute('select program from public.disciplines where source_id = %s', (self.source,)).fetchone()[0]
+        self.assertEqual(stored(), changed)
+        self.assertEqual(unifesp.curriculum.load(self.conn, self.source, (subjects, [(name, ementa, None)])), 1)
+        self.assertIsNone(stored())
 
 
 class WiringTest(unittest.TestCase):

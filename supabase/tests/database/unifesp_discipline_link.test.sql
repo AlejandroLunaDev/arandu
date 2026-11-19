@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(8);
+select plan(9);
 
 -- A Unifesp matriz page (source 9902) whose ementas are stored as disciplines of that same page, a same-named
 -- discipline of another page, and a subject of the page that no ementa describes.
@@ -17,6 +17,7 @@ insert into public.disciplines (id, institution_id, code, name, topics, source_i
 insert into public.curriculum_subjects (course_id, year, name, source_id) values
   (9911, 1, 'CÁLCULO', 9902), (9911, 1, 'Sem Ementa', 9902), (9911, 1, 'Cálculo', 9903);
 
+select has_column('public', 'disciplines', 'program', 'disciplines keep the Unifesp conteúdo programático in program');
 select is(staging.link_disciplines(9902), 1, 'the Unifesp page links its one described subject (name_key ignores case)');
 select is((select discipline_id from public.curriculum_subjects where source_id = 9902 and name = 'CÁLCULO'), 9921::bigint, 'to the discipline of its own page, not the same-named one of another page');
 select is((select discipline_id from public.curriculum_subjects where source_id = 9902 and name = 'Sem Ementa'), null, 'a subject without an ementa stays unlinked');

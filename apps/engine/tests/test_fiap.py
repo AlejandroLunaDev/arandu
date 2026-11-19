@@ -155,7 +155,7 @@ class LoadPageTest(unittest.TestCase):
         upserts = [c for c in conn.calls if c[0].startswith("insert into public.disciplines")]
         self.assertEqual(
             [c[1] for c in upserts],
-            [("graduacao/tecnologo/inteligencia-artificial#Web", "Web", ["d1"], 7, 852), ("graduacao/tecnologo/inteligencia-artificial#Data", "Data", ["d2"], 7, 852)],
+            [("graduacao/tecnologo/inteligencia-artificial#Web", "Web", ["d1"], None, 7, 852), ("graduacao/tecnologo/inteligencia-artificial#Data", "Data", ["d2"], None, 7, 852)],
         )
         self.assertEqual(conn.calls[1][1], (7, ["graduacao/tecnologo/inteligencia-artificial#Web", "graduacao/tecnologo/inteligencia-artificial#Data"]))
 
