@@ -250,7 +250,7 @@ export class BooksRepository {
     }));
   }
 
-  /** A landing's own book, one spread. Only an https link is served: the page renders it as a link. */
+  /** A landing's own book, its pages in reading order. Only an https link is served: the page renders it as a link. */
   async ownBook(book: OwnBook['book']): Promise<OwnBook> {
     const rows = await this.sql<
       {
@@ -267,11 +267,12 @@ export class BooksRepository {
       left join public.story_facts f on f.book = p.book and f.page = p.page
       where p.book = ${book}
       order by p.page, f.position`;
-    const pages: StoryPage[] = [];
+    const pages: (StoryPage & { n: number })[] = [];
     for (const row of rows) {
-      pages[row.page - 1] ??= { title: row.title, facts: [] };
+      if (pages.at(-1)?.n !== row.page)
+        pages.push({ n: row.page, title: row.title, facts: [] });
       if (row.text === null) continue; // a page with no facts yet
-      pages[row.page - 1].facts.push({
+      pages.at(-1)!.facts.push({
         figure: row.figure,
         text: row.text,
         source: row.source_label
@@ -285,11 +286,8 @@ export class BooksRepository {
           : null,
       });
     }
-    // The table allows pages 1 and 2 only; a missing one is a data error, not an empty page.
-    if (!pages[0] || !pages[1])
-      throw new Error(
-        `Own book "${book}" has ${pages.filter(Boolean).length} pages, not 2`,
-      );
-    return { book, pages: [pages[0], pages[1]] };
+    // Every book is seeded with its pages: none is a data error, not an empty book.
+    if (!pages.length) throw new Error(`Own book "${book}" has no pages`);
+    return { book, pages: pages.map(({ title, facts }) => ({ title, facts })) };
   }
 }

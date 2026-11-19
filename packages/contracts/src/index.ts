@@ -107,7 +107,7 @@ export interface BookSummary {
 
 /** One item of a page of the landing's own books. */
 export interface StoryFact {
-  /** "24,8%", "+540", a heading, or null for a plain statement. */
+  /** The item's heading, or null for a plain paragraph. */
   figure: string | null;
   text: string;
   /** Null for Arandu's own statement. `url` is null for a count of Arandu's own database, which has no one page. */
@@ -128,8 +128,8 @@ export interface StoryPage {
 /** GET /books/own/:book: the landing's own books, "Solução" (the problem) and "Produto" (what Arandu brings). */
 export interface OwnBook {
   book: "produto" | "solucao";
-  /** One spread: the left page, then the right one. */
-  pages: [StoryPage, StoryPage];
+  /** In reading order, one per section of the text; at least one. */
+  pages: StoryPage[];
 }
 
 /** One turn of the conversation with Arandu. */
