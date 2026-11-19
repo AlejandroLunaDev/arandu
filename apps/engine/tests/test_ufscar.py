@@ -171,7 +171,10 @@ class TableMatrizTest(unittest.TestCase):
 
     def test_total_da_disciplina_heads_hours_not_names(self):
         subjects = ufscar.parse_curriculum(pdf("ufscar_ambiental_total_da_disciplina.pdf"))
-        self.assertEqual(len(subjects), 70)
+        self.assertEqual(len(subjects), 74)
+        names = {s[2] for s in subjects}
+        for name in ("Metodologia científica", "Educação ambiental", "Economia e finanças", "Resíduos sólidos"):
+            self.assertIn(name, names)
         self.assertEqual([s[2] for s in subjects if s[0] == 1], [
             "Introdução à Engenharia Ambiental", "Desenvolvimento sustentável", "Tópicos de Matemática elementar",
             "Biologia geral", "Ecologia geral e de populações", "Química geral",
@@ -202,6 +205,8 @@ class MatrixJunkRowsTest(unittest.TestCase):
     def test_a_wrapped_shifted_name_is_joined_with_its_tail(self):
         names = self.names("ufscar_fisioterapia_matriz.pdf")
         self.assertIn("Estágio Fisioterapia em Ginecologia e Obstetrícia", names)
+        self.assertIn("Estágio Prevenção de Lesões Musculoesqueléticas no Trabalho", names)
+        self.assertIn("Prevenção de Lesões Musculoesqueléticas", self.names("ufscar_fisioterapia_matriz.pdf", 4))
         self.assertNotIn("Obstetrícia", names)
 
     def test_fisioterapia_has_no_one_letter_or_total_subject(self):

@@ -220,10 +220,13 @@ class ComponenteCurricularHeaderTest(unittest.TestCase):
         self.assertEqual(mackenzie.parse_curriculum(doc(html)), [(1, 1, "Cálculo", None, False)])
 
 
-class ParagraphLabelTest(unittest.TestCase):
-    def test_a_paragraph_ending_in_a_colon_is_a_label_not_a_subject(self):
+class SidebarTest(unittest.TestCase):
+    def test_the_last_etapa_ends_at_the_page_sidebar(self):
         html = ('<a href="#tab-content-1a_etapa1">1ª Etapa</a><div id="tab-content-1a_etapa1" class="tab-pane fade active in">'
-                '<p><b>Período(s) Oferecido(s):</b></p><p>Cálculo</p><p>Física</p></div>')
+                '<p>Cálculo</p><p>Física</p></div></div>'
+                '<aside class="col-md-4"><p><b>Tipo:</b></p><p>Graduação</p><p><b>Modalidade:</b></p><p>Presencial</p>'
+                '<p><b>Duração:</b></p><p>10 semestres</p><p>Prof. Maria Silva</p>'
+                '<p>A mensalidade é de R$ 3.000,00</p></aside>')
         self.assertEqual([s[2] for s in mackenzie.parse_curriculum(doc(html))], ["Cálculo", "Física"])
 
 
