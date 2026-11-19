@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import certifi
 
-USER_AGENT = "AranduRekaEngine/0.1 (+https://github.com/AlejandroLunaDev/arandu-reka)"
+USER_AGENT = "AranduEngine/0.1 (+https://github.com/AlejandroLunaDev/arandu-reka)"
 MIN_INTERVAL = 1.5  # seconds between requests to one host
 RETRY_STATUSES = {429, 503}
 MAX_ATTEMPTS = 5
