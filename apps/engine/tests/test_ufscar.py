@@ -171,7 +171,10 @@ class TableMatrizTest(unittest.TestCase):
 
     def test_total_da_disciplina_heads_hours_not_names(self):
         subjects = ufscar.parse_curriculum(pdf("ufscar_ambiental_total_da_disciplina.pdf"))
-        self.assertEqual(len(subjects), 50)
+        self.assertEqual(len(subjects), 74)
+        names = {s[2] for s in subjects}
+        for name in ("Metodologia científica", "Educação ambiental", "Economia e finanças", "Resíduos sólidos"):
+            self.assertIn(name, names)
         self.assertEqual([s[2] for s in subjects if s[0] == 1], [
             "Introdução à Engenharia Ambiental", "Desenvolvimento sustentável", "Tópicos de Matemática elementar",
             "Biologia geral", "Ecologia geral e de populações", "Química geral",
@@ -184,6 +187,45 @@ class TableMatrizTest(unittest.TestCase):
     def test_year_is_two_semesters(self):
         years = {s[0]: s[1] for s in ufscar.parse_curriculum(pdf("ufscar_quimica_sao_carlos_p1.pdf"))}
         self.assertEqual(years, {1: 1, 2: 1, 3: 2})
+
+
+class MatrixJunkRowsTest(unittest.TestCase):
+    """Whole real matrices (UFSCar Fisioterapia and Pedagogia Sorocaba), downloaded as published."""
+
+    def names(self, name, term=None):
+        return [s[2] for s in ufscar.parse_curriculum(pdf(name)) if term in (None, s[0])]
+
+    def test_shifted_name_cells_are_read_in_fisioterapias_first_semester(self):
+        # 'Introdução a Psicologia' is drawn as 'I' | 'ntrodução a Psicologia'; others sit wholly in the headless column.
+        self.assertEqual(self.names("ufscar_fisioterapia_matriz.pdf", 1), [
+            "Citologia, Histologia e Embriologia", "Filosofia da Ciência", "Fundamentos de Fisioterapia",
+            "Observação Clínica em Fisioterapia", "Genética", "Introdução a Psicologia",
+            "Introdução à Sociologia Geral", "Noções de Saúde Pública"])
+
+    def test_a_wrapped_shifted_name_is_joined_with_its_tail(self):
+        names = self.names("ufscar_fisioterapia_matriz.pdf")
+        self.assertIn("Estágio Fisioterapia em Ginecologia e Obstetrícia", names)
+        self.assertIn("Estágio Prevenção de Lesões Musculoesqueléticas no Trabalho", names)
+        self.assertIn("Prevenção de Lesões Musculoesqueléticas", self.names("ufscar_fisioterapia_matriz.pdf", 4))
+        self.assertNotIn("Obstetrícia", names)
+
+    def test_fisioterapia_has_no_one_letter_or_total_subject(self):
+        names = self.names("ufscar_fisioterapia_matriz.pdf")
+        self.assertNotIn("I", names)
+        self.assertFalse([n for n in names if n.startswith("Perfis")])  # a note row, not a subject
+        self.assertFalse([n for n in names if len(n) < 3 or n.lower().startswith(("sub-total", "carga"))])
+
+    def test_pedagogia_sorocaba_has_no_total_or_workload_row(self):
+        names = self.names("ufscar_pedagogia_sorocaba.pdf")
+        self.assertNotIn("Sub-Total", names)
+        self.assertNotIn("Carga-horária do Período", names)
+        self.assertEqual(len(names), 57)
+
+    def test_total_label_and_ordinal_only_rows_are_not_subjects(self):
+        for junk in ("Sub-Total", "Subtotal", "Total", "Carga-horária do Período", "Carga horária", "2°", "3º", "10 º"):
+            self.assertTrue(ufscar.NOT_A_SUBJECT.match(junk), junk)
+        for subject in ("Introdução a Psicologia", "Estágio Supervisionado I", "Cálculo 1"):
+            self.assertFalse(ufscar.NOT_A_SUBJECT.match(subject), subject)
 
 
 class TermMarkAndValidationTest(unittest.TestCase):
