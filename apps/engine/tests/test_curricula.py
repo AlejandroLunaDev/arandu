@@ -49,8 +49,19 @@ class LoadDescribedTest(unittest.TestCase):
     def test_codes_are_the_page_path_after_base_plus_the_name_and_inep_is_passed(self):
         conn, *_ = self.load([("Web", "d1"), ("Data", "d2")])
         upserts = [c for c in conn.calls if c[0].startswith("insert into public.disciplines")]
-        self.assertEqual([c[1] for c in upserts], [("a/b#Web", "Web", ["d1"], 7, 22), ("a/b#Data", "Data", ["d2"], 7, 22)])
+        self.assertEqual([c[1] for c in upserts], [("a/b#Web", "Web", ["d1"], None, 7, 22), ("a/b#Data", "Data", ["d2"], None, 7, 22)])
         self.assertEqual(conn.calls[1][1], (7, ["a/b#Web", "a/b#Data"]))
+
+    def test_a_third_item_is_the_program_and_a_missing_one_is_none(self):
+        conn, *_ = self.load([("Web", "d1", "p1\np2"), ("Data", "d2", None), ("Ops", "d3", ""), ("Pair", "d4")])
+        upserts = [c[1] for c in conn.calls if c[0].startswith("insert into public.disciplines")]
+        self.assertEqual([u[3] for u in upserts], ["p1\np2", None, None, None])
+
+    def test_the_upsert_updates_program_and_its_changed_row_guard_covers_it(self):
+        conn, *_ = self.load([("Web", "d1", "p")])
+        sql = next(c[0] for c in conn.calls if c[0].startswith("insert into public.disciplines"))
+        self.assertIn("program = excluded.program", sql)
+        self.assertIn("disciplines.program", sql.split("where", 1)[1])
 
     def test_delete_first_then_upserts_then_load_subjects_last(self):
         conn, load, order, result = self.load([("Web", "d1"), ("Data", "d2")])
