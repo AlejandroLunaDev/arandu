@@ -1,4 +1,8 @@
-"""FIAP: the graduação course list and each course page's matriz curricular, grouped by year (Next.js HTML)."""
+"""FIAP: the graduação course list and each course page's matriz curricular, grouped by year (Next.js HTML).
+
+Each subject of the matriz carries a short description, kept as the discipline's one topic: it is all FIAP publishes
+of a subject's program, and the book shows it as the subject's theme (owner, 2026-11-19).
+"""
 
 import html as entities
 import re
@@ -17,6 +21,12 @@ COURSE_LINK = re.compile(
 LOCALITY = re.compile(r'addressLocality\\*"\s*:\s*\\*"([^"\\]+)')
 YEAR = re.compile(r'class="styles_grade-year[^"]*">(\d+)<!-- -->º Ano</p>')
 MODULE_TITLE = re.compile(r'class="styles_module-title[^"]*">([^<]+)</p>')
+# A module's description sits in its dropdown, before the next module starts.
+MODULE = re.compile(
+    r'class="styles_module-title[^"]*">([^<]+)</p>(?:(?!styles_module-title).)*?'
+    r'class="styles_module-description[^"]*">(.*?)</p>',
+    re.S,
+)
 
 
 def _text(html):
@@ -42,7 +52,10 @@ def parse_courses(doc):
 
 def parse_curriculum(doc):
     """Return (None, year, name, None, False) for every subject: FIAP publishes years, not terms or hours."""
-    html = doc.read().decode("utf-8")
+    return _subjects(doc.read().decode("utf-8"))
+
+
+def _subjects(html):
     years = YEAR.split(html)  # [before, year, chunk, year, chunk, ...]
     subjects = [
         (None, int(year), " ".join(entities.unescape(title).split()), None, False)
@@ -60,4 +73,37 @@ courses = SimpleNamespace(
         conn, "fiap_curriculum", INEP_CODE, "FIAP, matriz curricular", parsed,
         every_unit=True),  # one matriz per course, no campus: it serves both census rows (owner, 2026-11-18)
 )
-curriculum = SimpleNamespace(parse=parse_curriculum, load=curricula.load_subjects)
+def parse_page(doc):
+    """Return (subjects, descriptions): parse_curriculum's subjects and a (name, description) per described subject."""
+    html = doc.read().decode("utf-8")
+    descriptions = {}
+    for title, text in MODULE.findall(html):
+        name, description = " ".join(entities.unescape(title).split()), _text(text)
+        if description:
+            descriptions.setdefault(name, description)  # a name listed twice keeps its first description
+    return _subjects(html), list(descriptions.items())
+
+
+def load_page(conn, source_id, parsed):
+    """Store each described subject as a discipline of this page, then load the subjects, which links them by name."""
+    subjects, descriptions = parsed
+    url = conn.execute("select url from sources where id = %s", (source_id,)).fetchone()[0]
+    path = url.removeprefix(BASE).strip("/")
+    # FIAP publishes no subject code, and one name can carry another description in another course: the code is the
+    # course page's path plus the name, so each page keeps its own.
+    codes = [f"{path}#{name}" for name, _ in descriptions]
+    written = conn.execute(
+        "delete from public.disciplines where source_id = %s and not (code = any(%s))", (source_id, codes)).rowcount
+    for code, (name, description) in zip(codes, descriptions):
+        written += conn.execute(
+            """insert into public.disciplines (institution_id, code, name, topics, source_id)
+               select id, %s, %s, %s, %s from public.institutions where inep_code = %s
+               on conflict (institution_id, code) do update
+                 set name = excluded.name, topics = excluded.topics, source_id = excluded.source_id
+                 where (disciplines.name, disciplines.topics, disciplines.source_id)
+                   is distinct from (excluded.name, excluded.topics, excluded.source_id)""",
+            (code, name, [description], source_id, INEP_CODE)).rowcount
+    return written + curricula.load_subjects(conn, source_id, subjects)
+
+
+curriculum = SimpleNamespace(parse=parse_page, load=load_page)

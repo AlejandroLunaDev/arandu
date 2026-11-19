@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import postgres from 'postgres';
 import { BOOK_OFFERINGS, BooksRepository } from './books.repository.js';
 
@@ -400,7 +401,8 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       't-flag-elective',
       'Test Flag Elective',
     );
-    await sampleCourse(flagElective, 'pool');
+    // Not a sampleCourse: the sample comes from one institution, so carl's elective must be the only candidate.
+    await candidate(flagElective, zeta, 'pool');
     await candidate(flagElective, alpha, 'a-plain');
     const cElective = await candidate(flagElective, carl, 'c-elective');
     await subjects(cElective, base, [
@@ -412,6 +414,60 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         discipline: await discipline(carl, 'Flag elective', ['E'], base),
       },
     ]);
+
+    // The sample comes from ONE institution: here only alpha (no short name) has a sample subject.
+    const onlyAlpha = await profession('t-sample-alpha', 'Test Sample Alpha');
+    const alphaCourse = await course(onlyAlpha, alpha, base, 'alpha-only');
+    await subjects(alphaCourse, base, [
+      firstTerm(
+        'Solo alpha',
+        await discipline(alpha, 'Solo alpha', ['S'], base),
+      ),
+    ]);
+
+    // A FIAP page: year-only subjects (no term), each discipline holding its page description as the one topic.
+    const fiapPage = await source('Fiap page');
+    const fiapIa = await profession('t-fiap-ia', 'Test Fiap IA');
+    const fiapIaCourse = await course(fiapIa, fiap, base, 'fiap-ia');
+    await subjects(
+      fiapIaCourse,
+      fiapPage,
+      await Promise.all(
+        ['Machine Learning', 'AI Challenges'].map(async (name) => ({
+          year: 1,
+          term: null,
+          name,
+          discipline: await discipline(
+            fiap,
+            name,
+            [`Descrição de ${name}`],
+            fiapPage,
+          ),
+        })),
+      ),
+    );
+
+    // Four institutions, each with sample subjects named so that a mix across them would show in the name order.
+    for (const slug of ['t-shared-a', 't-shared-b', 't-shared-c']) {
+      const shared = await profession(slug, `Test ${slug}`);
+      for (const [inst, label, names] of [
+        [zeta, 'zeta', ['A zeta', 'E zeta']],
+        [alpha, 'alpha', ['B alpha', 'F alpha']],
+        [carl, 'carl', ['C carl']],
+        [fiap, 'fiap', ['D fiap', 'G fiap']],
+      ] as const) {
+        const id = await course(shared, inst, base, `${slug}-${label}`);
+        await subjects(
+          id,
+          base,
+          await Promise.all(
+            names.map(async (name) =>
+              firstTerm(name, await discipline(inst, name, [name], base)),
+            ),
+          ),
+        );
+      }
+    }
 
     // A profession with courses but no sample subject at all.
     const noSample = await profession('t-no-sample', 'Test No Sample');
@@ -489,6 +545,14 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   });
 
   const book = (slug: string) => repository.book(slug);
+  /** The institution the sample must come from, computed here: the smallest md5(slug:institution id) of the candidates. */
+  const pickedInstitution = async (slug: string, ineps: number[]) => {
+    const rows = await sql<{ id: string; inep: number }[]>`
+      select id::text, inep_code as inep from public.institutions where inep_code in ${sql(ineps)}`;
+    const hash = (id: string) =>
+      createHash('md5').update(`${slug}:${id}`).digest('hex');
+    return rows.sort((a, b) => hash(a.id).localeCompare(hash(b.id)))[0];
+  };
   const summaries = async () =>
     (await repository.list()).filter((s) => s.profession.slug.startsWith('t-'));
 
@@ -499,6 +563,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(slugs).toEqual([
         't-fiap-empty',
         't-fiap-grade',
+        't-fiap-ia',
         't-flag-elective',
         't-flag-term2',
         't-grade',
@@ -508,12 +573,16 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-photo',
         't-pool-term-null',
         't-sample',
+        't-sample-alpha',
         't-sample-cap',
         't-sample-other',
         't-second-a',
         't-second-b',
         't-shift-a',
         't-shift-b',
+        't-shared-a',
+        't-shared-b',
+        't-shared-c',
         't-unfetched',
       ]);
     });
@@ -779,13 +848,23 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   });
 
   describe('sample', () => {
-    it('lists the pool disciplines of the first semester by name, once each, at most two', async () => {
+    it('takes the sample from one institution only: the one the profession hash picks, subjects by name', async () => {
       const result = await book('t-sample');
+      const picked = await pickedInstitution(
+        't-sample',
+        [9990001, 9990002, 9990004],
+      );
 
-      expect(result?.sample.map((s) => s.name)).toEqual([
-        'Anatomia',
-        'Undated term',
-      ]);
+      expect(result?.sample.map((s) => s.name)).toEqual(
+        (
+          {
+            9990001: ['Zoologia'],
+            9990002: ['Anatomia'],
+            9990004: ['Undated term'],
+          } as Record<number, string[]>
+        )[picked.inep],
+      );
+      expect(new Set(result?.sample.map((s) => s.institution)).size).toBe(1);
     });
 
     it('returns 2 sample subjects, the first two by name, for 3 linked first-semester disciplines', async () => {
@@ -810,7 +889,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
 
     it('uses the name of an institution without a short name', async () => {
-      expect((await book('t-sample'))?.sample[0].institution).toBe(
+      expect((await book('t-sample-alpha'))?.sample[0].institution).toBe(
         'Alpha Univ',
       );
     });
@@ -826,8 +905,8 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     it('ranks a course linked through a term-1 elective as a sample course', async () => {
       expect(names(await book('t-flag-elective'))).toEqual([
         'c-elective',
-        'pool',
         'a-plain',
+        'pool',
       ]);
     });
 
@@ -837,6 +916,56 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(names).not.toContain('No topics');
       expect(names).not.toContain('Term two only');
       expect(names).not.toContain('Other profession');
+    });
+  });
+
+  describe('one institution for the whole book', () => {
+    const shared = [9990001, 9990002, 9990004, 852];
+    const label = (i: { name: string; shortName: string | null }) =>
+      i.shortName ?? i.name;
+
+    it('puts a FIAP profession on the shelf with the page descriptions as the sample topics', async () => {
+      expect((await summaries()).map((s) => s.profession.slug)).toContain(
+        't-fiap-ia',
+      );
+      const result = await book('t-fiap-ia');
+
+      expect(
+        result?.sample.map((s) => [s.name, s.topics, s.institution]),
+      ).toEqual([
+        ['AI Challenges', ['Descrição de AI Challenges'], 'FIAP'],
+        ['Machine Learning', ['Descrição de Machine Learning'], 'FIAP'],
+      ]);
+      expect(result?.offerings.map((o) => o.course.name)).toEqual(['fiap-ia']);
+    });
+
+    it.each(['t-shared-a', 't-shared-b', 't-shared-c'])(
+      'draws every sample subject of %s from the picked institution, which also leads the offerings',
+      async (slug) => {
+        const result = await book(slug);
+        const picked = await pickedInstitution(slug, shared);
+        const [lead] = result?.offerings ?? [];
+        const [{ name, short }] = await sql<
+          { name: string; short: string | null }[]
+        >`select name, short_name as short from public.institutions where id = ${picked.id}`;
+
+        expect(result?.sample.length).toBeGreaterThan(0);
+        expect(new Set(result?.sample.map((s) => s.institution))).toEqual(
+          new Set([short ?? name]),
+        );
+        expect(label(lead.institution)).toBe(short ?? name);
+        // by name, at most two: a mix across institutions would start 'A zeta', 'B alpha'.
+        const own = result?.sample.map((s) => s.name) ?? [];
+        expect(own).toEqual([...own].sort());
+        expect(own.length).toBeLessThanOrEqual(2);
+      },
+    );
+
+    it('is stable across calls', async () => {
+      const first = await book('t-shared-a');
+
+      for (let i = 0; i < 3; i++)
+        expect(await book('t-shared-a')).toEqual(first);
     });
   });
 

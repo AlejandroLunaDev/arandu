@@ -30,6 +30,20 @@ const IN_POOL = `exists (
 /** The book's sample: at most 2 subjects (the contract's 1-2). */
 const SAMPLE_SIZE = 2;
 
+/**
+ * The one institution a book's sample comes from: among those with a sample subject for the profession ($1), a fixed
+ * pick that varies by profession (a hash, not a preference), so the shelf does not open every book with the same one.
+ */
+const SAMPLE_INSTITUTION = `(
+  select d.institution_id from public.disciplines d
+  join public.curriculum_subjects cs on cs.discipline_id = d.id
+  join public.courses c on c.id = cs.course_id
+  join public.professions p on p.id = c.profession_id
+  where p.slug = $1 and ${sampleSubject('cs', 'd')}
+  group by d.institution_id
+  order by md5($1 || ':' || d.institution_id)
+  limit 1)`;
+
 /** The first-year mandatory subjects of the profession's courses. Undated subjects (no year, no term) stay out. */
 const GRADE = `
   select cs.course_id, cs.source_id, cs.name, cs.term, cs.discipline_id
@@ -170,7 +184,7 @@ export class BooksRepository {
    * Up to 3 institutions, one offering each and never repeated (owner's decision): fewer when fewer qualify. Only
    * institutions with a real photo (owner's decision), filtered before the cap so the next one fills the slot. An
    * offering has a real first-year grade, FIAP's even without one. Neutral order, no institution pays for its place:
-   * the sample's own course first, then FIAP, then alphabetical by institution and city. An institution's offering is its sample course, else one with a grade, else by city. A course with two
+   * the sample's institution first, then FIAP, then alphabetical by institution and city. An institution's offering is its sample course, else one with a grade, else by city. A course with two
    * grades (one per shift) shows the one holding the sample subjects, else the first.
    */
   private offerings(slug: string): Promise<OfferingRow[]> {
@@ -206,9 +220,9 @@ export class BooksRepository {
           and i.photo_source_url is not null
       ),
       picked as (
-        select * from ranked
+        select ranked.*, institution_id = ${SAMPLE_INSTITUTION} as lead from ranked
         where nth = 1
-        order by sample desc, fiap desc, name, city, course_id
+        order by lead desc nulls last, fiap desc, name, city, course_id
         -- shortcut: the cap applies before the fetch-date joins, so an unfetched source can leave fewer than 3 (none
         -- today); filter sources here if the engine ever writes facts before stamping their fetch date.
         limit $2
@@ -221,27 +235,31 @@ export class BooksRepository {
       join public.courses c on c.id = k.course_id
       join public.institutions i on i.id = c.institution_id
       join public.sources s on s.id = c.source_id and s.last_fetched_at is not null
-      order by k.sample desc, k.fiap desc, k.name, k.city, k.course_id`,
+      order by k.lead desc nulls last, k.fiap desc, k.name, k.city, k.course_id`,
       [slug, BOOK_OFFERINGS],
     );
   }
 
-  /** The sample subjects, the taste of the path. */
+  /** The sample subjects, the taste of the path: all from the one institution SAMPLE_INSTITUTION picks. */
   private async sample(slug: string): Promise<SampleSubject[]> {
-    const rows = await this.sql<(SourceRow & Omit<SampleSubject, 'source'>)[]>`
-      select d.name, d.topics, coalesce(i.short_name, i.name) as institution,
+    const rows = await this.sql.unsafe<
+      (SourceRow & Omit<SampleSubject, 'source'>)[]
+    >(
+      `select d.name, d.topics, coalesce(i.short_name, i.name) as institution,
         s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
       from public.disciplines d
       join public.institutions i on i.id = d.institution_id
       join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
-      where exists (
+      where d.institution_id = ${SAMPLE_INSTITUTION} and exists (
         select 1 from public.curriculum_subjects cs
         join public.courses c on c.id = cs.course_id
         join public.professions p on p.id = c.profession_id
-        where cs.discipline_id = d.id and p.slug = ${slug} and ${this.sql.unsafe(sampleSubject('cs', 'd'))}
+        where cs.discipline_id = d.id and p.slug = $1 and ${sampleSubject('cs', 'd')}
       )
       order by d.name
-      limit ${SAMPLE_SIZE}`;
+      limit $2`,
+      [slug, SAMPLE_SIZE],
+    );
     return rows.map(({ name, topics, institution, ...row }) => ({
       name,
       topics,
