@@ -483,9 +483,10 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     const w = world(room);
     // On the room's own floor he walks in front of the furniture, never behind it.
     const spot = r.front !== null && target.y < (r.ground ?? 0) + 0.05 ? target.clone().setZ(Math.max(target.z, r.front)) : target;
-    // Where a jump comes down: on whatever is under that point, the sofa's seat first when it lies on his way.
-    const landing = (x: number) => {
-      const seat = r.bed && w ? w.top(x, r.bed.at.z, pose.pos.y - 0.05) : null;
+    // Where a jump comes down: on whatever is under that point, the sofa's seat first when it lies on his way
+    // (not when he leaves it: from on it, the ray starts inside the cushion and finds the seat again).
+    const landing = (x: number, sofa = true) => {
+      const seat = sofa && r.bed && w ? w.top(x, r.bed.at.z, pose.pos.y - 0.05) : null;
       if (r.bed && seat !== null && seat > spot.y + 0.12) return new THREE.Vector3(x, seat, r.bed.at.z);
       return new THREE.Vector3(x, w?.top(x, spot.z, pose.pos.y - 0.05) ?? spot.y, spot.z);
     };
@@ -511,7 +512,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
         // Off the sofa's seat from its front edge, high enough to clear it: from its middle he would cross the cushion.
         const seat = r.bed !== null && Math.abs(pose.pos.y - r.bed.at.y) < 0.05;
         if (seat && r.bed) yield* walkTo(pose.pos.x, r.bed.edge);
-        yield* jump(landing(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4)), seat ? 0.2 : 0.1);
+        yield* jump(landing(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4), !seat), seat ? 0.2 : 0.1);
       }
       // He came down on something on his way: on from there.
       if (pose.pos.y > spot.y + 0.12) return hops > 0 && (yield* goTo(r, spot, hops - 1));
