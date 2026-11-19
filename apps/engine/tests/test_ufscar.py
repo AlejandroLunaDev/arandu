@@ -171,7 +171,7 @@ class TableMatrizTest(unittest.TestCase):
 
     def test_total_da_disciplina_heads_hours_not_names(self):
         subjects = ufscar.parse_curriculum(pdf("ufscar_ambiental_total_da_disciplina.pdf"))
-        self.assertEqual(len(subjects), 50)
+        self.assertEqual(len(subjects), 70)
         self.assertEqual([s[2] for s in subjects if s[0] == 1], [
             "Introdução à Engenharia Ambiental", "Desenvolvimento sustentável", "Tópicos de Matemática elementar",
             "Biologia geral", "Ecologia geral e de populações", "Química geral",
@@ -207,6 +207,7 @@ class MatrixJunkRowsTest(unittest.TestCase):
     def test_fisioterapia_has_no_one_letter_or_total_subject(self):
         names = self.names("ufscar_fisioterapia_matriz.pdf")
         self.assertNotIn("I", names)
+        self.assertFalse([n for n in names if n.startswith("Perfis")])  # a note row, not a subject
         self.assertFalse([n for n in names if len(n) < 3 or n.lower().startswith(("sub-total", "carga"))])
 
     def test_pedagogia_sorocaba_has_no_total_or_workload_row(self):
