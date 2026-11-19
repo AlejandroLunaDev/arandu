@@ -259,10 +259,11 @@ export class BooksRepository {
         select distinct on (lower(d.name)) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
           s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at,
           -- The professions whose first semester at this institution has a subject of this name: the fewer, the more
-          -- the subject belongs to this career ('Ética e Cidadania' is in all of them).
+          -- the subject belongs to this career ('Ética e Cidadania' is in all of them). A row linked to this discipline
+          -- counts whatever its spelling: São Judas's grades and ementários accent some names differently.
           (select count(distinct oc.profession_id) from public.curriculum_subjects ocs
             join public.courses oc on oc.id = ocs.course_id
-            where oc.institution_id = d.institution_id and lower(ocs.name) = lower(d.name)
+            where oc.institution_id = d.institution_id and (ocs.discipline_id = d.id or lower(ocs.name) = lower(d.name))
               and (ocs.term = 1 or (ocs.term is null and ocs.year = 1))) as spread
         from public.disciplines d
         join public.institutions i on i.id = d.institution_id
