@@ -1,1 +1,1 @@
-"""Arandu Reka ingestion engine. One adapter per source (ADR-0004)."""
+"""Arandu ingestion engine. One adapter per source (ADR-0004)."""

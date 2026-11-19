@@ -20,7 +20,7 @@ const logger = new Logger('AI');
           name: 'openrouter',
           baseURL: 'https://openrouter.ai/api/v1',
           apiKey: config.get('OPENROUTER_API_KEY', { infer: true }),
-          headers: { 'X-OpenRouter-Title': 'Arandu Reka' },
+          headers: { 'X-OpenRouter-Title': 'Arandu' },
           // generateObject sends a JSON schema, which OpenRouter passes on to the model.
           supportsStructuredOutputs: true,
         });
