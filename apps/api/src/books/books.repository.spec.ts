@@ -173,6 +173,10 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       photo: false,
     });
     const fiap = await institution(FIAP, 'FIAP', base);
+    // md5('t-photo-sample:9990015') sorts before md5('t-photo-sample:9990001'): without the photo filter it would win.
+    const noPhotoUniv = await institution(9990015, 'Nophoto Univ', base, {
+      photo: false,
+    });
 
     // One sample discipline per test profession: the pool needs it, and the course holding it is "the sample's own".
     const sampleCourse = async (
@@ -228,7 +232,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     await candidate(photo, carl, 'carl');
     await candidate(photo, echo, 'echo');
 
-    // Every institution of the profession lacks a photo: no offerings, but the sample still comes.
+    // Every institution of the profession lacks a photo: its only sample subject comes from one, so it is off the shelf.
     const noPhoto = await profession('t-no-photo', 'Test No Photo');
     const bareSample = await course(noPhoto, bare, base, 'bare-sample');
     await subjects(bareSample, base, [
@@ -237,6 +241,21 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         await discipline(bare, 'Bare disc', ['B'], base),
       ),
     ]);
+
+    // A sample subject at an institution without a photo and one at an institution with a photo.
+    const photoSample = await profession('t-photo-sample', 'Test Photo Sample');
+    for (const [inst, label] of [
+      [noPhotoUniv, 'Nophoto'],
+      [zeta, 'Photo'],
+    ] as const) {
+      const id = await course(photoSample, inst, base, `${label}-course`);
+      await subjects(id, base, [
+        firstTerm(
+          `${label} subject`,
+          await discipline(inst, `${label} disc`, [label], base),
+        ),
+      ]);
+    }
 
     const byName = await profession('t-name', 'Test Name');
     await sampleCourse(byName);
@@ -475,6 +494,43 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       firstTerm('Plain'),
     ]);
 
+    // At alpha, 'Aaa shared' and 'Bbb shared' open three careers, 'Ccc mid' two, 'Own' one: the shared ones sort first.
+    const spread = await profession('t-spread', 'Test Spread');
+    await subjects(
+      await course(spread, alpha, base, 'spread'),
+      base,
+      await Promise.all(
+        ['Aaa shared', 'Bbb shared', 'Ccc mid', 'Own'].map(async (name) =>
+          firstTerm(name, await discipline(alpha, name, [name], base)),
+        ),
+      ),
+    );
+    for (const [slug, shared] of [
+      ['t-spread-x', ['Aaa shared', 'Bbb shared', 'Ccc mid']],
+      ['t-spread-y', ['aaa SHARED', 'Bbb shared']],
+    ] as const) {
+      const other = await profession(slug, `Test ${slug}`);
+      await subjects(
+        await course(other, alpha, base, slug),
+        base,
+        shared.map((name) => firstTerm(name)),
+      );
+    }
+
+    // Two disciplines of one name (an institution with an ementa per course page): the sample holds it once.
+    const twin = await profession('t-twin', 'Test Twin');
+    await subjects(await course(twin, carl, base, 'twin'), base, [
+      firstTerm(
+        'Twin',
+        await discipline(carl, 'Twin', ['T1'], await source('Twin 1')),
+      ),
+      firstTerm(
+        'TWIN',
+        await discipline(carl, 'TWIN', ['T2'], await source('Twin 2')),
+      ),
+      firstTerm('Zed', await discipline(carl, 'Zed', ['Z'], base)),
+    ]);
+
     // The pool.
     const pool = async (
       slug: string,
@@ -545,13 +601,13 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   });
 
   const book = (slug: string) => repository.book(slug);
-  /** The institution the sample must come from, computed here: the smallest md5(slug:institution id) of the candidates. */
+  /** The institution the sample must come from, computed here: the smallest md5(slug:INEP code) of the candidates. */
   const pickedInstitution = async (slug: string, ineps: number[]) => {
     const rows = await sql<{ id: string; inep: number }[]>`
       select id::text, inep_code as inep from public.institutions where inep_code in ${sql(ineps)}`;
-    const hash = (id: string) =>
-      createHash('md5').update(`${slug}:${id}`).digest('hex');
-    return rows.sort((a, b) => hash(a.id).localeCompare(hash(b.id)))[0];
+    const hash = (inep: number) =>
+      createHash('md5').update(`${slug}:${inep}`).digest('hex');
+    return rows.sort((a, b) => hash(a.inep).localeCompare(hash(b.inep)))[0];
   };
   const summaries = async () =>
     (await repository.list()).filter((s) => s.profession.slug.startsWith('t-'));
@@ -569,8 +625,8 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-grade',
         't-main',
         't-name',
-        't-no-photo',
         't-photo',
+        't-photo-sample',
         't-pool-term-null',
         't-sample',
         't-sample-alpha',
@@ -580,9 +636,11 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-second-b',
         't-shift-a',
         't-shift-b',
+        't-spread',
         't-shared-a',
         't-shared-b',
         't-shared-c',
+        't-twin',
         't-unfetched',
       ]);
     });
@@ -674,11 +732,11 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       }
     });
 
-    it('answers a book with offerings [] and its sample when no institution of the profession has a photo', async () => {
-      const result = await book('t-no-photo');
-
-      expect(result?.offerings).toEqual([]);
-      expect(result?.sample.map((s) => s.name)).toEqual(['Bare disc']);
+    it('keeps a profession whose only sample subject is from an institution without a photo off the shelf', async () => {
+      expect(await book('t-no-photo')).toBeNull();
+      expect((await summaries()).map((s) => s.profession.slug)).not.toContain(
+        't-no-photo',
+      );
     });
 
     it('never repeats an institution: its second campus is left out, by city', async () => {
@@ -867,6 +925,22 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(new Set(result?.sample.map((s) => s.institution)).size).toBe(1);
     });
 
+    it('never takes the sample from an institution without a photo, even when its hash sorts first', async () => {
+      const slug = 't-photo-sample';
+      // Premise: unfiltered, the institution without a photo (9990015) would win the hash.
+      expect((await pickedInstitution(slug, [9990001, 9990015])).inep).toBe(
+        9990015,
+      );
+      const result = await book(slug);
+
+      expect(result?.sample.map((s) => [s.name, s.institution])).toEqual([
+        ['Photo disc', 'ZU'],
+      ]);
+      expect(result?.offerings.map((o) => o.course.name)).toEqual([
+        'Photo-course',
+      ]);
+    });
+
     it('returns 2 sample subjects, the first two by name, for 3 linked first-semester disciplines', async () => {
       const result = await book('t-sample-cap');
 
@@ -907,6 +981,21 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         'c-elective',
         'a-plain',
         'pool',
+      ]);
+    });
+
+    it("puts the career's own subjects before the ones other first semesters at the institution share", async () => {
+      // By name alone it would be Aaa shared, Bbb shared.
+      expect((await book('t-spread'))?.sample.map((s) => s.name)).toEqual([
+        'Own',
+        'Ccc mid',
+      ]);
+    });
+
+    it('holds a subject name once, whatever its case, when several disciplines carry it', async () => {
+      expect((await book('t-twin'))?.sample.map((s) => s.name)).toEqual([
+        'Twin',
+        'Zed',
       ]);
     });
 

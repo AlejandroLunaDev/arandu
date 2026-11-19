@@ -92,8 +92,9 @@ export interface SampleSubject {
 /** One book on the shelf: a profession and the São Paulo institutions that offer it. */
 export interface Book {
   profession: { slug: string; name: string };
-  /** Up to 3, each with a real first-year curriculum: the sample's own institution first, then FIAP where it offers
-   * the profession, then the rest in a neutral order. `admission` is empty: the book does not show cut-offs. */
+  /** Up to 3 institutions with a photo, one offering each: the sample's own institution first, then FIAP where it
+   * offers the profession, then the rest in a neutral order. Each has a real first-year curriculum, except FIAP's,
+   * which is null where its grade is unknown. `admission` is empty: the book does not show cut-offs. */
   offerings: Offering[];
   /** 1-2 subjects. */
   sample: SampleSubject[];

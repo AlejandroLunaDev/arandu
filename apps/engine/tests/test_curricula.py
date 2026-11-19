@@ -36,6 +36,40 @@ class LoadSubjectsTest(unittest.TestCase):
         self.assertFalse(any(c[0].startswith("delete") for c in conn.calls))
 
 
+class LoadDescribedTest(unittest.TestCase):
+    URL = "https://example.test/base/a/b/"
+
+    def load(self, descriptions, inep=22):
+        conn = FakeConn([(self.URL,)])
+        order = []
+        with mock.patch.object(curricula, "load_subjects", side_effect=lambda *a: order.append(len(conn.calls)) or 5) as load:
+            result = curricula.load_described(conn, 7, ([("s",)], descriptions), inep, "https://example.test/base")
+        return conn, load, order, result
+
+    def test_codes_are_the_page_path_after_base_plus_the_name_and_inep_is_passed(self):
+        conn, *_ = self.load([("Web", "d1"), ("Data", "d2")])
+        upserts = [c for c in conn.calls if c[0].startswith("insert into public.disciplines")]
+        self.assertEqual([c[1] for c in upserts], [("a/b#Web", "Web", ["d1"], 7, 22), ("a/b#Data", "Data", ["d2"], 7, 22)])
+        self.assertEqual(conn.calls[1][1], (7, ["a/b#Web", "a/b#Data"]))
+
+    def test_delete_first_then_upserts_then_load_subjects_last(self):
+        conn, load, order, result = self.load([("Web", "d1"), ("Data", "d2")])
+        sqls = [c[0] for c in conn.calls]
+        self.assertTrue(sqls[0].startswith("select url from sources"))
+        self.assertTrue(sqls[1].startswith("delete from public.disciplines where source_id"))
+        self.assertTrue(all(q.startswith("insert into public.disciplines") for q in sqls[2:]))
+        self.assertEqual(order, [4])
+        load.assert_called_once_with(conn, 7, [("s",)])
+        self.assertEqual(result, 1 + 2 + 5)
+
+    def test_no_descriptions_still_deletes_the_pages_stale_disciplines_and_loads_the_subjects(self):
+        conn, load, _, result = self.load([])
+        self.assertEqual(conn.calls[1][1], (7, []))
+        self.assertEqual(len(conn.calls), 2)
+        load.assert_called_once_with(conn, 7, [("s",)])
+        self.assertEqual(result, 1 + 5)
+
+
 class LoadCoursesTest(unittest.TestCase):
     def staged(self, conn):
         return [c[1] for c in conn.calls if "insert into staging.curriculum_courses" in c[0]]

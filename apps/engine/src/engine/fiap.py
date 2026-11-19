@@ -86,24 +86,7 @@ def parse_page(doc):
 
 def load_page(conn, source_id, parsed):
     """Store each described subject as a discipline of this page, then load the subjects, which links them by name."""
-    subjects, descriptions = parsed
-    url = conn.execute("select url from sources where id = %s", (source_id,)).fetchone()[0]
-    path = url.removeprefix(BASE).strip("/")
-    # FIAP publishes no subject code, and one name can carry another description in another course: the code is the
-    # course page's path plus the name, so each page keeps its own.
-    codes = [f"{path}#{name}" for name, _ in descriptions]
-    written = conn.execute(
-        "delete from public.disciplines where source_id = %s and not (code = any(%s))", (source_id, codes)).rowcount
-    for code, (name, description) in zip(codes, descriptions):
-        written += conn.execute(
-            """insert into public.disciplines (institution_id, code, name, topics, source_id)
-               select id, %s, %s, %s, %s from public.institutions where inep_code = %s
-               on conflict (institution_id, code) do update
-                 set name = excluded.name, topics = excluded.topics, source_id = excluded.source_id
-                 where (disciplines.name, disciplines.topics, disciplines.source_id)
-                   is distinct from (excluded.name, excluded.topics, excluded.source_id)""",
-            (code, name, [description], source_id, INEP_CODE)).rowcount
-    return written + curricula.load_subjects(conn, source_id, subjects)
+    return curricula.load_described(conn, source_id, parsed, INEP_CODE, BASE)
 
 
 curriculum = SimpleNamespace(parse=parse_page, load=load_page)

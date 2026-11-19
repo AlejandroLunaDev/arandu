@@ -20,28 +20,36 @@ const FIAP = 852;
 const sampleSubject = (cs: string, d: string) =>
   `${d}.topics is not null and (${cs}.term = 1 or (${cs}.term is null and ${cs}.year = 1))`;
 
-/** A profession on the shelf: it has a sample subject, the taste of the path. */
+/** The fields the photo object needs: a book never shows a university without its own photo (owner's decision). */
+const HAS_PHOTO = (i: string) =>
+  `${i}.photo_url is not null and ${i}.photo_credit is not null and ${i}.photo_license is not null
+  and ${i}.photo_source_url is not null`;
+
+/** A profession on the shelf: an institution with a photo has a sample subject, the taste of the path. */
 const IN_POOL = `exists (
   select 1 from public.courses pc
   join public.curriculum_subjects pcs on pcs.course_id = pc.id
   join public.disciplines pd on pd.id = pcs.discipline_id
-  where pc.profession_id = p.id and ${sampleSubject('pcs', 'pd')})`;
+  join public.institutions pi on pi.id = pd.institution_id
+  where pc.profession_id = p.id and ${sampleSubject('pcs', 'pd')} and ${HAS_PHOTO('pi')})`;
 
 /** The book's sample: at most 2 subjects (the contract's 1-2). */
 const SAMPLE_SIZE = 2;
 
 /**
- * The one institution a book's sample comes from: among those with a sample subject for the profession ($1), a fixed
- * pick that varies by profession (a hash, not a preference), so the shelf does not open every book with the same one.
+ * The one institution a book's sample comes from: among those with a photo and a sample subject for the profession
+ * ($1), a fixed pick that varies by profession (a hash of the INEP code, stable across reloads, not a preference), so
+ * the shelf does not open every book with the same one. Null when none qualifies: the book then has no sample.
  */
 const SAMPLE_INSTITUTION = `(
-  select d.institution_id from public.disciplines d
+  select i.id from public.disciplines d
+  join public.institutions i on i.id = d.institution_id
   join public.curriculum_subjects cs on cs.discipline_id = d.id
   join public.courses c on c.id = cs.course_id
   join public.professions p on p.id = c.profession_id
-  where p.slug = $1 and ${sampleSubject('cs', 'd')}
-  group by d.institution_id
-  order by md5($1 || ':' || d.institution_id)
+  where p.slug = $1 and ${sampleSubject('cs', 'd')} and ${HAS_PHOTO('i')}
+  group by i.id, i.inep_code
+  order by md5($1 || ':' || i.inep_code)
   limit 1)`;
 
 /** The first-year mandatory subjects of the profession's courses. Undated subjects (no year, no term) stay out. */
@@ -215,9 +223,7 @@ export class BooksRepository {
         from course_grade cg
         join public.courses c on c.id = cg.course_id
         join public.institutions i on i.id = c.institution_id
-        -- The same fields the photo object needs: a book never shows a university without its own photo.
-        where i.photo_url is not null and i.photo_credit is not null and i.photo_license is not null
-          and i.photo_source_url is not null
+        where ${HAS_PHOTO('i')}
       ),
       picked as (
         select ranked.*, institution_id = ${SAMPLE_INSTITUTION} as lead from ranked
@@ -240,23 +246,36 @@ export class BooksRepository {
     );
   }
 
-  /** The sample subjects, the taste of the path: all from the one institution SAMPLE_INSTITUTION picks. */
+  /**
+   * The sample subjects, the taste of the path: all from the one institution SAMPLE_INSTITUTION picks, the career's
+   * own subjects first (fewest professions sharing the name there), then by name.
+   */
   private async sample(slug: string): Promise<SampleSubject[]> {
     const rows = await this.sql.unsafe<
       (SourceRow & Omit<SampleSubject, 'source'>)[]
     >(
-      `select d.name, d.topics, coalesce(i.short_name, i.name) as institution,
-        s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
-      from public.disciplines d
-      join public.institutions i on i.id = d.institution_id
-      join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
-      where d.institution_id = ${SAMPLE_INSTITUTION} and exists (
-        select 1 from public.curriculum_subjects cs
-        join public.courses c on c.id = cs.course_id
-        join public.professions p on p.id = c.profession_id
-        where cs.discipline_id = d.id and p.slug = $1 and ${sampleSubject('cs', 'd')}
-      )
-      order by d.name
+      `select name, topics, institution, source_label, source_url, retrieved_at from (
+        -- One per name: an institution that publishes ementas per course page has one discipline per page.
+        select distinct on (lower(d.name)) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
+          s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at,
+          -- The professions whose first semester at this institution has a subject of this name: the fewer, the more
+          -- the subject belongs to this career ('Ética e Cidadania' is in all of them).
+          (select count(distinct oc.profession_id) from public.curriculum_subjects ocs
+            join public.courses oc on oc.id = ocs.course_id
+            where oc.institution_id = d.institution_id and lower(ocs.name) = lower(d.name)
+              and (ocs.term = 1 or (ocs.term is null and ocs.year = 1))) as spread
+        from public.disciplines d
+        join public.institutions i on i.id = d.institution_id
+        join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
+        where d.institution_id = ${SAMPLE_INSTITUTION} and exists (
+          select 1 from public.curriculum_subjects cs
+          join public.courses c on c.id = cs.course_id
+          join public.professions p on p.id = c.profession_id
+          where cs.discipline_id = d.id and p.slug = $1 and ${sampleSubject('cs', 'd')}
+        )
+        order by lower(d.name), d.id
+      ) named
+      order by spread, name
       limit $2`,
       [slug, SAMPLE_SIZE],
     );
