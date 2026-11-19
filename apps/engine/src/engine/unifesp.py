@@ -4,12 +4,10 @@ The matriz links the course's list of curricular units; each first-termo unit of
 programático' page whose ementa becomes the discipline's one topic, as Mackenzie's are (owner, 2026-11-19).
 """
 
-import base64
 import datetime
 import hashlib
 import html as entities
 import io
-import json
 import re
 import tempfile
 import zipfile
@@ -88,44 +86,46 @@ UNIT_NAME = re.compile(r"<strong>Matéria: </strong>(.*?) \(\d+\)</p>")
 CARD = r'<strong>{}</strong>\s*</div>\s*<div class="card-body[^"]*">(.*?)</div>\s*</div>\s*</div>'
 EMENTA = re.compile(CARD.format("Ementa"), re.S)
 CONTENT = re.compile(CARD.format("Conteúdo Programático"), re.S)
+CSRF = re.compile(rb'<meta name="csrf-token" content="[^"]*">')
+UNSET = "Não informado"  # a class that publishes no text for that card
 
 
-def _unit(key):
-    """The matéria id an offer url's base64 JSON key names."""
-    return json.loads(base64.b64decode(key + "=" * (-len(key) % 4)))["mater_id_mater"]
+def _get(url, part, digest):
+    """Fetch url into part and return its bytes; the digest leaves out the csrf token, new on every fetch."""
+    fetch.download(url, part)
+    part.seek(0)
+    body = part.read()
+    digest.update(CSRF.sub(b"", body))
+    return body
 
 
 def download_matriz(url, dest):
     """Zip the matriz page and the conteúdo programático of each unit its course offers in the first termo.
 
     Offers are listed per school year and semester: this year's first semester, else this year's annual offers
-    (semestre 0, as Medicina's), else last year's. The digest covers every page fetched.
+    (semestre 0, as Medicina's), else last year's. Every class of a unit is fetched, since classes publish their own
+    texts. The digest covers every page fetched.
     shortcut: São José dos Campos's courses list no first-termo offer under any of these filters, so they get no
     ementas; read their interdisciplinary entry course's list once one is found to hold them.
     """
     dest.seek(0)
     dest.truncate()
+    digest = hashlib.sha256()
     with tempfile.TemporaryFile() as part:
-        digest = hashlib.sha256(fetch.download(url, part).encode())
-        part.seek(0)
-        page = part.read()
-        offers = {}
+        page = _get(url, part, digest)
+        offers = []
         if listing := UNIT_LIST.search(page.decode("utf-8")):
             year = datetime.date.today().year
             for school_year, semester in ((year, 1), (year, 0), (year - 1, 1), (year - 1, 0)):
                 query = f"&filter_anoLetivo={school_year}&filter_semestre={semester}&filter_termo=1"
-                digest.update(fetch.download(entities.unescape(listing[1]) + query, part).encode())
-                part.seek(0)
-                for offer, key in OFFER.findall(part.read().decode("utf-8")):
-                    offers.setdefault(_unit(key), offer)  # one page per unit, whatever its class
+                listed = _get(entities.unescape(listing[1]) + query, part, digest).decode("utf-8")
+                offers = list(dict.fromkeys(offer for offer, _ in OFFER.findall(listed)))
                 if offers:
                     break
         with zipfile.ZipFile(dest, "w") as bundle:
             bundle.writestr("page.html", page)
-            for n, offer in enumerate(offers.values()):
-                digest.update(fetch.download(offer, part).encode())
-                part.seek(0)
-                bundle.writestr(f"{n}.html", part.read())
+            for n, offer in enumerate(offers):
+                bundle.writestr(f"{n}.html", _get(offer, part, digest))
     return digest.hexdigest()
 
 
@@ -148,22 +148,29 @@ def parse_page(doc):
     """Return the matriz's subjects and (name, ementa, conteúdo programático or None) for each first-termo unit.
 
     The conteúdo programático is kept whole, its lines as the page breaks them: it is a list, a plan per class or
-    prose depending on the unit, so it is not split into topics here.
+    prose depending on the unit, so it is not split into topics here. A unit's classes, and two units of one name,
+    publish their own texts: a subject keeps an ementa only when every class that publishes one gives the same, and
+    a conteúdo programático under the same rule. A class's 'Não informado' counts as no text.
     """
     with zipfile.ZipFile(doc) as bundle:
         subjects = parse_curriculum(io.BytesIO(bundle.read("page.html")))
         first = {name for term, _, name, _, _ in subjects if term == 1}
-        found = {}
+        ementas, contents = {}, {}
         for item in bundle.namelist():
             if item == "page.html":
                 continue
             unit = bundle.read(item).decode("utf-8")
-            name = UNIT_NAME.search(unit)
+            if not (name := UNIT_NAME.search(unit)) or (name := " ".join(entities.unescape(name[1]).split())) not in first:
+                continue
             ementa, content = " ".join(_card(EMENTA.search(unit)).split()), _card(CONTENT.search(unit))
-            if name and len(ementa) >= 30 and (name := " ".join(entities.unescape(name[1]).split())) in first:
-                found.setdefault(name, set()).add((ementa, content or None))
-    # Two texts for one name (two units of that name in the termo) is not certain: the subject keeps none.
-    return subjects, sorted((name, *texts.pop()) for name, texts in found.items() if len(texts) == 1)
+            if len(ementa) >= 30:
+                ementas.setdefault(name, set()).add(ementa)
+            if content and content != UNSET:
+                contents.setdefault(name, set()).add(content)
+    # Two texts for one name is not certain: that subject keeps none of that card.
+    one = lambda texts: next(iter(texts)) if texts and len(texts) == 1 else None
+    return subjects, sorted((name, one(texts), one(contents.get(name))) for name, texts in ementas.items()
+                            if len(texts) == 1)
 
 
 curriculum = SimpleNamespace(
