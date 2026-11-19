@@ -998,6 +998,21 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
     await expect(result).resolves.toMatch(/has 1 pages, not 2/);
   });
 
+  it('throws the pages message, not a TypeError, when page 1 is missing but page 2 has facts', async () => {
+    const result = rolledBack(async (tx) => {
+      await tx`delete from public.story_facts where book = 'produto' and page = 1`;
+      await tx`delete from public.story_pages where book = 'produto' and page = 1`;
+      return inTx(tx)
+        .ownBook('produto')
+        .then(
+          () => 'resolved',
+          (e: Error) => `${e.constructor.name}: ${e.message}`,
+        );
+    });
+
+    await expect(result).resolves.toMatch(/^Error: .*has 1 pages, not 2/);
+  });
+
   describe('constraints', () => {
     it('rejects a fact on page 3', async () => {
       await expect(

@@ -45,7 +45,7 @@ insert into public.story_facts (book, page, position, figure, text, source_label
     'https://www.gov.br/inep/pt-br/centrais-de-conteudo/noticias/censo-escolar/inep-apresenta-os-grandes-numeros-da-educacao-basica',
     '2026-11-19'),
   ('solucao', 2, 1, null,
-    'Escolhe-se sem ter vivido a carreira: pelo nome da profissão, pela imagem que se tem dela ou pela opinião dos outros.',
+    'Escolhe-se sem ter experimentado a carreira: pelo nome da profissão, pela imagem que se tem dela ou pela opinião de outras pessoas.',
     null, null, '2026-11-19'),
   ('solucao', 2, 2, null,
     'Os dados existem, mas estão espalhados: grades curriculares, notas de corte e formas de ingresso ficam em dezenas de sites, em formatos difíceis de comparar.',
@@ -71,9 +71,10 @@ insert into public.story_facts (book, page, position, figure, text, source_label
   ('produto', 1, 6, null,
     'A conversa com o Arandu é só sua.',
     null, null, '2026-11-19'),
-  -- Arandu's own counts, rounded down so each "+" stays true: 545 institutions, 7.863 courses, 9.416 cut-offs
-  -- (SISU 2020-2024, ProUni 2023-2026, ENEM-USP 2024-2026), 66.717 distinct subjects of 839 courses, 1.143 topics of
-  -- 109 USP subjects in 60 careers, 2.085 sources from 76 hosts (real DB, 2026-11-19).
+  -- Arandu's own counts, rounded down so each "+" stays true: 545 institutions and 7.863 courses, all in-person in
+  -- SP (the engine loads only census rows with SG_UF 'SP' and TP_DIMENSAO 1); 9.416 cut-offs (SISU 2020-2024, ProUni
+  -- 2023-2026, ENEM-USP 2024-2026); 66.717 distinct subjects of 839 courses from 24 institutions; 1.143 topics of 109
+  -- USP subjects in 60 careers; 2.085 sources from 76 hosts (real DB, 2026-11-19).
   ('produto', 2, 1, '+540',
     'instituições e mais de 7.800 cursos presenciais no estado de São Paulo.',
     'INEP, Censo da Educação Superior 2024',

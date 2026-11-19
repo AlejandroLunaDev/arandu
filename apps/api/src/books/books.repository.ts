@@ -269,7 +269,7 @@ export class BooksRepository {
       order by p.page, f.position`;
     const pages: StoryPage[] = [];
     for (const row of rows) {
-      if (pages.length < row.page) pages.push({ title: row.title, facts: [] });
+      pages[row.page - 1] ??= { title: row.title, facts: [] };
       if (row.text === null) continue; // a page with no facts yet
       pages[row.page - 1].facts.push({
         figure: row.figure,
@@ -286,8 +286,10 @@ export class BooksRepository {
       });
     }
     // The table allows pages 1 and 2 only; a missing one is a data error, not an empty page.
-    if (pages.length !== 2)
-      throw new Error(`Own book "${book}" has ${pages.length} pages, not 2`);
+    if (!pages[0] || !pages[1])
+      throw new Error(
+        `Own book "${book}" has ${pages.filter(Boolean).length} pages, not 2`,
+      );
     return { book, pages: [pages[0], pages[1]] };
   }
 }
