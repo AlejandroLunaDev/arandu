@@ -134,6 +134,11 @@ def unit_page(name, ementa=LONG, code=1):
     return page[:start] + ementa + page[page.index("</p>", start):]
 
 
+def unset_content(page, text=unifesp.UNSET):
+    card = unifesp.CONTENT.search(page)
+    return page[:card.start(1)] + text + page[card.end(1):]
+
+
 def bundle(matriz, *units):
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w") as z:
@@ -142,19 +147,6 @@ def bundle(matriz, *units):
             z.writestr(f"{n}.html", unit)
     out.seek(0)
     return out
-
-
-class UnitKeyTest(unittest.TestCase):
-    def test_padded_and_unpadded_base64_give_the_same_matter_id(self):
-        for mater in (9750, 97500, 1):
-            with self.subTest(mater):
-                padded, bare = offer(mater).split("/")[-2], offer(mater, pad=False).split("/")[-2]
-                self.assertEqual(unifesp._unit(padded), str(mater))
-                self.assertEqual(unifesp._unit(bare), str(mater))
-
-    def test_the_real_offer_key_without_padding_is_read(self):
-        key = "eyJtYXRlcl9pZF9tYXRlciI6Ijk3NTAiLCJzZXJpZV9hbm9fbGV0aXZvIjoiMjAyNiIsInNlcmllX3NlcmllIjoiMSIsInNlcmllX3NlbWVzdHJlIjoiMSIsInNlcmllX2N1cnNvX2lkX2N1cnNvIjoiNzgwIiwidHVybm8iOiJJIn0"
-        self.assertEqual(unifesp._unit(key), "9750")
 
 
 DANCE_PROGRAM = [  # the real unit's Conteúdo Programático card: one line per <br>, blank lines dropped
@@ -213,9 +205,21 @@ class ParsePageTest(unittest.TestCase):
     def test_two_different_ementas_for_one_name_are_dropped(self):
         self.assertEqual(self.triples(unit_page(FIRST), unit_page(FIRST, LONG + " Outra."))[1], [])
 
-    def test_two_different_programs_for_one_name_are_dropped(self):
+    def test_two_different_programs_with_one_ementa_keep_the_ementa_and_no_program(self):
         other = unit_page(FIRST).replace("- Educação rítmica.", "- Outra coisa.")
-        self.assertEqual(self.triples(unit_page(FIRST), other)[1], [])
+        self.assertEqual(self.triples(unit_page(FIRST), other)[1], [(FIRST, LONG, None)])
+
+    def test_a_class_with_nao_informado_in_both_cards_does_not_hide_the_real_texts(self):
+        blank = unset_content(unit_page(FIRST, unifesp.UNSET))
+        for units in ((unit_page(FIRST), blank), (blank, unit_page(FIRST))):
+            with self.subTest(units[0] is blank):
+                self.assertEqual(self.triples(*units)[1], [(FIRST, LONG, PROGRAM)])
+
+    def test_nao_informado_alone_is_no_text_so_the_name_is_dropped(self):
+        self.assertEqual(self.triples(unset_content(unit_page(FIRST, unifesp.UNSET)))[1], [])
+
+    def test_nao_informado_program_with_a_real_ementa_gives_program_none(self):
+        self.assertEqual(self.triples(unset_content(unit_page(FIRST)))[1], [(FIRST, LONG, None)])
 
     def test_the_same_ementa_and_program_twice_is_kept_once(self):
         self.assertEqual(self.triples(unit_page(FIRST), unit_page(FIRST))[1], [(FIRST, LONG, PROGRAM)])
@@ -316,23 +320,43 @@ class DownloadMatrizTest(unittest.TestCase):
         self.assertEqual(z.namelist(), ["page.html"])
         self.assertEqual(len(seen), 5)
 
-    def test_one_unit_across_two_classes_is_fetched_once(self):
-        a1, a2, b = offer(10, "I"), offer(10, "N", pad=False), offer(11)
+    def test_two_classes_of_one_unit_are_both_fetched_and_zipped(self):
+        a1, a2 = offer(10, "I"), offer(10, "N", pad=False)
         self.assertNotEqual(a1, a2)
-        _, z, seen = self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): listing(a1, a2, b), a1: "a", b: "b"})
-        self.assertEqual(seen[2:], [a1, b])
+        _, z, seen = self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): listing(a1, a2), a1: "a", a2: "b"})
+        self.assertEqual(seen[2:], [a1, a2])
         self.assertEqual([z.read(n) for n in z.namelist()[1:]], [b"a", b"b"])
+
+    def test_an_identical_url_listed_twice_is_fetched_once(self):
+        a = offer(10)
+        _, z, seen = self.run_download(self.MATRIZ, {query(THIS_YEAR, 1): listing(a, a), a: "a"})
+        self.assertEqual(seen[2:], [a])
+        self.assertEqual(z.namelist(), ["page.html", "0.html"])
 
     def test_a_page_without_a_list_link_gives_only_page_html_and_one_fetch(self):
         digest, z, seen = self.run_download("<html></html>", {})
         self.assertEqual((z.namelist(), seen), (["page.html"], [MATRIZ_URL]))
-        self.assertEqual(digest, hashlib.sha256(hashlib.sha256(b"<html></html>").hexdigest().encode()).hexdigest())
+        self.assertEqual(digest, hashlib.sha256(b"<html></html>").hexdigest())
 
     def test_the_digest_changes_when_a_unit_page_changes_and_not_otherwise(self):
         a = offer(1)
         bodies = {query(THIS_YEAR, 1): listing(a), a: "v1"}
         self.assertEqual(self.run_download(self.MATRIZ, bodies)[0], self.run_download(self.MATRIZ, bodies)[0])
         self.assertNotEqual(self.run_download(self.MATRIZ, bodies)[0], self.run_download(self.MATRIZ, bodies | {a: "v2"})[0])
+
+    def test_the_digest_is_the_sha256_of_the_pages_in_fetch_order_and_ignores_only_the_csrf_token(self):
+        token = '<meta name="csrf-token" content="%s">'
+        a = offer(1)
+
+        def digest(t1, t2, t3, unit="u"):
+            matriz = self.MATRIZ + token % t1
+            bodies = {query(THIS_YEAR, 1): listing(a) + token % t2, a: unit + token % t3}
+            return self.run_download(matriz, bodies)[0]
+
+        expected = hashlib.sha256(self.MATRIZ.encode() + listing(a).encode() + b"u").hexdigest()
+        self.assertEqual(digest("x", "y", "z"), expected)
+        self.assertEqual(digest("x", "y", "z"), digest("1", "2", "3"))
+        self.assertNotEqual(digest("x", "y", "z"), digest("x", "y", "z", unit="changed"))
 
     def test_the_digest_changes_when_the_matriz_page_changes(self):
         empty = {"&filter_termo=1": "none"}
