@@ -11,6 +11,7 @@ import io
 import re
 import tempfile
 import unicodedata
+import urllib.error
 import zipfile
 from types import SimpleNamespace
 from urllib.parse import unquote, urljoin
@@ -108,6 +109,7 @@ def parse_curriculum(doc):
 
 
 PDF_LINK = re.compile(r'href="([^"]+\.pdf)"', re.I)
+GONE = {403, 404, 410}  # a linked PDF that answers these is dead, not down: the page loads without it
 FIRST_ETAPA = re.compile(r"(^|[^0-9])0?1(a|ª|º|o)?[_ -]*(etapa|semestre)|etapa[_ -]*0?1([^0-9]|$)", re.I)
 NOT_EMENTAS = re.compile(r"biblioteca|codigo|c%c3%b3digo|ebook|regulamento|manual|calendario", re.I)
 
@@ -132,7 +134,16 @@ def download_page(url, dest):
         with zipfile.ZipFile(dest, "w") as bundle:
             bundle.writestr("page.html", page)
             for n, pdf_url in enumerate(ementa_pdfs(page.decode("utf-8"))):
-                digest.update(fetch.download(pdf_url, part).encode())
+                try:
+                    digest.update(fetch.download(pdf_url, part).encode())
+                except urllib.error.HTTPError as error:
+                    if error.code not in GONE:
+                        raise
+                    digest.update(f"{pdf_url} {error.code}".encode())
+                    continue  # a dead link: its ementas go, the page's subjects still load
+                except PermissionError:  # robots.txt disallows it
+                    digest.update(f"{pdf_url} disallowed".encode())
+                    continue
                 part.seek(0)
                 bundle.writestr(f"{n}.pdf", part.read())
     return digest.hexdigest()
@@ -191,7 +202,11 @@ def parse_page(doc):
     """Return the page's subjects and (name, ementa) for each first-etapa subject its PDFs describe unambiguously."""
     with zipfile.ZipFile(doc) as bundle:
         subjects = parse_curriculum(io.BytesIO(bundle.read("page.html")))
-        first = {_key(name).replace(" ", ""): name for term, _, name, _, elective in subjects if term == 1 and not elective}
+        # Every subject of the page is matched, so a later etapa's heading ('Cálculo II') is never credited to a
+        # first-etapa name it contains ('Cálculo I'); only the first etapa's ementas are kept.
+        names = {_key(name).replace(" ", ""): name for _, _, name, _, _ in subjects}
+        first = {names[_key(name).replace(" ", "")] for term, _, name, _, elective in subjects
+                 if term == 1 and not elective}
         found = {}
         for item in sorted(n for n in bundle.namelist() if n.endswith(".pdf")):
             data = bundle.read(item)
@@ -199,8 +214,9 @@ def parse_page(doc):
                 continue  # a link that serves an HTML page instead of its PDF
             with pdfplumber.open(io.BytesIO(data)) as pdf:
                 lines = [line for page in pdf.pages for line in (page.extract_text() or "").splitlines() if line.strip()]
-            for key, text in _ementas(lines, first):
-                found.setdefault(first[key], set()).add(text)
+            for key, text in _ementas(lines, names):
+                if names[key] in first:
+                    found.setdefault(names[key], set()).add(text)
     # Two ementas for one name (two curriculum versions, or a misread heading) is not certain: the subject keeps none.
     return subjects, sorted((name, texts.pop()) for name, texts in found.items() if len(texts) == 1)
 

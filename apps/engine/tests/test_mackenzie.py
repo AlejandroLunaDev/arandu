@@ -1,6 +1,7 @@
 import hashlib
 import io
 import unittest
+import urllib.error
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -279,6 +280,47 @@ class DownloadPageTest(unittest.TestCase):
         digest, bundle, _ = self.run_download(b"<html></html>", {})
         self.assertEqual(bundle.namelist(), ["page.html"])
 
+    def run_with_errors(self, errors):
+        """Two PDF links; `errors` maps a url to the exception its download raises."""
+        a, b = "https://www.mackenzie.br/a/1__Etapa.pdf", "https://www.mackenzie.br/a/ETAPA_1.pdf"
+        page = links("/a/1__Etapa.pdf", "/a/ETAPA_1.pdf").encode()
+
+        def fake(url, dest, **kw):
+            if url in errors:
+                raise errors[url]
+            body = page if url.endswith("matriz") else b"%PDF-" + url[-6:].encode()
+            dest.seek(0)
+            dest.truncate()
+            dest.write(body)
+            return hashlib.sha256(body).hexdigest()
+        dest = io.BytesIO()
+        with mock.patch.object(mackenzie.fetch, "download", side_effect=fake):
+            digest = mackenzie.download_page("https://www.mackenzie.br/x/matriz", dest)
+        return digest, zipfile.ZipFile(io.BytesIO(dest.getvalue())), a, b
+
+    def test_a_pdf_gone_404_is_skipped_and_the_digest_changes(self):
+        gone = urllib.error.HTTPError("u", 404, "Not Found", {}, None)
+        whole = self.run_with_errors({})[0]
+        digest, bundle, *_ = self.run_with_errors({"https://www.mackenzie.br/a/1__Etapa.pdf": gone})
+        self.assertEqual(bundle.namelist(), ["page.html", "1.pdf"])
+        self.assertNotEqual(digest, whole)
+
+    def test_a_pdf_answering_500_raises(self):
+        down = urllib.error.HTTPError("u", 500, "Server Error", {}, None)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_with_errors({"https://www.mackenzie.br/a/1__Etapa.pdf": down})
+
+    def test_a_pdf_refused_by_robots_is_skipped_and_the_digest_changes(self):
+        whole = self.run_with_errors({})[0]
+        digest, bundle, *_ = self.run_with_errors({"https://www.mackenzie.br/a/ETAPA_1.pdf": PermissionError("robots")})
+        self.assertEqual(bundle.namelist(), ["page.html", "0.pdf"])
+        self.assertNotEqual(digest, whole)
+
+    def test_the_page_itself_failing_still_raises(self):
+        with mock.patch.object(mackenzie.fetch, "download", side_effect=urllib.error.HTTPError("u", 404, "x", {}, None)):
+            with self.assertRaises(urllib.error.HTTPError):
+                mackenzie.download_page("https://www.mackenzie.br/x/matriz", io.BytesIO())
+
 
 EMENTA = "Estudo dos fundamentos da conduta etica e da cidadania na vida profissional."
 
@@ -379,13 +421,34 @@ class ParsePageTest(unittest.TestCase):
             _, ementas = mackenzie.parse_page(bundle_of(DIREITO, DIREITO_PDF, DIREITO_PDF))
         self.assertEqual(ementas, [])
 
-    def test_electives_and_later_terms_are_not_described(self):
-        with mock.patch.object(mackenzie, "_ementas", return_value=[]) as found:
-            mackenzie.parse_page(bundle_of(CIVIL, DIREITO_PDF))
-        names = found.call_args.args[1]
-        self.assertIn("eticaecidadania", names)
-        self.assertNotIn("eletivauniversal", names)
-        self.assertNotIn("bancodedadosi", names)
+    def test_electives_and_later_terms_are_matched_but_never_described(self):
+        found = [("eticaecidadania", EMENTA), ("eletivauniversal", EMENTA), ("calculonumerico", EMENTA)]
+        with mock.patch.object(mackenzie, "_ementas", return_value=found) as called:
+            _, ementas = mackenzie.parse_page(bundle_of(CIVIL, DIREITO_PDF))
+        names = called.call_args.args[1]  # every subject is offered, so a later one can claim its own heading
+        self.assertIn("eletivauniversal", names)
+        self.assertIn("calculonumerico", names)
+        self.assertEqual([n for n, _ in ementas], [names["eticaecidadania"]])
+
+    def test_a_later_etapas_heading_is_not_credited_to_the_first_etapa_name_it_contains(self):
+        subjects = [(1, 1, "Cálculo I", None, False), (2, 1, "Cálculo II", None, False),
+                    (1, 1, "Filosofia", None, False), (3, 2, "Filosofia do Direito", None, False)]
+        lines = ["Disciplina", "Cálculo II", "Ementa", EMENTA, "Objetivo",
+                 "Disciplina", "Filosofia do Direito", "Ementa", EMENTA + " dois", "Objetivo"]
+        pdf = mock.MagicMock()
+        pdf.__enter__.return_value.pages = [mock.Mock(extract_text=lambda: "\n".join(lines))]
+        with mock.patch.object(mackenzie, "parse_curriculum", return_value=subjects),                 mock.patch.object(mackenzie.pdfplumber, "open", return_value=pdf):
+            _, ementas = mackenzie.parse_page(bundle_of("<html></html>", b"%PDF-x"))
+        self.assertEqual(ementas, [])
+
+    def test_a_first_etapa_heading_still_gets_its_ementa_beside_a_later_etapa_name_it_is_inside(self):
+        subjects = [(1, 1, "Cálculo I", None, False), (2, 1, "Cálculo II", None, False)]
+        pdf = mock.MagicMock()
+        pdf.__enter__.return_value.pages = [mock.Mock(extract_text=lambda: "\n".join(
+            ["Disciplina", "Cálculo I", "Ementa", EMENTA, "Objetivo"]))]
+        with mock.patch.object(mackenzie, "parse_curriculum", return_value=subjects),                 mock.patch.object(mackenzie.pdfplumber, "open", return_value=pdf):
+            _, ementas = mackenzie.parse_page(bundle_of("<html></html>", b"%PDF-x"))
+        self.assertEqual(ementas, [("Cálculo I", EMENTA)])
 
 
 class LoadDescribedLocalDbTest(unittest.TestCase):
