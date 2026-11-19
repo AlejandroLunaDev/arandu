@@ -53,9 +53,9 @@ class LoadDescribedTest(unittest.TestCase):
         self.assertEqual(conn.calls[1][1], (7, ["a/b#Web", "a/b#Data"]))
 
     def test_a_third_item_is_the_program_and_a_missing_one_is_none(self):
-        conn, *_ = self.load([("Web", "d1", "p1\np2"), ("Data", "d2", None), ("Pair", "d3")])
+        conn, *_ = self.load([("Web", "d1", "p1\np2"), ("Data", "d2", None), ("Ops", "d3", ""), ("Pair", "d4")])
         upserts = [c[1] for c in conn.calls if c[0].startswith("insert into public.disciplines")]
-        self.assertEqual([u[3] for u in upserts], ["p1\np2", None, None])
+        self.assertEqual([u[3] for u in upserts], ["p1\np2", None, None, None])
 
     def test_the_upsert_updates_program_and_its_changed_row_guard_covers_it(self):
         conn, *_ = self.load([("Web", "d1", "p")])
