@@ -66,6 +66,8 @@ const PRINT_EARLY = 0.2;
 /** How much the GitHub plaque's face carries its own light, at rest and under the pointer (props.ts). */
 const PLAQUE_GLOW = 0.35;
 const PLAQUE_HOT = 0.9;
+/** How wide (CSS px) the portfolio is laid out on the notebook's screen, before it is scaled to it. */
+const PORTFOLIO_WIDTH = 1440;
 /** The TV's brand screen: a canvas at the screen's 16:9, the cat's head (px) in its middle. */
 const BRAND = { width: 640, height: 360, head: 120 };
 const ZOOM_LEAST = 1.2;
@@ -425,6 +427,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       if (!target?.closest("[data-pages]")) shutBook();
       return;
     }
+    // The right button only backs out (onMenu): it grabs, zooms and opens nothing.
+    if (e.button === 2) return;
     if (e.pointerType === "mouse") {
       lastMove = lastInput;
       Object.assign(pointer, { x: e.clientX, y: e.clientY, on: true });
@@ -957,14 +961,26 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     nbBox.setFromObject(nbScreen);
     const x = screenX(nbBox.min.x);
     const y = screenY(nbBox.max.y);
+    // Laid out at one width and scaled to the screen, as the TV's card is: on any screen the site sees
+    // the same window, so it never falls into a layout that needs scrolling to reach its input.
+    const k = (screenX(nbBox.max.x) - x) / PORTFOLIO_WIDTH;
     site.style.setProperty("--nb-x", `${x.toFixed(1)}px`);
     site.style.setProperty("--nb-y", `${y.toFixed(1)}px`);
-    site.style.setProperty("--nb-w", `${(screenX(nbBox.max.x) - x).toFixed(1)}px`);
-    site.style.setProperty("--nb-h", `${(screenY(nbBox.min.y) - y).toFixed(1)}px`);
+    site.style.setProperty("--nb-w", `${PORTFOLIO_WIDTH}px`);
+    site.style.setProperty("--nb-h", `${((screenY(nbBox.min.y) - y) / k).toFixed(1)}px`);
+    site.style.setProperty("--nb-k", k.toFixed(4));
   };
   const unzoom = () => zoom(null);
   addEventListener(UNZOOM_EVENT, unzoom);
   addEventListener("scroll", unzoom, { passive: true });
+  // A right click backs out of a close-up, as Escape does, instead of the browser's menu; links, fields
+  // and the open book's text keep theirs.
+  const onMenu = (e: MouseEvent) => {
+    if (e.target instanceof Element && e.target.closest("a, input, textarea, [data-pages]")) return;
+    e.preventDefault();
+    unzoom();
+  };
+  addEventListener("contextmenu", onMenu);
 
   // The coffee's steam is the page's (stage.tsx), soft wisps over the mug's rim: the model's own stays hidden.
   const steam = document.querySelector<HTMLElement>("[data-steam]");
@@ -1280,6 +1296,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (steam) delete steam.dataset.on;
     removeEventListener(UNZOOM_EVENT, unzoom);
     removeEventListener("scroll", unzoom);
+    removeEventListener("contextmenu", onMenu);
     delete document.documentElement.dataset.zoom;
     delete document.documentElement.dataset.book;
     if (site) delete site.dataset.on;

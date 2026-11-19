@@ -206,6 +206,8 @@
   width: var(--nb-w);
   height: var(--nb-h);
   translate: var(--nb-x) var(--nb-y);
+  scale: var(--nb-k, 1);
+  transform-origin: 0 0;
   border: 0;
   border-radius: 2px;
   background: var(--ink-950);

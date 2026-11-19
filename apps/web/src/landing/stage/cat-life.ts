@@ -507,23 +507,32 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
         const off = edge + side * 0.25;
         const b = world(room)?.blocker(pose.pos.x, off, pose.pos.y);
         yield* jump(landing(off), b ? b.top - pose.pos.y + 0.08 : 0.1);
-      } else yield* jump(landing(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4)), 0.1);
+      } else {
+        // Off the sofa's seat from its front edge, high enough to clear it: from its middle he would cross the cushion.
+        const seat = r.bed !== null && Math.abs(pose.pos.y - r.bed.at.y) < 0.05;
+        if (seat && r.bed) yield* walkTo(pose.pos.x, r.bed.edge);
+        yield* jump(landing(pose.pos.x + clamp(spot.x - pose.pos.x, -0.4, 0.4)), seat ? 0.2 : 0.1);
+      }
       // He came down on something on his way: on from there.
       if (pose.pos.y > spot.y + 0.12) return hops > 0 && (yield* goTo(r, spot, hops - 1));
       yield* walkTo(spot.x, spot.z);
       return true;
     }
-    if (dy > LEAP_UP) return false;
-    // Up from the floor, by the front of the sofa's seat, never through it.
+    // Up from the floor, by the front of the sofa's seat, never through it: tried before the leap's
+    // limit, since his shelf is out of one leap from the floor and its fallback jump would cross the sofa.
     if (r.bed && hops > 0 && pose.pos.y < r.bed.at.y - 0.1 && spot.y > r.bed.at.y + 0.1) {
       const on = new THREE.Vector3(clamp(spot.x, r.bed.from, r.bed.to), r.bed.at.y, r.bed.at.z);
       if (!(yield* goTo(r, on, hops - 1))) return false;
       return yield* goTo(r, spot, hops - 1);
     }
+    if (dy > LEAP_UP) return false;
     const to = plankAt(r, spot.y);
     const x = to ? clamp(spot.x, to.left + 0.12, to.right - 0.12) : spot.x;
     yield* walkTo(x);
-    yield* jump(new THREE.Vector3(x, spot.y, spot.z), 0.1, OUT);
+    // Onto the sofa's seat over its front edge, then back along it: straight to its middle he would cross the cushion.
+    const seat = r.bed !== null && Math.abs(spot.y - r.bed.at.y) < 0.05 && spot.z < r.bed.edge;
+    yield* jump(new THREE.Vector3(x, spot.y, seat && r.bed ? r.bed.edge : spot.z), 0.1, OUT);
+    if (seat) yield* walkTo(x, spot.z);
     return true;
   }
 

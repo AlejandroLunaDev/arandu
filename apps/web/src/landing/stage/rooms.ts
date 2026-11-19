@@ -47,7 +47,8 @@ export type Room = {
   fixtures: Solid[];
   pendant: Pendant | null;
   /** Where he goes to sleep, in the content (m), and the seat it is on, from one end to the other; null where he sleeps on his plank. */
-  bed: { at: THREE.Vector3; from: number; to: number } | null;
+  /** His bed and the stretch of it he walks; edge is the z of its front edge, where he jumps on and off. */
+  bed: { at: THREE.Vector3; from: number; to: number; edge: number } | null;
   /** How far out (m) he walks on the room's own floor: in front of the furniture; null without one. */
   front: number | null;
   /** The height (m) of the room's own floor, where what falls lands; null where the page's bottom is its floor. */
@@ -273,6 +274,8 @@ function place(content: THREE.Object3D, kit: Kit, name: PropName, x: number, y: 
   return o;
 }
 
+/** How far out from a shelf's middle (m) the toys lie: on every plank's depth (WALL each side), and in the bin's. */
+const TOY_DEPTH = 0.05;
 /** How thick a shelf's plank is (build.py, shelf): what hangs under one hangs from this far below its top. */
 const SHELF_PLANK = 0.05;
 /** Where the motto's sign hangs from the middle shelf: x from its left end, z out from its middle; smaller on a phone. */
@@ -294,27 +297,33 @@ function markOwn(content: THREE.Object3D) {
 
 /** Where the side table stands, and how far apart (m) its two books stand face out on it, against its back board. */
 const TABLE = { x: 6.65, z: 0.45, gap: 0.03, back: -0.06 + 0.009 };
+/** On a phone's top shelf, the own books' backs stand this close to the wall (WALL behind the plank's middle). */
+const OWN_ON_SHELF = -WALL + 0.009;
 
-/** The round side table right of the sofa, Arandu's own two books standing on it with their covers to you. */
-function sideTable(kit: Kit, content: THREE.Object3D) {
-  place(content, kit, "SideTable", TABLE.x, 0, TABLE.z);
-  ownBooks("BookGrand").forEach(([name, look, title], i) => {
+/** Arandu's own two books standing side by side around x, their covers to you, their backs at depth back. */
+function ownCovers(kit: Kit, content: THREE.Object3D, name: BookName, x: number, y: number, back: number) {
+  ownBooks(name).forEach(([name, look, title], i) => {
     const s = kit.size(name);
     const b = kit.book(name, look, title);
     // Turned a quarter, the front cover faces you and the spine is on its left.
     b.rotation.y = -Math.PI / 2;
-    put(content, b, TABLE.x + (i - 0.5) * (s.z + TABLE.gap), SIDE_TABLE_TOP, TABLE.z + TABLE.back + s.x / 2);
+    put(content, b, x + (i - 0.5) * (s.z + TABLE.gap), y, back + s.x / 2);
   });
+}
+
+/** The round side table right of the sofa, Arandu's own two books standing on it with their covers to you. */
+function sideTable(kit: Kit, content: THREE.Object3D) {
+  place(content, kit, "SideTable", TABLE.x, 0, TABLE.z);
+  ownCovers(kit, content, "BookGrand", TABLE.x, SIDE_TABLE_TOP, TABLE.z + TABLE.back);
 }
 
 /**
  * The three shelves, each given by its plank's middle: the lowest, where the cat waits among books
  * and his yarn; the middle one, with books, the Farol Santander, a pile of books and a little lamp;
  * the top one, short, with the plant over its edge and a few books. On a phone, with no side table,
- * Arandu's own two books lie on that pile.
+ * Arandu's own two books stand on the top one instead, their covers to you, where they are seen first.
  */
 function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: [number, number], top: [number, number], phone: boolean) {
-  const own = phone;
   const x0 = low[0] - 0.8;
   put(content, kit.make("ShelfLarge"), low[0], low[1]);
   const left = standBooks(kit, content, x0 + 0.1, low[1], [
@@ -330,7 +339,7 @@ function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: 
     ["Book", LOOK.v4, "Economia"],
   ]);
   // Its strand runs back along the plank, to the shelf's end.
-  const yarn = put(content, kit.make("YarnBall"), x0 + 1.33, low[1], 0.05);
+  const yarn = put(content, kit.make("YarnBall"), x0 + 1.33, low[1], TOY_DEPTH);
   yarn.rotation.y = 0.6;
 
   const x1 = mid[0] - 0.8;
@@ -348,7 +357,6 @@ function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: 
   pileBooks(kit, content, x1 + 0.69, mid[1], [
     ["BookThick", LOOK.v6, "Biologia"],
     ["BookShort", LOOK.c3, "Design"],
-    ...(own ? ownBooks("BookShort") : []),
   ]);
   put(content, kit.make("LampMushroom"), x1 + 1.4, mid[1]);
   // The motto hangs on two strings under the lamp's end of the plank, near its front edge.
@@ -358,11 +366,13 @@ function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: 
   const x2 = top[0] - 0.5;
   put(content, kit.make("ShelfMedium"), top[0], top[1]);
   put(content, kit.make("PlantPot"), x2 + 0.25, top[1], 0.05);
-  standBooks(kit, content, x2 + 0.6, top[1], [
-    ["BookSlim", LOOK.v8, "Física"],
-    ["BookPaperback", LOOK.a6, "Odontologia"],
-    ["BookShort", LOOK.v4, "Pedagogia"],
-  ]);
+  if (phone) ownCovers(kit, content, "BookShort", x2 + 0.72, top[1], OWN_ON_SHELF);
+  else
+    standBooks(kit, content, x2 + 0.6, top[1], [
+      ["BookSlim", LOOK.v8, "Física"],
+      ["BookPaperback", LOOK.a6, "Odontologia"],
+      ["BookShort", LOOK.v4, "Pedagogia"],
+    ]);
 
   return { seat, left, right };
 }
@@ -422,14 +432,17 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     for (const [name, sx, sz] of PENCILS)
       place(content, kit, name, 2.7 + sx * PENCIL_OFF, DESK_TOP + 0.01, 0.22 + sz * PENCIL_OFF).rotation.set(sz * PENCIL_LEAN, 0, -sx * PENCIL_LEAN);
     place(content, kit, "Mug", 2.55, DESK_TOP, 0.45, 20);
-    place(content, kit, "PaperBin", 3.3, 0, 0.22);
+    // A held toy keeps its depth (physics.ts, drag), so the bin and its sheets stand at TOY_DEPTH: a sheet
+    // dropped over the bin falls in, and one dropped over a shelf lies on it.
+    place(content, kit, "PaperBin", 3.3, 0, TOY_DEPTH);
     // Two sheets in the bin, one that missed it: toys, like his yarn.
-    place(content, kit, "PaperBallLarge", 3.26, 0.32, 0.24);
-    place(content, kit, "PaperBallSmall", 3.37, 0.32, 0.18, 40);
-    place(content, kit, "PaperBall", 3.55, 0, 0.5);
+    place(content, kit, "PaperBallLarge", 3.28, 0.006, TOY_DEPTH + 0.01);
+    place(content, kit, "PaperBallSmall", 3.33, 0.14, TOY_DEPTH - 0.02, 40);
+    place(content, kit, "PaperBall", 3.55, 0, TOY_DEPTH);
     place(content, kit, "Sofa", 4.9, 0, 0.5);
     // Its right seat cushion, in front of the knitted pillow: right under his shelf's end, a hop down.
-    room.bed = { at: new THREE.Vector3(5.25, SOFA_SEAT, 0.62), from: 4.01, to: 5.81 };
+    // The seat's cushions reach 1.02 m out (props.ts, Sofa).
+    room.bed = { at: new THREE.Vector3(5.25, SOFA_SEAT, 0.62), from: 4.01, to: 5.81, edge: 1 };
     room.front = 1.2;
     place(content, kit, "Tv", 2.3, 2.25, ON_WALL);
     // Two universities' photos on the wall left of the TV, over the chair.
