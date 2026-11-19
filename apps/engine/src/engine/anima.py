@@ -1,13 +1,23 @@
-"""Ânima Educação (São Judas, Anhembi Morumbi): sitemap, each course page's Nuxt state, each campus's PDF matrix."""
+"""Ânima Educação (São Judas, Anhembi Morumbi): sitemap, each course page's Nuxt state, each campus's PDF matrix.
 
+The documents page's presencial PPCs link each course's ementário: its units' ementas become the institution's
+disciplines, one topic each, as Mackenzie's are (owner, 2026-11-19).
+"""
+
+import hashlib
+import io
 import json
 import re
+import tempfile
+import unicodedata
+import urllib.error
+import zipfile
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import pdfplumber
 
-from engine import curricula
+from engine import curricula, fetch
 
 # Each site's host, its institution's CO_IES in the INEP census and its label.
 INSTITUTIONS = {"www.usjt.br": (203, "São Judas"), "portal.anhembi.br": (466, "Anhembi Morumbi")}
@@ -139,7 +149,124 @@ def parse_curriculum(doc):
     return subjects
 
 
+PPC_LINK = re.compile(r'href="(https://estaticos\.animaeducacao\.com\.br/[^"]+_PRES_[^"]+\.pdf)"')
+GONE = {403, 404, 410}  # a linked PDF that answers these is dead, not down: the run goes on without it
+UNIT = re.compile(r"^\s*UNIDADE CURRICULAR\s*:\s*(.*)$")
+EMENTA = re.compile(r"^\s*EMENTA\s*:\s*(.*)$")
+BIBLIOGRAPHY = re.compile(r"^\s*BIBLIOGRAFIA\b")
+
+
+def download_ementas(url, dest):
+    """Zip the ementários the documents page's presencial PPCs link; the digest covers every file fetched.
+
+    A 2026 PPC links its course's ementário (one PDF of 'UNIDADE CURRICULAR' blocks); older PPCs link none.
+    """
+    dest.seek(0)
+    dest.truncate()
+    with tempfile.TemporaryFile() as part:
+        digest = hashlib.sha256(fetch.download(url, part).encode())
+        part.seek(0)
+        ppcs = list(dict.fromkeys(PPC_LINK.findall(part.read().decode("utf-8"))))
+        if not ppcs:
+            raise ValueError("no presencial PPC found on the documents page")
+        ementarios = []
+        for ppc in ppcs:
+            if _fetch_part(ppc, part, digest) and part.read(4) == b"%PDF":
+                part.seek(0)
+                with pdfplumber.open(part) as pdf:
+                    ementarios += [link["uri"] for page in pdf.pages for link in page.hyperlinks
+                                   if (link.get("uri") or "").lower().endswith(".pdf")]
+        with zipfile.ZipFile(dest, "w") as bundle:
+            for n, ementario in enumerate(dict.fromkeys(ementarios)):
+                if _fetch_part(ementario, part, digest):
+                    part.seek(0)
+                    bundle.writestr(f"{n}.pdf", part.read())
+    return digest.hexdigest()
+
+
+def _fetch_part(url, part, digest):
+    """Download url into part and fold it into digest; False for a dead or disallowed link."""
+    try:
+        digest.update(fetch.download(url, part).encode())
+        part.seek(0)
+        return True
+    except urllib.error.HTTPError as error:
+        if error.code not in GONE:
+            raise
+        digest.update(f"{url} {error.code}".encode())
+    except PermissionError:  # robots.txt disallows it
+        digest.update(f"{url} disallowed".encode())
+    return False
+
+
+def _name_key(name):
+    """staging.name_key's form: accents off, lower case, spaces collapsed."""
+    name = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+    return " ".join(name.lower().split())
+
+
+def _units(lines):
+    """Yield (name, ementa) per block: 'UNIDADE CURRICULAR: name' (may wrap), 'EMENTA: text', then 'BIBLIOGRAFIA'."""
+    name = body = None
+    for line in lines:
+        if unit := UNIT.match(line):
+            name, body = unit[1].strip(), None
+        elif name is not None and body is None:
+            if ementa := EMENTA.match(line):
+                body = [ementa[1]] if ementa[1] else []
+            else:
+                name += " " + line.strip()  # a name wrapped over lines
+        elif body is not None:
+            if BIBLIOGRAPHY.match(line):
+                text = " ".join(" ".join(body).split())
+                if len(name) <= 150 and 30 <= len(text) <= 1500:
+                    yield name, text
+                name = body = None
+            else:
+                body.append(line)
+
+
+def parse_ementas(doc):
+    """Return (name, ementa) for each unit the ementários describe one way; two texts for one name keep none."""
+    found = {}  # name key -> (name as first written, texts)
+    with zipfile.ZipFile(doc) as bundle:
+        for item in sorted(bundle.namelist()):
+            data = bundle.read(item)
+            if not data.startswith(b"%PDF"):
+                continue  # a link that serves an HTML page instead of its PDF
+            with pdfplumber.open(io.BytesIO(data)) as pdf:
+                lines = [line for page in pdf.pages for line in (page.extract_text() or "").splitlines() if line.strip()]
+            for name, text in _units(lines):
+                found.setdefault(_name_key(name), (name, set()))[1].add(text)
+    units = sorted((name, texts.pop()) for name, texts in found.values() if len(texts) == 1)
+    if not units:
+        raise ValueError("no ementa found in the linked ementários")
+    return units
+
+
+def load_ementas(conn, source_id, units):
+    """Store each unit as a discipline of the documents page's institution, then link the Ânima grades to them."""
+    url = conn.execute("select url from sources where id = %s", (source_id,)).fetchone()[0]
+    inep_code = INSTITUTIONS[urlsplit(url).netloc][0]
+    codes = [_name_key(name) for name, _ in units]
+    written = conn.execute("delete from public.disciplines where source_id = %s and not (code = any(%s))",
+                           (source_id, codes)).rowcount
+    for code, (name, text) in zip(codes, units):
+        written += conn.execute(
+            """insert into public.disciplines (institution_id, code, name, topics, source_id)
+               select id, %s, %s, %s, %s from public.institutions where inep_code = %s
+               on conflict (institution_id, code) do update
+                 set name = excluded.name, topics = excluded.topics, source_id = excluded.source_id
+                 where (disciplines.name, disciplines.topics, disciplines.source_id)
+                   is distinct from (excluded.name, excluded.topics, excluded.source_id)""",
+            (code, name, [text], source_id, inep_code)).rowcount
+    return written + conn.execute(
+        "select coalesce(sum(staging.link_disciplines(id)), 0) from public.sources where adapter = 'anima_curriculum'"
+    ).fetchone()[0]
+
+
 sitemap = SimpleNamespace(parse=parse_sitemap, load=load_pages)
+ementas = SimpleNamespace(download=download_ementas, parse=parse_ementas, load=load_ementas)
 course = SimpleNamespace(
     parse=parse_course,
     load=lambda conn, source_id, parsed: curricula.load_courses(
