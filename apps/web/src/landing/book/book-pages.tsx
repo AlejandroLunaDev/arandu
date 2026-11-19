@@ -1,8 +1,8 @@
 "use client";
 
-import type { Book, Offering, OwnBook, StoryFact } from "@arandu/contracts";
+import type { Book, Offering, OwnBook, StoryPage } from "@arandu/contracts";
 import { getFontEmbedCSS, toCanvas } from "html-to-image";
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import {
   BOOK_EVENT,
   getBook,
@@ -26,6 +26,8 @@ import styles from "./book-pages.module.css";
 const SUBJECTS = 3;
 const TOPICS = 3;
 const TOPIC_CHARS = 110;
+/** How much of a subject's description shows, where its grade gives one paragraph and not a list of topics. */
+const ABOUT_CHARS = 170;
 const DEGREE: Record<NonNullable<Offering["course"]["degree"]>, string> = {
   bacharelado: "Bacharelado",
   licenciatura: "Licenciatura",
@@ -33,12 +35,16 @@ const DEGREE: Record<NonNullable<Offering["course"]["degree"]>, string> = {
   bacharelado_licenciatura: "Bacharelado e licenciatura",
 };
 const CLOSING = "Com o Arandu, você vive um pedacinho dessa carreira antes de escolher.";
-/** The label over the first page of Arandu's own books. */
-const OWN_LABEL: Record<OwnBook["book"], string> = { produto: "O que o Arandu traz", solucao: "Por que o Arandu existe" };
 /** Which of Arandu's own books is open, if one is. */
 const ownOf = (b: OpenedBook) => (b?.product ? "produto" : b?.research ? "solucao" : null);
 /** Census and some grades write in capitals: shown in sentence case, the words as they are. */
 const calm = (text: string) => (text === text.toUpperCase() ? text.charAt(0) + text.slice(1).toLowerCase() : text);
+/** Real screens of the app (public/screens, drawn to public/img/screens), in the journey's order: the product book shows them by its first page. */
+const SCREENS = [
+  { src: "/img/screens/a4.webp", step: "Conhecer você", alt: "Tela do Arandu: uma pergunta do questionário sobre o seu tempo livre" },
+  { src: "/img/screens/u2.webp", step: "Opções reais", alt: "Tela do Arandu: a ficha de um curso, com a nota de corte e a fonte" },
+  { src: "/img/screens/b3.webp", step: "Experimentar", alt: "Tela do Arandu: um exercício de uma matéria, já respondido" },
+];
 const KIND: Record<Offering["institution"]["kind"], string> = { public: "Pública", private: "Privada", special: "Especial" };
 
 // The pages of the open book, laid over the 3D book run-stage opens in the middle of the screen. It
@@ -140,7 +146,10 @@ export function BookPages() {
   const key = opened.slug ?? ownKey;
   const blank = !shown && !ownShown && (!key || failed === key);
   const pages: ReactNode[] = ownShown
-    ? ownShown.facts.map((fact, i) => <FactPage key={i} fact={fact} label={i === 0 ? OWN_LABEL[ownShown.book] : null} />)
+    ? ownShown.pages.flatMap((page, i) => [
+        ...roomy(page).map((part, j) => <OwnPage key={`${i}-${j}`} page={part} />),
+        ...(ownShown.book === "produto" && i === 0 ? [<ScreensPage key="screens" />] : []),
+      ])
     : shown
       ? [
           ...pictured(shown)
@@ -152,8 +161,9 @@ export function BookPages() {
             .map((o, i) => <OfferingPage key={`u${i + 1}`} offering={o} profession={shown.profession.name} />),
         ]
       : [<Note key="wait" text={blank ? "Este livro não abriu agora. Tente de novo daqui a pouco." : "Abrindo o livro…"} />];
-  // A last page left alone gets Arandu's word, so no spread ends on bare paper.
-  if ((shown || ownShown) && pages.length % 2) pages.push(<Note key="end" text={CLOSING} />);
+  // A last page left alone gets Arandu's word, so no spread ends on bare paper; his own books' end on a plain page.
+  if (shown && pages.length % 2) pages.push(<Note key="end" text={CLOSING} />);
+  if (ownShown && pages.length % 2) pages.push(<Card key="end">{null}</Card>);
   const spreads = Math.ceil(pages.length / 2);
   const proofSpreads = printable ? Array.from({ length: spreads }, (_, i) => pages.slice(i * 2, i * 2 + 2)) : [];
 
@@ -348,6 +358,9 @@ function trimTopics(topics: string[]) {
   return shown;
 }
 
+/** A subject's description, up to ABOUT_CHARS and cut at a word. */
+const trimAbout = (text: string) => (text.length > ABOUT_CHARS ? `${text.slice(0, ABOUT_CHARS).replace(/\s+\S*$/, "")}…` : text);
+
 function SamplePage({ book }: { book: Book }) {
   return (
     <Card>
@@ -360,11 +373,15 @@ function SamplePage({ book }: { book: Book }) {
           <section key={i} className={styles.subject}>
             <h4 className={styles.name}>{subject.name}</h4>
             <p className={`${styles.cap} ${styles.roomy}`}>{subject.institution}</p>
-            <ul className={styles.topics}>
-              {trimTopics(subject.topics).map((topic, j) => (
-                <li key={j}>{topic}</li>
-              ))}
-            </ul>
+            {subject.topics.length === 1 && subject.topics[0].length > TOPIC_CHARS ? (
+              <p className={`${styles.topics} ${styles.about}`}>{trimAbout(subject.topics[0])}</p>
+            ) : (
+              <ul className={styles.topics}>
+                {trimTopics(subject.topics).map((topic, j) => (
+                  <li key={j}>{topic}</li>
+                ))}
+              </ul>
+            )}
             <Cite source={subject.source} />
           </section>
         ))}
@@ -373,15 +390,103 @@ function SamplePage({ book }: { book: Book }) {
   );
 }
 
-// A page of Arandu's own books: a figure, what it means, and its source; Arandu's own statements have none.
-function FactPage({ fact, label }: { fact: StoryFact; label: string | null }) {
+// Facing the product book's first page: the app itself, three of its screens.
+function ScreensPage() {
   return (
     <Card>
-      <div className={styles.body}>
-        {label && <p className={styles.label}>{label}</p>}
-        <p className={styles.figure}>{fact.figure}</p>
-        <p className={styles.text}>{fact.text}</p>
-        {fact.source && <Cite source={fact.source} />}
+      <div className={`${styles.body} ${styles.own}`}>
+        <h3 className={styles.title}>O app</h3>
+        <div className={styles.screens}>
+          {SCREENS.map(({ src, step, alt }) => (
+            <figure key={src}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- drawn into the 3D page by html-to-image, which reads plain images. */}
+              <img src={src} alt={alt} width={390} height={844} />
+              <figcaption className={styles.cap}>{step}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const percent = (value: number) => `${value.toLocaleString("pt-BR")}%`;
+
+// The research book's shares, as bars over the paragraph that states them (0 to 100), each chart named for what it measures.
+// shortcut: copied from the API's prose, not served with it; move to a chart field on StoryFact once the API has one.
+const CHARTS = [
+  {
+    title: "Deixaram o curso em 2024",
+    bars: [
+      { label: "Cursos presenciais", value: 24.8 },
+      { label: "Cursos a distância (EAD)", value: 41.6 },
+    ],
+  },
+  {
+    title: "Quem entrou na faculdade em 2015, dez anos depois",
+    bars: [
+      { label: "Saiu do curso em que entrou", value: 60 },
+      { label: "Se formou", value: 39 },
+    ],
+  },
+  {
+    title: "Quem entrou na faculdade em 2024",
+    bars: [
+      { label: "Presencial, com 27 anos ou mais", value: 25 },
+      { label: "A distância, com 29 anos ou mais", value: 50 },
+    ],
+  },
+];
+
+// A paragraph's chart, only while the paragraph still states every one of its shares.
+const chartOf = (text: string) => CHARTS.find((chart) => chart.bars.every((bar) => text.includes(percent(bar.value))));
+
+// A section with charts gives each chart a page of its own, the plain paragraphs after it beside it, so nothing is cramped.
+const roomy = (page: StoryPage) =>
+  page.facts.reduce<StoryPage[]>((parts, fact, i) => {
+    if (i === 0 || chartOf(fact.text)) parts.push({ ...page, facts: [fact] });
+    else parts[parts.length - 1].facts.push(fact);
+    return parts;
+  }, []);
+
+// The text reads the same shares out, so the chart is not read twice.
+function Bars({ text }: { text: string }) {
+  const chart = chartOf(text);
+  if (!chart) return null;
+  return (
+    <div className={styles.bars} aria-hidden>
+      <span className={styles.chart}>{chart.title}</span>
+      {chart.bars.map(({ label, value }) => (
+        <Fragment key={label}>
+          <span className={styles.cap}>{label}</span>
+          <svg className={styles.track} width="100%" height="6">
+            <rect className={styles.bar} width={`${value}%`} height="6" rx="3" />
+            {/* Square on the baseline, rounded only at the data end. */}
+            <rect className={styles.bar} width="3" height="6" />
+          </svg>
+          <span className={styles.value}>{percent(value)}</span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+// A section of Arandu's own books: each item's bold heading (none for a plain paragraph) leads its text,
+// which cites inline; the source under it links that citation. A long section scrolls within its page.
+function OwnPage({ page }: { page: StoryPage }) {
+  return (
+    <Card>
+      <div className={`${styles.body} ${styles.own}`}>
+        <h3 className={styles.title}>{page.title}</h3>
+        {page.facts.map((fact, i) => (
+          <div key={i} className={styles.fact}>
+            <Bars text={fact.text} />
+            <p className={styles.text}>
+              {fact.figure && <strong>{fact.figure}</strong>} {fact.text}
+            </p>
+            {fact.source && <Cite source={fact.source} />}
+          </div>
+        ))}
       </div>
     </Card>
   );
