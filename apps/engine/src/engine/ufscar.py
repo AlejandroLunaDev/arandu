@@ -136,7 +136,7 @@ def _matriz_rows(pdf):
 NAME_HEAD = re.compile(r"(?i)disciplina|componente|atividade|unidade curricular")
 TERM_HEAD = re.compile(r"(?i)^(?:perfil|per[ií]odo|semestre)|^p$")  # 'P' heads the período column
 HOURS_HEAD = re.compile(r"(?i)carga|^total|^ch\b|^cht$")
-NOT_A_SUBJECT = re.compile(r"(?i)^(?:sub-?)?tota|^carga[- ]hor|^cr[eé]ditos|^per[ií]odo|^perfil|^semestre|^[\d\s()h,./-]+$")
+NOT_A_SUBJECT = re.compile(r"(?i)^(?:sub-?)?tota|^carga[- ]hor|^cr[eé]ditos|^per[ií]odo|^perfil|^semestre|^[\d\s()h,./°º-]+$")
 ORDINALS = "primeiro segundo terceiro quarto quinto sexto setimo oitavo nono decimo".split()
 
 
