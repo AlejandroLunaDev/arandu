@@ -23,6 +23,7 @@ ADAPTERS = {
     "anima_sitemap": anima.sitemap,
     "anima_course": anima.course,
     "anima_curriculum": anima.curriculum,
+    "anima_ementas": anima.ementas,  # after anima_curriculum: it links to the rows that level loads
     "unip_courses": unip.courses,
     "unip_units": unip.units,
     "unip_curriculum": unip.curriculum,

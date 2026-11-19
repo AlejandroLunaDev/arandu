@@ -517,6 +517,21 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       );
     }
 
+    // São Judas spells a subject one way in the ementário and another in the grades, yet both rows link to one
+    // discipline: three careers at alpha reach 'Aaa Transmidia' through 'Aaa Transmídia', so it is as shared as can be.
+    const linked = await discipline(alpha, 'Aaa Transmidia', ['Topic'], base);
+    const link = await profession('t-link', 'Test Link');
+    await subjects(await course(link, alpha, base, 'link'), base, [
+      firstTerm('Aaa Transmídia', linked),
+      firstTerm('Own link', await discipline(alpha, 'Own link', ['O'], base)),
+    ]);
+    for (const slug of ['t-link-x', 't-link-y']) {
+      const other = await profession(slug, `Test ${slug}`);
+      await subjects(await course(other, alpha, base, slug), base, [
+        firstTerm('Aaa Transmídia', linked),
+      ]);
+    }
+
     // Two disciplines of one name (an institution with an ementa per course page): the sample holds it once.
     const twin = await profession('t-twin', 'Test Twin');
     await subjects(await course(twin, carl, base, 'twin'), base, [
@@ -623,6 +638,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-flag-elective',
         't-flag-term2',
         't-grade',
+        't-link',
         't-main',
         't-name',
         't-photo',
@@ -637,6 +653,8 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-shift-a',
         't-shift-b',
         't-spread',
+        't-link-x',
+        't-link-y',
         't-shared-a',
         't-shared-b',
         't-shared-c',
@@ -989,6 +1007,14 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect((await book('t-spread'))?.sample.map((s) => s.name)).toEqual([
         'Own',
         'Ccc mid',
+      ]);
+    });
+
+    it('counts a linked subject as shared even when its rows are spelled differently', async () => {
+      // Matching by name alone it would count 0 careers and come first, by name too.
+      expect((await book('t-link'))?.sample.map((s) => s.name)).toEqual([
+        'Own link',
+        'Aaa Transmidia',
       ]);
     });
 
