@@ -17,6 +17,11 @@
   opacity: 0;
 }
 
+/* Out of the flow too, so the room's box, and the loading head in its middle, are centred in the screen. */
+:global(html:not(.no3d)) .tv:not([data-on-tv]) {
+  position: absolute;
+}
+
 :global(.no3d) .tv {
   opacity: 1;
 }
@@ -143,13 +148,18 @@
 
 /*
  * The room's footprint: as wide as the space allows at its own proportions (--room-aspect, which the
- * stage sets), its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom).
+ * stage sets), its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom). Leaning back
+ * (TILT), what stands out from the wall, the chair's base and the sofa's front, shows below that corner:
+ * --room-under, a share of the footprint's height, is kept free under it so they never leave the screen.
  */
 .room {
+  --room-under: 0.11;
+  --room-width: min(100cqw, 100cqh / (1 + var(--room-under)) * var(--room-aspect, 2.2));
   position: relative;
   flex: none;
-  width: min(100cqw, 100cqh * var(--room-aspect, 2.2));
+  width: var(--room-width);
   aspect-ratio: var(--room-aspect, 2.2);
+  margin-bottom: calc(var(--room-width) / var(--room-aspect, 2.2) * var(--room-under));
 }
 
 /* While the room loads, the cat's head, small, breathing in the middle of where it will stand. */
@@ -202,6 +212,7 @@
 @media (width < 768px) {
   .room {
     --room-layout: tall;
+    --room-under: 0;
   }
 
   .tv:not([data-on-tv]) .brand {

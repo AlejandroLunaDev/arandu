@@ -145,7 +145,15 @@ const SHAPES: Partial<Record<PropName, Shape[]>> = {
     box(0.33, 0.62, 1.8, 0.08, 0, 0, -0.48),
     ...[-1, 1].map((sx) => box(0.05, 0.82, 0.865, 0.17, 0, sx * 0.38, -0.01)),
   ],
-  PaperBin: [cylinder(0.17, 0, 0.32, 0)],
+  // Hollow, as build.py's wire bin is: a floor and four walls, so what falls in lies at the bottom. The bin
+  // flares from 0.14 to 0.18; straight walls at 0.16 take in what is dropped over nearly all of its rim.
+  PaperBin: [
+    cylinder(0.15, 0, 0.006, 0),
+    box(0.01, 0, 0.4, 0.17, 0, 0.16),
+    box(0.01, 0, 0.4, 0.17, 0, -0.16),
+    box(0.17, 0, 0.4, 0.01, 0, 0, 0.16),
+    box(0.17, 0, 0.4, 0.01, 0, 0, -0.16),
+  ],
   Mug: [cylinder(0.049, 0, 0.105, 0)],
   Notebook: [box(0.24, 0, 0.02, 0.165, 0), box(0.24, 0.02, 0.32, 0.012, 0, 0, -0.19)],
 };
