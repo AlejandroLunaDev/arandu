@@ -246,23 +246,36 @@ export class BooksRepository {
     );
   }
 
-  /** The sample subjects, the taste of the path: all from the one institution SAMPLE_INSTITUTION picks. */
+  /**
+   * The sample subjects, the taste of the path: all from the one institution SAMPLE_INSTITUTION picks, the career's
+   * own subjects first (fewest professions sharing the name there), then by name.
+   */
   private async sample(slug: string): Promise<SampleSubject[]> {
     const rows = await this.sql.unsafe<
       (SourceRow & Omit<SampleSubject, 'source'>)[]
     >(
-      `select d.name, d.topics, coalesce(i.short_name, i.name) as institution,
-        s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
-      from public.disciplines d
-      join public.institutions i on i.id = d.institution_id
-      join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
-      where d.institution_id = ${SAMPLE_INSTITUTION} and exists (
-        select 1 from public.curriculum_subjects cs
-        join public.courses c on c.id = cs.course_id
-        join public.professions p on p.id = c.profession_id
-        where cs.discipline_id = d.id and p.slug = $1 and ${sampleSubject('cs', 'd')}
-      )
-      order by d.name
+      `select name, topics, institution, source_label, source_url, retrieved_at from (
+        -- One per name: an institution that publishes ementas per course page has one discipline per page.
+        select distinct on (lower(d.name)) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
+          s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at,
+          -- The professions whose first semester at this institution has a subject of this name: the fewer, the more
+          -- the subject belongs to this career ('Ética e Cidadania' is in all of them).
+          (select count(distinct oc.profession_id) from public.curriculum_subjects ocs
+            join public.courses oc on oc.id = ocs.course_id
+            where oc.institution_id = d.institution_id and lower(ocs.name) = lower(d.name)
+              and (ocs.term = 1 or (ocs.term is null and ocs.year = 1))) as spread
+        from public.disciplines d
+        join public.institutions i on i.id = d.institution_id
+        join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
+        where d.institution_id = ${SAMPLE_INSTITUTION} and exists (
+          select 1 from public.curriculum_subjects cs
+          join public.courses c on c.id = cs.course_id
+          join public.professions p on p.id = c.profession_id
+          where cs.discipline_id = d.id and p.slug = $1 and ${sampleSubject('cs', 'd')}
+        )
+        order by lower(d.name), d.id
+      ) named
+      order by spread, name
       limit $2`,
       [slug, SAMPLE_SIZE],
     );

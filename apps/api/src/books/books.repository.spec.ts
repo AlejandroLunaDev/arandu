@@ -494,6 +494,43 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       firstTerm('Plain'),
     ]);
 
+    // At alpha, 'Aaa shared' and 'Bbb shared' open three careers, 'Ccc mid' two, 'Own' one: the shared ones sort first.
+    const spread = await profession('t-spread', 'Test Spread');
+    await subjects(
+      await course(spread, alpha, base, 'spread'),
+      base,
+      await Promise.all(
+        ['Aaa shared', 'Bbb shared', 'Ccc mid', 'Own'].map(async (name) =>
+          firstTerm(name, await discipline(alpha, name, [name], base)),
+        ),
+      ),
+    );
+    for (const [slug, shared] of [
+      ['t-spread-x', ['Aaa shared', 'Bbb shared', 'Ccc mid']],
+      ['t-spread-y', ['aaa SHARED', 'Bbb shared']],
+    ] as const) {
+      const other = await profession(slug, `Test ${slug}`);
+      await subjects(
+        await course(other, alpha, base, slug),
+        base,
+        shared.map((name) => firstTerm(name)),
+      );
+    }
+
+    // Two disciplines of one name (an institution with an ementa per course page): the sample holds it once.
+    const twin = await profession('t-twin', 'Test Twin');
+    await subjects(await course(twin, carl, base, 'twin'), base, [
+      firstTerm(
+        'Twin',
+        await discipline(carl, 'Twin', ['T1'], await source('Twin 1')),
+      ),
+      firstTerm(
+        'TWIN',
+        await discipline(carl, 'TWIN', ['T2'], await source('Twin 2')),
+      ),
+      firstTerm('Zed', await discipline(carl, 'Zed', ['Z'], base)),
+    ]);
+
     // The pool.
     const pool = async (
       slug: string,
@@ -599,9 +636,11 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         't-second-b',
         't-shift-a',
         't-shift-b',
+        't-spread',
         't-shared-a',
         't-shared-b',
         't-shared-c',
+        't-twin',
         't-unfetched',
       ]);
     });
@@ -942,6 +981,21 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         'c-elective',
         'a-plain',
         'pool',
+      ]);
+    });
+
+    it("puts the career's own subjects before the ones other first semesters at the institution share", async () => {
+      // By name alone it would be Aaa shared, Bbb shared.
+      expect((await book('t-spread'))?.sample.map((s) => s.name)).toEqual([
+        'Own',
+        'Ccc mid',
+      ]);
+    });
+
+    it('holds a subject name once, whatever its case, when several disciplines carry it', async () => {
+      expect((await book('t-twin'))?.sample.map((s) => s.name)).toEqual([
+        'Twin',
+        'Zed',
       ]);
     });
 
