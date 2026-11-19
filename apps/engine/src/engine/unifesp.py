@@ -85,7 +85,9 @@ courses = SimpleNamespace(
 UNIT_LIST = re.compile(r'href="(' + re.escape(BASE) + r'/graduacao/lista-unidades-curriculares\?[^"]+)"')
 OFFER = re.compile(r'data-url="(' + re.escape(BASE) + r'/graduacao/oferta/([^/"]+)/conteudo-programatico)"')
 UNIT_NAME = re.compile(r"<strong>Matéria: </strong>(.*?) \(\d+\)</p>")
-EMENTA = re.compile(r'<strong>Ementa</strong>\s*</div>\s*<div class="card-body[^"]*">(.*?)</div>\s*</div>\s*</div>', re.S)
+CARD = r'<strong>{}</strong>\s*</div>\s*<div class="card-body[^"]*">(.*?)</div>\s*</div>\s*</div>'
+EMENTA = re.compile(CARD.format("Ementa"), re.S)
+CONTENT = re.compile(CARD.format("Conteúdo Programático"), re.S)
 
 
 def _unit(key):
@@ -127,8 +129,27 @@ def download_matriz(url, dest):
     return digest.hexdigest()
 
 
+def _card(match):
+    """A card's text, one line per line the page breaks.
+
+    The site stores dashes and quotes as '¿', which Portuguese never uses: a spaced or leading one is a dash, a pair
+    around words is quotes. shortcut: a lone one between letters (L¿Hôpital, sociedade¿natureza: 4 of 306 units in
+    2026) stays as published, since it stands for an apostrophe or a dash; map it once a rule tells them apart.
+    """
+    if not match:
+        return ""
+    lines = (" ".join(entities.unescape(re.sub(r"<[^>]+>", " ", line)).split())
+             for line in re.split(r"<br\s*/?>", match[1]))
+    lines = (re.sub(r"¿([^¿\s][^¿]*?)¿", r"“\1”", re.sub(r"(^| )¿ ", r"\1– ", line)) for line in lines if line)
+    return "\n".join(lines)
+
+
 def parse_page(doc):
-    """Return the matriz's subjects and (name, ementa) for each first-termo unit with one ementa."""
+    """Return the matriz's subjects and (name, ementa, conteúdo programático or None) for each first-termo unit.
+
+    The conteúdo programático is kept whole, its lines as the page breaks them: it is a list, a plan per class or
+    prose depending on the unit, so it is not split into topics here.
+    """
     with zipfile.ZipFile(doc) as bundle:
         subjects = parse_curriculum(io.BytesIO(bundle.read("page.html")))
         first = {name for term, _, name, _, _ in subjects if term == 1}
@@ -137,13 +158,12 @@ def parse_page(doc):
             if item == "page.html":
                 continue
             unit = bundle.read(item).decode("utf-8")
-            name, ementa = UNIT_NAME.search(unit), EMENTA.search(unit)
-            text = ementa and " ".join(entities.unescape(re.sub(r"<[^>]+>", " ", ementa[1])).split())
-            text = text and text.replace(" ¿ ", " – ")  # the site stores some dashes as '¿', which Portuguese never uses
-            if name and text and len(text) >= 30 and (name := " ".join(entities.unescape(name[1]).split())) in first:
-                found.setdefault(name, set()).add(text)
-    # Two ementas for one name (two units of that name in the termo) is not certain: the subject keeps none.
-    return subjects, sorted((name, texts.pop()) for name, texts in found.items() if len(texts) == 1)
+            name = UNIT_NAME.search(unit)
+            ementa, content = " ".join(_card(EMENTA.search(unit)).split()), _card(CONTENT.search(unit))
+            if name and len(ementa) >= 30 and (name := " ".join(entities.unescape(name[1]).split())) in first:
+                found.setdefault(name, set()).add((ementa, content or None))
+    # Two texts for one name (two units of that name in the termo) is not certain: the subject keeps none.
+    return subjects, sorted((name, *texts.pop()) for name, texts in found.items() if len(texts) == 1)
 
 
 curriculum = SimpleNamespace(

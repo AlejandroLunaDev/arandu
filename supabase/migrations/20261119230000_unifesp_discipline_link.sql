@@ -2,6 +2,10 @@
 -- discipline of the matriz page (source), as fiap_curriculum and mackenzie_curriculum do: a subject row links to the
 -- discipline of its own source with the same name. The other branches are unchanged. No hash reset: the engine now
 -- hashes each matriz together with its units' pages, so every matriz reads as changed on the next run.
+-- program keeps a discipline's published conteúdo programático whole, its lines as the page breaks them (Unifesp: a
+-- list of topics, a plan per class or prose, depending on the unit); topics stays the one ementa the book shows.
+alter table public.disciplines add column program text;
+
 create or replace function staging.link_disciplines(p_source_id bigint) returns integer
 language plpgsql
 set search_path = ''
