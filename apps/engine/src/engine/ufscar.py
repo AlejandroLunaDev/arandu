@@ -136,7 +136,7 @@ def _matriz_rows(pdf):
 NAME_HEAD = re.compile(r"(?i)disciplina|componente|atividade|unidade curricular")
 TERM_HEAD = re.compile(r"(?i)^(?:perfil|per[ií]odo|semestre)|^p$")  # 'P' heads the período column
 HOURS_HEAD = re.compile(r"(?i)carga|^total|^ch\b|^cht$")
-NOT_A_SUBJECT = re.compile(r"(?i)^(?:sub)?tota|^carga hor|^cr[eé]ditos|^per[ií]odo|^perfil|^semestre|^[\d\s()h,./-]+$")
+NOT_A_SUBJECT = re.compile(r"(?i)^(?:sub-?)?tota|^carga[- ]hor|^cr[eé]ditos|^per[ií]odo|^perfil|^semestre|^[\d\s()h,./-]+$")
 ORDINALS = "primeiro segundo terceiro quarto quinto sexto setimo oitavo nono decimo".split()
 
 
@@ -154,7 +154,7 @@ def _term_mark(text):
 def _table_rows(pdf):
     """Subjects of the ruled matrices: a header row names the subject, semester and hours columns; a semester is a
     header column or a heading line inside or above the table."""
-    subjects, columns, term = [], None, None
+    subjects, columns, term, wrapped = [], None, None, False
     for page in pdf.pages:
         lines, above_from = page.extract_text_lines(), 0
         for table in sorted(page.find_tables(), key=lambda t: t.bbox[1]):
@@ -177,6 +177,9 @@ def _table_rows(pdf):
                         "hours": next((i for i, c in filled.items() if HOURS_HEAD.search(c) and "créd" not in c.lower()),
                                       None),
                         "width": len(row),
+                        # A headless column right of the names: some rows' names are shifted into it, or split
+                        # across both ('I' | 'ntrodução a Psicologia'), as Fisioterapia's matriz draws them.
+                        "spill": name_col + 1 if name_col + 1 < len(row) and not row[name_col + 1] else None,
                     }
                 elif len(filled) == 1 and (mark := _term_mark(next(iter(filled.values())))):
                     term = mark
@@ -184,11 +187,26 @@ def _table_rows(pdf):
                     if columns["term"] is not None and (match := re.match(r"(\d{1,2})\s*[°ºª]?", row[columns["term"]])):
                         term = int(match[1])
                     name = row[columns["name"]]
+                    spill = row[columns["spill"]] if columns["spill"] is not None else ""
+                    numbered = any(cell.isdigit() for cell in row)
+                    # Only a subject row (it has credits or hours) is shifted; a wrapped name's tail has no numbers.
+                    if spill and not spill.isdigit() and numbered:
+                        if not name:
+                            name = spill
+                        elif len(name) == 1 and spill[0].islower():
+                            name += spill
+                    elif spill and not name and not numbered and wrapped:
+                        # The tail of the shifted name just above ('Estágio ... Ginecologia e' | 'Obstetrícia').
+                        last = subjects[-1]
+                        subjects[-1] = (last[0], f"{last[1]} {spill}", *last[2:])
+                        continue
+                    wrapped = False
                     # Rows before any semester belong to tables grouped by area, which list the same subjects again.
                     if term is not None and name and not NOT_A_SUBJECT.match(name):
                         hours = row[columns["hours"]] if columns["hours"] is not None else ""
                         elective = bool(re.match(r"(?i)(?:disciplinas? )?(?:optativ|eletiv)", name))
                         subjects.append((term, name, int(hours) if hours.isdigit() else None, elective))
+                        wrapped = name == spill  # a shifted name, whose tail may sit in the next row
     return subjects
 
 
