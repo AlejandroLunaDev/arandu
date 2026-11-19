@@ -46,27 +46,38 @@
 }
 
 /*
- * The logo's wordmark: Arandu over Reka, the same size, Reka a little to the right and in the
- * primary color, the two lines close. Its size, weight, tracking and leading are measured from the
- * logo, so they are not steps of the type scale.
+ * The logo's wordmark: arandu, one word, its u a cat on its back. Its face, size, tracking and
+ * leading are measured from the logo, so they are not steps of the type scale.
  */
 .brand {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: baseline;
   margin: 0;
   color: var(--text);
-  font-family: var(--font-body);
+  font-family: var(--font-bricolage), var(--font-display);
   font-size: 92px;
   font-weight: 700;
   line-height: 0.76;
-  letter-spacing: 0.02em;
-  /* The tight leading lets Reka's ink hang below the box: room for it before the pitch. */
+  letter-spacing: -0.02em;
+  /* The tight leading lets the ink hang below the box: room for it before the pitch. */
   padding-bottom: 0.16em;
 }
 
-.reka {
-  margin-left: 0.18em;
+/* The cat's u sits on the baseline; its head and paws rise above the x-height, like the d. */
+.u {
+  width: 0.8em;
+  height: 0.72em;
+  margin-left: 0.05em;
+  overflow: visible;
+  fill: currentColor;
+}
+
+.ear {
+  fill: var(--violet-400);
+}
+
+.eye {
+  fill: var(--amber-500);
 }
 
 /* The play button: round, in the screen's empty top right, beside the brand; it swells under the pointer. */

@@ -1,4 +1,4 @@
-# Arandu Reka
+# Arandu
 
 Vocational orientation for anyone in Brazil heading to university, from high-school (ensino médio) students to those who already finished school, guided by Arandu, a curious black cat. Built for Hack Brasil 2026, education track.
 
@@ -8,7 +8,7 @@ Choosing a university career at 16 or 17 is hard, and a wrong choice is costly: 
 
 ## The solution
 
-Arandu Reka lets the student try a career before choosing it.
+Arandu lets the student try a career before choosing it.
 
 1. **Get to know her.** A short, Duolingo-style questionnaire builds her profile.
 2. **Show real options.** Arandu suggests careers that fit her, with real data from universities in São Paulo: where each one is offered, how to get in (SISU, ProUni, Fuvest) and the cut-off, always with its source.
