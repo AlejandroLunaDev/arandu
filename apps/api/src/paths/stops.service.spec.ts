@@ -584,15 +584,14 @@ describe('StopsService', () => {
       expect(stop.cards[0]).not.toHaveProperty('topic');
     });
 
-    it('starts topic 7 at its block start 6 and leaves out stored topics', async () => {
-      paths.stopCards.mockResolvedValue(new Map([[8, [stored('s8')]]]));
+    it('starts topic 7 at its block start 6', async () => {
       // numbers count the listed topics: 2 is T7
       steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'a')] }));
 
       const stop = await service.stop(7, 7);
 
       expect(subjectCall().prompt).toBe(
-        'Subject: Cálculo\nTopics:\n1. T6\n2. T7\n3. T9\n4. T10\n5. T11',
+        'Subject: Cálculo\nTopics:\n1. T6\n2. T7\n3. T8\n4. T9\n5. T10\n6. T11',
       );
       expect(paths.saveStopCards).toHaveBeenCalledWith(7, [savedEntry(7, 'a')]);
       expect(titles(stop.cards)).toEqual(['a']);
@@ -662,14 +661,42 @@ describe('StopsService', () => {
       expect(steps.cards).toHaveBeenCalledTimes(2);
     });
 
-    it('an AiModelError from the subject call propagates without a fallback', async () => {
+    it("a provider error in the subject call falls back to the topic's own search", async () => {
+      steps.subject.mockRejectedValue(new AiModelError([]));
+
+      const stop = await service.stop(7, 0);
+
+      expect(steps.subject).toHaveBeenCalledTimes(1);
+      expect(paths.saveStopCards).not.toHaveBeenCalled();
+      expect(steps.cards).toHaveBeenCalledTimes(1);
+      expect(stop.cards).toHaveLength(2);
+    });
+
+    it("an AiModelError from the topic's own search still propagates", async () => {
       const error = new AiModelError([]);
-      steps.subject.mockRejectedValue(error);
+      steps.subject.mockRejectedValue(new AiModelError([]));
+      steps.cards.mockRejectedValue(error);
 
       await expect(service.stop(7, 0)).rejects.toBe(error);
-      expect(steps.subject).toHaveBeenCalledTimes(1);
-      expect(steps.cards).not.toHaveBeenCalled();
+      expect(steps.cards).toHaveBeenCalledTimes(1);
       expect(paths.saveStopContent).not.toHaveBeenCalled();
+    });
+
+    it('searches the block once: with one of its topics stored, an uncovered topic goes to its own search', async () => {
+      paths.stopCards.mockResolvedValue(new Map([[3, [stored('s3')]]]));
+
+      const stop = await service.stop(7, 1);
+
+      expect(steps.subject).not.toHaveBeenCalled();
+      expect(paths.saveStopCards).not.toHaveBeenCalled();
+      expect(steps.cards).toHaveBeenCalledTimes(1);
+      expect(titles(stop.cards)).toEqual(['t1', 't2']);
+    });
+
+    it('asks for 900 output tokens per block topic', async () => {
+      await service.stop(7, 7);
+
+      expect(subjectCall().maxOutputTokens).toBe(5400);
     });
   });
 
