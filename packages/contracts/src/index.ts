@@ -292,21 +292,16 @@ export interface StopCard {
   source: { label: string; url: string; quote: string };
 }
 
-/** The exercises of a stop. Answers come with them: the client checks them and reports the mistakes. */
-export type Exercise =
-  | {
-      kind: "escolha_uma";
-      prompt: string;
-      options: string[];
-      answer: number;
-      why: string;
-    }
-  | {
-      kind: "una_os_pares";
-      prompt: string;
-      pairs: [string, string][];
-      why: string;
-    }
+/** Recognize the answer among given ones, or produce it. */
+export type ExerciseMode = "reconhecer" | "produzir";
+
+/**
+ * The exercises of a stop (R01-R12). Answers come with them: the client checks them and reports the mistakes. "Revisão
+ * relâmpago" (R11) is not here: the client replays the items missed in this stop against a timer.
+ */
+export type Exercise = { mode: ExerciseMode; why: string } & (
+  | { kind: "escolha_uma"; prompt: string; options: string[]; answer: number }
+  | { kind: "una_os_pares"; prompt: string; pairs: [string, string][] }
   | {
       kind: "verdadeiro_ou_falso";
       statements: { text: string; answer: boolean; why: string }[];
@@ -317,8 +312,46 @@ export type Exercise =
       text: string;
       tiles: string[];
       answers: string[];
-      why: string;
-    };
+    }
+  /** `answer` is the sentence's words in order; the client shuffles them, plus `distractors`. */
+  | {
+      kind: "monte_a_frase";
+      prompt: string;
+      answer: string[];
+      distractors: string[];
+    }
+  | {
+      kind: "escolha_a_frase_certa";
+      prompt: string;
+      options: string[];
+      answer: number;
+    }
+  /** A 2x2 grid: each item goes in one cell, [row, column]. */
+  | {
+      kind: "na_grade";
+      prompt: string;
+      rows: [string, string];
+      columns: [string, string];
+      items: { text: string; cell: [0 | 1, 0 | 1] }[];
+    }
+  | {
+      kind: "separe_nas_cestas";
+      prompt: string;
+      baskets: [string, string];
+      items: { text: string; basket: 0 | 1 }[];
+    }
+  /** The sentence in segments; `answer` is the index of the one to tap. */
+  | {
+      kind: "toque_no_trecho";
+      prompt: string;
+      segments: string[];
+      answer: number;
+    }
+  /** `steps` in the right order; the client shuffles them. */
+  | { kind: "ordene"; prompt: string; steps: string[] }
+  /** A free answer by text or voice, graded by POST /stops/:disciplineId/:topic/explain against `ideas`. */
+  | { kind: "explique_para_o_arandu"; prompt: string; ideas: string[] }
+);
 
 /** GET /stops/:disciplineId/:topic: a stop of a subject, the same for everyone. */
 export interface StopContent {
@@ -332,6 +365,31 @@ export interface StopContent {
 /** POST /stops/:disciplineId/:topic/result: how many mistakes the person made before getting every item right. */
 export interface StopResultRequest {
   mistakes: number;
+  /** Mistakes in the stop's revisão relâmpago; null when it had none (nothing was missed). */
+  relampagoMistakes?: number | null;
+}
+
+/** POST /stops/:disciplineId/:topic/explain: the person's answer to "Explique para o Arandu", typed or spoken. */
+export interface ExplainRequest {
+  answer: string;
+}
+
+/** Which expected ideas the answer got: a reading, never a score. */
+export interface ExplainReply {
+  ideas: { text: string; got: boolean }[];
+  /** Arandu's short, warm reply. */
+  reply: string;
+}
+
+/** POST /stops/:disciplineId/:topic/ask (T1): a question about the stop's cards. */
+export interface AskRequest {
+  question: string;
+}
+
+export interface AskReply {
+  reply: string;
+  /** The cards' sources the reply rests on. */
+  sources: { label: string; url: string }[];
 }
 
 export type AchievementCode =

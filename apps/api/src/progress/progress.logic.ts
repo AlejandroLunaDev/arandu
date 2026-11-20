@@ -3,6 +3,8 @@ import type { Achievement } from '@arandu/contracts';
 // Demo values (docs: Arandu-Reka-producto-gamificacion §3).
 export const MAX_NOVELOS = 5;
 export const REFILL_MS = 30 * 60_000;
+/** Questions to Arandu that earn "Curiosidade de gato". */
+export const CURIOSITY_QUESTIONS = 10;
 
 /** Novelos after the time passed since `at`; `at` moves by the novelos given back, or to `now` once full. */
 export function refill(
@@ -30,17 +32,20 @@ export interface Finish {
   disciplineId: number;
   topic: number;
   mistakes: number;
+  /** Mistakes in the stop's revisão relâmpago; null when it had none. */
+  relampagoMistakes: number | null;
   completedAt: Date;
   day: string;
 }
 
 /**
  * The achievements earned so far, each with when it was earned, from the stops finished (oldest first) and the number
- * of topics of each subject. Relâmpago and Curiosidade de gato come with the exercises that earn them (#64).
+ * of topics of each subject, and the times of the person's first questions to Arandu about the cards (oldest first).
  */
 export function achievementsOf(
   finishes: Finish[],
   topicsOf: Map<number, number>,
+  questionTimes: Date[] = [],
 ): Achievement[] {
   const earned: Achievement[] = [];
   const at = (date: Date) => date.toISOString();
@@ -84,6 +89,17 @@ export function achievementsOf(
       break;
     }
   }
+
+  const lightning = finishes.find((f) => f.relampagoMistakes === 0);
+  if (lightning)
+    earned.push({ code: 'relampago', earnedAt: at(lightning.completedAt) });
+
+  // Ten questions to Arandu about the cards: earned with the tenth.
+  if (questionTimes.length >= CURIOSITY_QUESTIONS)
+    earned.push({
+      code: 'curiosidade_de_gato',
+      earnedAt: at(questionTimes[CURIOSITY_QUESTIONS - 1]),
+    });
 
   return earned.sort((a, b) => a.earnedAt.localeCompare(b.earnedAt));
 }
