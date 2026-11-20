@@ -232,6 +232,8 @@ describe('quoteIsOnPage', () => {
     'https://scribd.com?x=1',
     'https://scribd.com#top',
     'HTTPS://SCRIBD.COM/x',
+    'https://user@scribd.com/x',
+    'https://scribd.com./x',
   ])('refuses %s without any request', async (url) => {
     await expect(quoteIsOnPage(url, 'a')).resolves.toBe(false);
     expect(request).not.toHaveBeenCalled();
@@ -303,6 +305,16 @@ describe('quoteIsOnPage', () => {
   ])('refuses a redirect to %s', async (_, location) => {
     replies = [
       { status: 302, location },
+      { status: 200, body: 'a' },
+    ];
+
+    await expect(quoteIsOnPage('https://a.org/x', 'a')).resolves.toBe(false);
+    expect(urls()).toEqual(['https://a.org/x']);
+  });
+
+  it('refuses a redirect to a refused host after one request', async () => {
+    replies = [
+      { status: 301, location: 'https://pt.scribd.com/x' },
       { status: 200, body: 'a' },
     ];
 
