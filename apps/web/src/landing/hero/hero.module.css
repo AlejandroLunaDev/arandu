@@ -233,7 +233,8 @@
 
 /*
  * The TV switches off for an open book and back on once it is shut (run-stage shows the cat's head on
- * the 3D screen meanwhile): the picture goes out at once, and comes back once the head has.
+ * the 3D screen meanwhile): the picture goes out at once, and comes back once the head has. A TV
+ * playing the video stays on.
  */
 .tv[data-on-tv] > * {
   animation: picture-on 1.4s ease-out;
@@ -243,7 +244,7 @@
   pointer-events: none;
 }
 
-:global(html[data-book]) .tv > * {
+:global(html[data-book]) .tv:not([data-playing]) > * {
   animation: picture-off 0.2s ease-in forwards;
 }
 
@@ -268,11 +269,11 @@
     animation: none;
   }
 
-  :global(html[data-book]) .tv {
+  :global(html[data-book]) .tv:not([data-playing]) {
     visibility: hidden;
   }
 
-  :global(html[data-book]) .tv > * {
+  :global(html[data-book]) .tv:not([data-playing]) > * {
     animation: none;
   }
 }
