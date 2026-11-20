@@ -59,7 +59,7 @@ Monorepo Turborepo com workspaces do npm ([ADR 0003](docs/adr/0003-backend-archi
 | `apps/api` | A API em NestJS, a única porta para os dados, no Render |
 | `apps/engine` | O motor de dados em Python, que mantém os dados públicos atualizados |
 | `packages/contracts` | Os tipos das respostas da API ([ADR 0004](docs/adr/0004-profession-book-contract-and-ingestion-scope.md)) |
-| `packages/db-types` | Os tipos gerados a partir do esquema do banco |
+| `packages/db-types` | Os tipos derivados do esquema do banco |
 | `supabase/` | Migrations e testes do banco |
 
 ```sh
