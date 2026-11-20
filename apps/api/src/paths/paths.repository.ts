@@ -123,20 +123,44 @@ export class PathsRepository {
         set topic_text = excluded.topic_text, content = excluded.content, created_at = now()`;
   }
 
+  /** T1: a question about a stop's cards and Arandu's answer, kept for "Suas conversas". */
+  async saveQuestion(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    question: string,
+    answer: string,
+  ): Promise<void> {
+    try {
+      await this.sql`
+        insert into public.stop_questions (user_id, discipline_id, topic, question, answer)
+        values (${userId}, ${disciplineId}, ${topic}, ${question}, ${answer.slice(0, 4000)})`;
+    } catch (error) {
+      const { code, constraint_name } = error as {
+        code?: string;
+        constraint_name?: string;
+      };
+      if (code === '23503' && constraint_name === 'stop_questions_user_id_fkey')
+        throw new PersonGoneError();
+      throw error;
+    }
+  }
+
   /** Records a finished stop. Only the first finish counts: a replay gives nothing. Achievements are added by the caller. */
   async finishStop(
     userId: string,
     disciplineId: number,
     topic: number,
     mistakes: number,
+    relampagoMistakes: number | null = null,
   ): Promise<Omit<StopResult, 'achievements'>> {
     try {
       return await this.sql.begin(async (tx) => {
         // One finish at a time per person, so two at once cannot both be "the first" of the day.
         await tx`select pg_advisory_xact_lock(hashtext(${userId}))`;
         const inserted = await tx`
-          insert into public.stop_results (user_id, discipline_id, topic, mistakes, sabedoria)
-          values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${STOP_SABEDORIA})
+          insert into public.stop_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
+          values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${relampagoMistakes}, ${STOP_SABEDORIA})
           on conflict do nothing returning 1`;
         if (!inserted.length)
           return { sabedoria: 0, peixinhos: 0, patinha: false };

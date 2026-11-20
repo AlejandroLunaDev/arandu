@@ -9,21 +9,25 @@ export class ProgressService {
   constructor(private readonly progress: ProgressRepository) {}
 
   async achievements(userId: string): Promise<Achievement[]> {
-    const finishes = await this.progress.finishes(userId);
+    const [finishes, questions] = await Promise.all([
+      this.progress.finishes(userId),
+      this.progress.questionTimes(userId),
+    ]);
     const topics = await this.progress.topicCounts([
       ...new Set(finishes.map((f) => f.disciplineId)),
     ]);
-    return achievementsOf(finishes, topics);
+    return achievementsOf(finishes, topics, questions);
   }
 
   async home(userId: string): Promise<Home> {
-    const [wallet, finishes, sabedoria, { today, monday }, journey] =
+    const [wallet, finishes, sabedoria, { today, monday }, journey, questions] =
       await Promise.all([
         this.progress.wallet(userId),
         this.progress.finishes(userId),
         this.progress.sabedoria(userId),
         this.progress.calendar(),
         this.progress.journey(userId),
+        this.progress.questionTimes(userId),
       ]);
     const topics = await this.progress.topicCounts([
       ...new Set(finishes.map((f) => f.disciplineId)),
@@ -59,7 +63,7 @@ export class ProgressService {
       },
       lastStudiedOn: finishes.at(-1)?.day ?? null,
       current,
-      achievements: achievementsOf(finishes, topics),
+      achievements: achievementsOf(finishes, topics, questions),
     };
   }
 

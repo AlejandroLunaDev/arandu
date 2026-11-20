@@ -7,6 +7,7 @@ const finish = (day: string, topic: number, disciplineId = 7): Finish => ({
   disciplineId,
   topic,
   mistakes: 1,
+  relampagoMistakes: null,
   day,
   completedAt: new Date(`${day}T15:00:00Z`),
 });
@@ -36,6 +37,7 @@ describe('ProgressService', () => {
       journey: vi
         .fn()
         .mockResolvedValue({ discipline: null, weeklyGoal: null }),
+      questionTimes: vi.fn().mockResolvedValue([]),
       topicCounts: vi.fn().mockResolvedValue(new Map([[7, 3]])),
       discipline: vi.fn().mockResolvedValue(discipline),
     };
@@ -191,6 +193,31 @@ describe('ProgressService', () => {
 
       expect(stops.every((s) => s.state === 'done')).toBe(true);
     });
+  });
+
+  it('achievements counts the questions asked: the 10th earns curiosidade_de_gato', async () => {
+    const times = Array.from(
+      { length: 10 },
+      (_, i) => new Date(`2026-03-09T10:0${i}:00Z`),
+    );
+    repo.questionTimes.mockResolvedValue(times);
+
+    const list = await service.achievements('u');
+
+    expect(list).toEqual([
+      { code: 'curiosidade_de_gato', earnedAt: times[9].toISOString() },
+    ]);
+    expect(repo.questionTimes).toHaveBeenCalledWith('u');
+  });
+
+  it('home includes the achievements that come from questions', async () => {
+    repo.questionTimes.mockResolvedValue(
+      Array.from({ length: 10 }, () => new Date('2026-03-09T10:00:00Z')),
+    );
+
+    const { achievements } = await service.home('u');
+
+    expect(achievements.map((a) => a.code)).toEqual(['curiosidade_de_gato']);
   });
 
   it('achievements derives from the finishes', async () => {

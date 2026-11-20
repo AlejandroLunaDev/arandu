@@ -90,6 +90,7 @@ describe('achievementsOf', () => {
     disciplineId: 1,
     topic: 0,
     mistakes: 1,
+    relampagoMistakes: null,
     day,
     completedAt: new Date(`${day}T${String(hour).padStart(2, '0')}:00:00Z`),
     ...over,
@@ -265,6 +266,54 @@ describe('achievementsOf', () => {
       expect(
         codes(achievementsOf([finish('2026-03-10')], new Map())),
       ).not.toContain('primeiro_livro');
+    });
+  });
+
+  describe('relampago', () => {
+    it('is the first finish with 0 relampago mistakes', () => {
+      const a = finish('2026-03-10', { relampagoMistakes: 2 });
+      const b = finish('2026-03-11', { topic: 1, relampagoMistakes: 0 });
+      const c = finish('2026-03-12', { topic: 2, relampagoMistakes: 0 });
+      expect(
+        achievementsOf([a, b, c], topics).find((x) => x.code === 'relampago'),
+      ).toEqual({ code: 'relampago', earnedAt: b.completedAt.toISOString() });
+    });
+
+    it('is not earned with mistakes or without a relampago round (null)', () => {
+      const run = [
+        finish('2026-03-10', { relampagoMistakes: 1 }),
+        finish('2026-03-11', { topic: 1, relampagoMistakes: null }),
+      ];
+      expect(codes(achievementsOf(run, topics))).not.toContain('relampago');
+    });
+  });
+
+  describe('curiosidade_de_gato', () => {
+    const asked = (n: number) =>
+      Array.from(
+        { length: n },
+        (_, i) => new Date(`2026-03-10T10:${10 + i}:00Z`),
+      );
+
+    it('is earned at the 10th question time', () => {
+      const times = asked(12);
+      expect(achievementsOf([], topics, times)).toEqual([
+        { code: 'curiosidade_de_gato', earnedAt: times[9].toISOString() },
+      ]);
+    });
+
+    it('is not earned with 9 questions', () => {
+      expect(achievementsOf([], topics, asked(9))).toEqual([]);
+    });
+
+    it('is sorted among the others by earnedAt', () => {
+      const f = finish('2026-03-10', { relampagoMistakes: 0 }, 23);
+      const list = achievementsOf([f], topics, asked(10));
+      expect(codes(list)).toEqual([
+        'curiosidade_de_gato',
+        'primeira_parada',
+        'relampago',
+      ]);
     });
   });
 

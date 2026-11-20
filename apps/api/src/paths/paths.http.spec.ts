@@ -14,6 +14,7 @@ describe('paths and journey routes', () => {
   const progress = {
     finishes: vi.fn(),
     topicCounts: vi.fn(),
+    questionTimes: vi.fn(),
   };
   const paths = {
     careerPaths: vi.fn(),
@@ -21,6 +22,7 @@ describe('paths and journey routes', () => {
     stopContent: vi.fn(),
     saveStopContent: vi.fn(),
     finishStop: vi.fn(),
+    saveQuestion: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -33,6 +35,7 @@ describe('paths and journey routes', () => {
     });
     progress.finishes.mockResolvedValue([]);
     progress.topicCounts.mockResolvedValue(new Map());
+    progress.questionTimes.mockResolvedValue([]);
     paths.finishStop.mockResolvedValue({
       sabedoria: 15,
       peixinhos: 5,
@@ -126,13 +129,43 @@ describe('paths and journey routes', () => {
         .send({ mistakes: 2 })
         .expect(200);
 
-      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2);
+      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2, null);
       expect(res.body.sabedoria).toBe(15);
       expect(res.body.peixinhos).toBe(5);
       expect(res.body.achievements).toEqual([]);
     });
 
+    it('passes relampagoMistakes through', async () => {
+      await server()
+        .post('/stops/7/1/result')
+        .send({ mistakes: 2, relampagoMistakes: 0 })
+        .expect(200);
+
+      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2, 0);
+    });
+
+    it('drops relampagoMistakes when there were no mistakes to review', async () => {
+      await server()
+        .post('/stops/7/1/result')
+        .send({ mistakes: 0, relampagoMistakes: 0 })
+        .expect(200);
+
+      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 0, null);
+    });
+
+    it('accepts relampagoMistakes null', async () => {
+      await server()
+        .post('/stops/7/1/result')
+        .send({ mistakes: 2, relampagoMistakes: null })
+        .expect(200);
+
+      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2, null);
+    });
+
     it.each([
+      ['relampagoMistakes -1', { mistakes: 0, relampagoMistakes: -1 }],
+      ['relampagoMistakes 101', { mistakes: 0, relampagoMistakes: 101 }],
+      ['relampagoMistakes 1.5', { mistakes: 0, relampagoMistakes: 1.5 }],
       ['mistakes -1', { mistakes: -1 }],
       ['mistakes 101', { mistakes: 101 }],
       ['mistakes 1.5', { mistakes: 1.5 }],
@@ -151,6 +184,44 @@ describe('paths and journey routes', () => {
         .expect(404);
 
       expect(paths.finishStop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /stops/:disciplineId/:topic/explain and /ask', () => {
+    it.each([
+      ['explain', { answer: '' }],
+      ['explain', { answer: '   ' }],
+      ['explain', { answer: 'a'.repeat(1501) }],
+      ['explain', { answer: 'ok', extra: 1 }],
+      ['explain', {}],
+      ['ask', { question: '' }],
+      ['ask', { question: 'a'.repeat(501) }],
+      ['ask', { question: 'ok', extra: 1 }],
+      ['ask', {}],
+    ])('400s for %s with %j without reading the stop', async (route, body) => {
+      await server().post(`/stops/7/1/${route}`).send(body).expect(400);
+
+      expect(paths.stopContent).not.toHaveBeenCalled();
+      expect(paths.saveQuestion).not.toHaveBeenCalled();
+    });
+
+    it.each(['explain', 'ask'])(
+      '%s 404s when the stop is not open',
+      async (route) => {
+        paths.stopContent.mockResolvedValue(null);
+        const body = route === 'ask' ? { question: 'q' } : { answer: 'a' };
+
+        await server().post(`/stops/7/1/${route}`).send(body).expect(404);
+      },
+    );
+
+    it('explain accepts an answer of 1500 characters (limit passes validation)', async () => {
+      paths.stopContent.mockResolvedValue(null);
+
+      await server()
+        .post('/stops/7/1/explain')
+        .send({ answer: 'a'.repeat(1500) })
+        .expect(404);
     });
   });
 });

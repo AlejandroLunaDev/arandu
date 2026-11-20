@@ -4,6 +4,7 @@ import type { TransactionSql } from 'postgres';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../platform/database/database.module.js';
 import {
+  CURIOSITY_QUESTIONS,
   type Finish,
   MAX_NOVELOS,
   REFILL_MS,
@@ -118,9 +119,18 @@ export class ProgressRepository {
   // shortcut: reads all of a person's finishes (a demo has tens); keep a running summary if people reach thousands.
   finishes(userId: string): Promise<Finish[]> {
     return this.sql<Finish[]>`
-      select discipline_id::int as "disciplineId", topic, mistakes, completed_at as "completedAt",
+      select discipline_id::int as "disciplineId", topic, mistakes, relampago_mistakes as "relampagoMistakes",
+        completed_at as "completedAt",
         to_char(completed_at at time zone ${TIME_ZONE}, 'YYYY-MM-DD') as day
       from public.stop_results where user_id = ${userId} order by completed_at`;
+  }
+
+  /** When the person asked their first questions about the cards, oldest first: enough for "Curiosidade de gato". */
+  async questionTimes(userId: string): Promise<Date[]> {
+    const rows = await this.sql<{ created_at: Date }[]>`
+      select created_at from public.stop_questions where user_id = ${userId}
+      order by created_at limit ${CURIOSITY_QUESTIONS}`;
+    return rows.map((r) => r.created_at);
   }
 
   async topicCounts(disciplineIds: number[]): Promise<Map<number, number>> {
