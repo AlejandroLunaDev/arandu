@@ -334,7 +334,13 @@ export interface StopResultRequest {
   mistakes: number;
 }
 
-export type AchievementCode = "primeira_parada";
+export type AchievementCode =
+  | "primeira_parada"
+  | "nenhum_novelo_perdido"
+  | "semana_de_patinhas"
+  | "primeiro_livro"
+  | "relampago"
+  | "curiosidade_de_gato";
 
 export interface StopResult {
   /** Sabedoria this finish gave: 0 when the stop was already finished. */
@@ -343,4 +349,51 @@ export interface StopResult {
   patinha: boolean;
   /** Achievements this finish earned. */
   achievements: AchievementCode[];
+}
+
+/** Novelos, peixinhos and page markers (all amounts are demo values). */
+export interface Wallet {
+  novelos: number;
+  maxNovelos: number;
+  /** When the next novelo comes back; null when full. */
+  nextNoveloAt: string | null;
+  peixinhos: number;
+  marcadores: number;
+}
+
+export interface Achievement {
+  code: AchievementCode;
+  earnedAt: string;
+}
+
+/** GET /me: the home (S1) and "Você" (K1). Days are São Paulo days, "YYYY-MM-DD". */
+export interface Home {
+  wallet: Wallet;
+  sabedoria: { total: number; week: number };
+  /** This week, Monday first: whether the person studied that day (a patinha). */
+  week: {
+    days: { date: string; studied: boolean }[];
+    studied: number;
+    goal: 3 | 5 | 7 | null;
+  };
+  /** For S3 "Voltou": null before the first stop. */
+  lastStudiedOn: string | null;
+  /** The book the person is on and its next stop; null before choosing one. `nextTopic` is null when it is done. */
+  current: {
+    disciplineId: number;
+    name: string;
+    nextTopic: number | null;
+    total: number;
+  } | null;
+  achievements: Achievement[];
+}
+
+/** GET /me/books/:disciplineId: the path of stops (P1, K3). */
+export interface BookProgress {
+  discipline: { id: number; name: string };
+  stops: {
+    index: number;
+    text: string;
+    state: "done" | "current" | "locked";
+  }[];
 }
