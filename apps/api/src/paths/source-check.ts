@@ -177,9 +177,9 @@ async function fetchText(url: string): Promise<string | null> {
   return null;
 }
 
-/** Sites of documents uploaded by users, and placeholder domains: never a source, whatever the page says. */
+/** Sites of documents uploaded by users, Wikipedia (anyone edits it) and placeholder domains: never a source, whatever the page says. */
 const REFUSED_HOST =
-  /^https?:\/\/([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|example\.(com|org|net))([/:?#]|$)/i;
+  /^https?:\/\/([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|wikipedia\.org|example\.(com|org|net))([/:?#]|$)/i;
 
 /** True when the page at `url` holds `quote` word for word (case, spacing and quote marks aside). */
 export async function quoteIsOnPage(

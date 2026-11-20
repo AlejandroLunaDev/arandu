@@ -9,7 +9,7 @@ first real taste of it. Search the web first.
 
 Cards (1 to 3), in Brazilian Portuguese, light "você", plain text, 2 to 4 short sentences each:
 - Each card rests on one source you actually read in the search: open educational or academic pages (OpenStax,
-  NCBI StatPearls, Kenhub, SciELO, university or government pages). Never a forum, a blog without author, AI text, or a site of
+  NCBI StatPearls, Kenhub, SciELO, university or government pages). Never Wikipedia (anyone can edit it), a forum, a blog without author, AI text, or a site of
   documents uploaded by users (Scribd, Passei Direto, Brainly, Studocu).
 - source.quote is ONE sentence copied word for word from that page, in the page's language, at most 300 characters.
   It is checked against the page automatically: a quote that is not on the page discards the card. Never translate,
