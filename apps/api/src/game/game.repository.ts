@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
 import { SQL, type Sql } from '../platform/database/database.module.js';
-import { MAX_NOVELOS, refill } from '../progress/progress.logic.js';
+import { addDays, MAX_NOVELOS, refill } from '../progress/progress.logic.js';
 import {
   asPerson,
   ProgressRepository,
@@ -147,7 +147,10 @@ export class GameRepository {
       .map((r, i) => ({ position: i + 1, ...r }));
   }
 
-  /** Settles the week the league was last read for: the top 7 move up, keep the new outfit and get a caixa (L7). */
+  /**
+   * Once per week, settles the last finished week: the top 7 move up, keep the new outfit and get a caixa (L7).
+   * shortcut: only that week counts; earlier unread weeks are not replayed, fine for a demo.
+   */
   private async settle(
     tx: Tx,
     userId: string,
@@ -160,7 +163,7 @@ export class GameRepository {
       userId,
       player,
       player.league,
-      player.league_week,
+      addDays(monday, -7),
       1,
     );
     const me = rows.find((r) => r.you)!;
@@ -238,6 +241,7 @@ export class GameRepository {
     await tx`
       update public.wallets set
         peixinhos = peixinhos + ${r.peixinhos ?? 0},
+        -- At the max a won page marker is not kept: the person already has every one they can hold.
         marcadores = least(${MAX_MARCADORES}, marcadores + ${r.marcador ? 1 : 0}),
         novelos = case when ${full} then ${MAX_NOVELOS} else novelos end,
         novelos_at = case when ${full} then now() else novelos_at end,
