@@ -238,10 +238,12 @@ describe('StopsService', () => {
   };
   type Fn = Mock<(...args: any[]) => any>;
   // One mock per step; `ai.generateObject` routes to it by the call's model / instructions.
-  let steps: { cards: Fn; basic: Fn; extra: Fn };
+  let steps: { subject: Fn; cards: Fn; basic: Fn; extra: Fn };
   let ai: { generateObject: Fn };
   let paths: {
     discipline: Fn;
+    stopCards: Fn;
+    saveStopCards: Fn;
     stopContent: Fn;
     saveStopContent: Fn;
     finishStop: Fn;
@@ -271,21 +273,28 @@ describe('StopsService', () => {
   beforeEach(() => {
     vi.mocked(quoteIsOnPage).mockReset().mockResolvedValue(true);
     steps = {
+      // By default the subject search finds nothing, so a stop falls back to its own search.
+      subject: vi.fn().mockResolvedValue(reply({ cards: [] })),
       cards: vi.fn().mockResolvedValue(reply(cardsReply())),
       basic: vi.fn().mockResolvedValue(reply(basicOf(full()))),
       extra: vi.fn().mockResolvedValue(reply(extraOf(full()))),
     };
     ai = {
-      generateObject: vi.fn((o: { model?: string; instructions: string }) =>
-        o.model === 'web'
-          ? steps.cards(o)
-          : o.instructions === exercisesInstructions('basic')
-            ? steps.basic(o)
-            : steps.extra(o),
+      generateObject: vi.fn(
+        (o: { model?: string; label?: string; instructions: string }) =>
+          o.label === 'arandu-subject-cards'
+            ? steps.subject(o)
+            : o.model === 'web'
+              ? steps.cards(o)
+              : o.instructions === exercisesInstructions('basic')
+                ? steps.basic(o)
+                : steps.extra(o),
       ),
     };
     paths = {
       discipline: vi.fn().mockResolvedValue(discipline),
+      stopCards: vi.fn().mockResolvedValue(new Map()),
+      saveStopCards: vi.fn().mockResolvedValue(undefined),
       stopContent: vi.fn().mockResolvedValue(null),
       saveStopContent: vi.fn().mockResolvedValue(undefined),
       finishStop: vi
@@ -509,6 +518,159 @@ describe('StopsService', () => {
     expect(steps.cards).toHaveBeenCalledTimes(1);
     expect(steps.basic).toHaveBeenCalledTimes(1);
     expect(a).toBe(b);
+  });
+
+  describe('subject cards', () => {
+    const topics = Array.from({ length: 14 }, (_, i) => `T${i}`);
+    const cardOf = (n: number, title: string) => ({
+      title,
+      text: 'x',
+      source: {
+        label: 'l',
+        url: `https://a.org/${title}`,
+        quote: `q-${title}`,
+      },
+      topic: n,
+    });
+    const stored = (title: string) => ({
+      title,
+      text: 'x',
+      source: { label: 'l', url: 'https://a.org/s', quote: 'q' },
+    });
+    const titles = (cards: { title: string }[]) => cards.map((c) => c.title);
+    const subjectCall = () => steps.subject.mock.calls[0][0];
+    const savedEntry = (topic: number, ...cardTitles: string[]) => ({
+      topic,
+      topicText: `T${topic}`,
+      cards: cardTitles.map((t) => expect.objectContaining({ title: t })),
+    });
+
+    beforeEach(() => {
+      paths.discipline.mockResolvedValue({ id: 7, name: 'Cálculo', topics });
+    });
+
+    it('uses the stored cards and makes no web call', async () => {
+      paths.stopCards.mockResolvedValue(new Map([[1, [stored('s1')]]]));
+
+      const stop = await service.stop(7, 1);
+
+      expect(paths.stopCards).toHaveBeenCalledWith(7, topics);
+      expect(steps.subject).not.toHaveBeenCalled();
+      expect(steps.cards).not.toHaveBeenCalled();
+      expect(paths.saveStopCards).not.toHaveBeenCalled();
+      expect(titles(stop.cards)).toEqual(['s1']);
+    });
+
+    it("saves every block topic with a verified card and returns this topic's", async () => {
+      steps.subject.mockResolvedValue(
+        reply({ cards: [cardOf(2, 'a'), cardOf(3, 'b'), cardOf(3, 'c')] }),
+      );
+
+      const stop = await service.stop(7, 1);
+
+      expect(subjectCall()).toMatchObject({
+        model: 'web',
+        label: 'arandu-subject-cards',
+      });
+      expect(subjectCall().prompt).toBe(
+        'Subject: Cálculo\nTopics:\n1. T0\n2. T1\n3. T2\n4. T3\n5. T4\n6. T5',
+      );
+      expect(steps.cards).not.toHaveBeenCalled();
+      expect(paths.saveStopCards).toHaveBeenCalledWith(7, [
+        savedEntry(1, 'a'),
+        savedEntry(2, 'b', 'c'),
+      ]);
+      expect(titles(stop.cards)).toEqual(['a']);
+      expect(stop.cards[0]).not.toHaveProperty('topic');
+    });
+
+    it('starts topic 7 at its block start 6 and leaves out stored topics', async () => {
+      paths.stopCards.mockResolvedValue(new Map([[8, [stored('s8')]]]));
+      // numbers count the listed topics: 2 is T7
+      steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'a')] }));
+
+      const stop = await service.stop(7, 7);
+
+      expect(subjectCall().prompt).toBe(
+        'Subject: Cálculo\nTopics:\n1. T6\n2. T7\n3. T9\n4. T10\n5. T11',
+      );
+      expect(paths.saveStopCards).toHaveBeenCalledWith(7, [savedEntry(7, 'a')]);
+      expect(titles(stop.cards)).toEqual(['a']);
+    });
+
+    it('drops cards with an unverified quote or a topic number outside the block', async () => {
+      vi.mocked(quoteIsOnPage).mockImplementation(
+        async (_u, q) => q !== 'q-bad',
+      );
+      steps.subject.mockResolvedValue(
+        reply({
+          cards: [
+            cardOf(1, 'bad'),
+            cardOf(1, 'good'),
+            cardOf(0, 'zero'),
+            cardOf(7, 'seven'),
+          ],
+        }),
+      );
+
+      const stop = await service.stop(7, 0);
+
+      expect(paths.saveStopCards).toHaveBeenCalledWith(7, [
+        savedEntry(0, 'good'),
+      ]);
+      expect(titles(stop.cards)).toEqual(['good']);
+    });
+
+    it('keeps at most 3 verified cards per topic', async () => {
+      steps.subject.mockResolvedValue(
+        reply({ cards: [1, 2, 3, 4].map((n) => cardOf(1, `c${n}`)) }),
+      );
+
+      const stop = await service.stop(7, 0);
+
+      expect(titles(stop.cards)).toEqual(['c1', 'c2', 'c3']);
+    });
+
+    it("falls back to the topic's own search when it got no verified card, keeping the others saved", async () => {
+      steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'other')] }));
+
+      const stop = await service.stop(7, 0);
+
+      expect(paths.saveStopCards).toHaveBeenCalledWith(7, [
+        savedEntry(1, 'other'),
+      ]);
+      expect(steps.cards).toHaveBeenCalledTimes(1);
+      expect(steps.cards.mock.calls[0][0]).toMatchObject({ model: 'web' });
+      expect(titles(stop.cards)).toEqual(['t1', 't2']);
+    });
+
+    it("falls back to the topic's own search after an AiOutputError", async () => {
+      steps.subject.mockRejectedValue(outputError());
+
+      const stop = await service.stop(7, 0);
+
+      expect(steps.subject).toHaveBeenCalledTimes(1);
+      expect(paths.saveStopCards).not.toHaveBeenCalled();
+      expect(steps.cards).toHaveBeenCalledTimes(1);
+      expect(stop.cards).toHaveLength(2);
+    });
+
+    it('the fallback still retries once, then 503s', async () => {
+      steps.cards.mockRejectedValue(outputError());
+
+      await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(steps.cards).toHaveBeenCalledTimes(2);
+    });
+
+    it('an AiModelError from the subject call propagates without a fallback', async () => {
+      const error = new AiModelError([]);
+      steps.subject.mockRejectedValue(error);
+
+      await expect(service.stop(7, 0)).rejects.toBe(error);
+      expect(steps.subject).toHaveBeenCalledTimes(1);
+      expect(steps.cards).not.toHaveBeenCalled();
+      expect(paths.saveStopContent).not.toHaveBeenCalled();
+    });
   });
 
   describe('finish', () => {
