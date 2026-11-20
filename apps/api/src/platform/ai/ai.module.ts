@@ -31,6 +31,12 @@ const logger = new Logger('AI');
               model: openrouter('anthropic/claude-haiku-5.5'),
               pricing: { input: 0.1, output: 0.5 },
             },
+            // The same model with OpenRouter's web search (":online", Anthropic's native search): only for writing a
+            // stop's cards from real sources. The search is billed on top and not counted in `cost`.
+            web: {
+              model: openrouter('anthropic/claude-haiku-5.5:online'),
+              pricing: { input: 0.1, output: 0.5 },
+            },
           },
           defaults: {
             maxOutputTokens: 400,

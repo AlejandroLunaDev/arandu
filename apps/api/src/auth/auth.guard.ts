@@ -16,7 +16,7 @@ export interface AuthedRequest {
 }
 
 /**
- * Global guard: lets a request in only with a valid Supabase access token of a signed-in, not anonymous, person.
+ * Global guard: lets a request in only with a valid Supabase access token, of a signed-in or an anonymous person.
  * Supabase signs with asymmetric keys (ES256), checked against the project's public JWKS, which jose caches.
  */
 @Injectable()
@@ -52,7 +52,8 @@ export class AuthGuard implements CanActivate {
         // A few seconds of drift between this server's clock and Supabase's must not reject a fresh token.
         clockTolerance: 5,
       });
-      if (!payload.sub || payload.is_anonymous === true) throw new Error();
+      // Anonymous users (signed in before login, O01-O21) get every endpoint: the login wall lives in the UI only.
+      if (!payload.sub) throw new Error();
       request.userId = payload.sub;
       return true;
     } catch {
