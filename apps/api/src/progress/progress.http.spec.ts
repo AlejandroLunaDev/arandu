@@ -21,6 +21,7 @@ describe('progress routes', () => {
     calendar: vi.fn(),
     journey: vi.fn(),
     topicCounts: vi.fn(),
+    questionTimes: vi.fn(),
     discipline: vi.fn(),
     spend: vi.fn(),
     reread: vi.fn(),
@@ -37,6 +38,7 @@ describe('progress routes', () => {
     });
     repo.journey.mockResolvedValue({ discipline: null, weeklyGoal: null });
     repo.topicCounts.mockResolvedValue(new Map());
+    repo.questionTimes.mockResolvedValue([]);
     repo.discipline.mockResolvedValue({ id: 7, name: 'C', topics: ['a', 'b'] });
     repo.spend.mockResolvedValue(wallet);
     repo.reread.mockResolvedValue(wallet);

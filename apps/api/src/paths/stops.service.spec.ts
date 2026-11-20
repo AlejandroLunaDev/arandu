@@ -36,6 +36,7 @@ const draft = (): StopDraft => ({
       { text: 'b', answer: false, why: 'w' },
       { text: 'c', answer: true, why: 'w' },
     ],
+    why: 'w',
   },
   completeAFrase: {
     text: 'A ___ e o ___',
@@ -43,6 +44,128 @@ const draft = (): StopDraft => ({
     answers: ['x', 'y'],
     why: 'w',
   },
+});
+
+const full = (): StopDraft => ({
+  ...draft(),
+  monteAFrase: {
+    prompt: 'p',
+    answer: ['a', 'b', 'c'],
+    distractors: ['d'],
+    why: 'w',
+  },
+  escolhaAFraseCerta: {
+    prompt: 'p',
+    options: ['a', 'b', 'c'],
+    answer: 2,
+    why: 'w',
+  },
+  naGrade: {
+    prompt: 'p',
+    rows: ['r0', 'r1'],
+    columns: ['c0', 'c1'],
+    items: [
+      { text: 'a', row: 0, column: 0 },
+      { text: 'b', row: 0, column: 1 },
+      { text: 'c', row: 1, column: 0 },
+      { text: 'd', row: 1, column: 1 },
+    ],
+    why: 'w',
+  },
+  separeNasCestas: {
+    prompt: 'p',
+    baskets: ['x', 'y'],
+    items: [
+      { text: 'a', basket: 0 },
+      { text: 'b', basket: 1 },
+      { text: 'c', basket: 0 },
+      { text: 'd', basket: 1 },
+    ],
+    why: 'w',
+  },
+  toqueNoTrecho: {
+    prompt: 'p',
+    segments: ['a', 'b', 'c'],
+    answer: 1,
+    why: 'w',
+  },
+  ordene: { prompt: 'p', steps: ['a', 'b', 'c'], why: 'w' },
+  expliqueParaOArandu: { prompt: 'p', ideas: ['i1', 'i2'], why: 'w' },
+});
+
+describe('exercisesOf (all kinds)', () => {
+  const kinds = (d: StopDraft) => exercisesOf(d).map((e) => e.kind);
+
+  it('keeps all 11 kinds in order, with their mode', () => {
+    const list = exercisesOf(full());
+
+    expect(list.map((e) => e.kind)).toEqual([
+      'escolha_uma',
+      'una_os_pares',
+      'verdadeiro_ou_falso',
+      'complete_a_frase',
+      'monte_a_frase',
+      'escolha_a_frase_certa',
+      'na_grade',
+      'separe_nas_cestas',
+      'toque_no_trecho',
+      'ordene',
+      'explique_para_o_arandu',
+    ]);
+    expect(
+      list.filter((e) => e.mode === 'produzir').map((e) => e.kind),
+    ).toEqual(['monte_a_frase', 'ordene', 'explique_para_o_arandu']);
+    expect(list.every((e) => e.why === 'w')).toBe(true);
+  });
+
+  it('maps grid items to a [row, column] cell', () => {
+    const grid = exercisesOf(full()).find((e) => e.kind === 'na_grade');
+
+    expect(grid?.kind === 'na_grade' && grid.items[1]).toEqual({
+      text: 'b',
+      cell: [0, 1],
+    });
+  });
+
+  it('a draft without the extra kinds keeps just the four', () => {
+    expect(kinds(draft())).toHaveLength(4);
+  });
+
+  it.each([-1, 3])('drops escolha_a_frase_certa with answer %i', (answer) => {
+    const d = full();
+    d.escolhaAFraseCerta!.answer = answer;
+    expect(kinds(d)).not.toContain('escolha_a_frase_certa');
+  });
+
+  it.each([-1, 2])('drops na_grade with an item row %i', (row) => {
+    const d = full();
+    d.naGrade!.items[0].row = row;
+    expect(kinds(d)).not.toContain('na_grade');
+  });
+
+  it.each([-1, 2])('drops na_grade with an item column %i', (column) => {
+    const d = full();
+    d.naGrade!.items[0].column = column;
+    expect(kinds(d)).not.toContain('na_grade');
+  });
+
+  it.each([-1, 2])('drops separe_nas_cestas with basket %i', (basket) => {
+    const d = full();
+    d.separeNasCestas!.items[0].basket = basket;
+    expect(kinds(d)).not.toContain('separe_nas_cestas');
+  });
+
+  it.each([-1, 3])('drops toque_no_trecho with answer %i', (answer) => {
+    const d = full();
+    d.toqueNoTrecho!.answer = answer;
+    expect(kinds(d)).not.toContain('toque_no_trecho');
+  });
+
+  it('dropping one kind keeps the others', () => {
+    const d = full();
+    d.toqueNoTrecho!.answer = 9;
+    expect(kinds(d)).toHaveLength(10);
+  });
 });
 
 describe('exercisesOf', () => {
@@ -133,6 +256,7 @@ describe('StopsService', () => {
 
   it('generates with the web model, saves, and keeps only verified cards', async () => {
     vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
+    ai.generateObject.mockResolvedValue({ object: full() });
 
     const stop = await service.stop(7, 1);
 
@@ -141,8 +265,39 @@ describe('StopsService', () => {
     );
     expect(stop.cards.map((c) => c.title)).toEqual(['t2']);
     expect(stop.topic).toEqual({ index: 1, text: 'Derivadas', total: 2 });
-    expect(stop.exercises).toHaveLength(4);
+    expect(stop.exercises).toHaveLength(11);
     expect(paths.saveStopContent).toHaveBeenCalledWith(stop);
+  });
+
+  it('503s on a later stop when only the 4 basic exercises come back', async () => {
+    ai.generateObject.mockResolvedValue({ object: draft() });
+
+    await expect(service.stop(7, 1)).rejects.toMatchObject({ status: 503 });
+    expect(paths.saveStopContent).not.toHaveBeenCalled();
+  });
+
+  const minus = (n: number) => {
+    const d = full();
+    d.toqueNoTrecho!.answer = 9;
+    d.ordene = undefined;
+    d.expliqueParaOArandu = undefined;
+    if (n >= 8) return d;
+    d.separeNasCestas!.items[0].basket = 5;
+    return d;
+  };
+
+  it('keeps a later stop with exactly 8 consistent exercises', async () => {
+    ai.generateObject.mockResolvedValue({ object: minus(8) });
+
+    const stop = await service.stop(7, 1);
+
+    expect(stop.exercises).toHaveLength(8);
+  });
+
+  it('503s on a later stop with 7 consistent exercises', async () => {
+    ai.generateObject.mockResolvedValue({ object: minus(7) });
+
+    await expect(service.stop(7, 1)).rejects.toMatchObject({ status: 503 });
   });
 
   it('retries once when no card verifies, then succeeds', async () => {
@@ -190,7 +345,13 @@ describe('StopsService', () => {
   it('finish records the result for a valid topic', async () => {
     await service.finish('u', 7, 1, 3);
 
-    expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3);
+    expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3, null);
+  });
+
+  it('finish passes the relampago mistakes on', async () => {
+    await service.finish('u', 7, 1, 3, 0);
+
+    expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3, 0);
   });
 
   const earned = (...codes: string[]) =>
