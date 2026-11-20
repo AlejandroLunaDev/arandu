@@ -258,9 +258,10 @@ export class MemoryRepository {
   /** Forgets the person: their profile, facts, sessions and messages. Their account stays. */
   async forget(userId: string): Promise<void> {
     await this.sql.begin(async (tx) => {
+      // Facts, then sessions, then questions: the order saveFacts locks them in, so the two never deadlock.
+      await tx`delete from public.arandu_facts where user_id = ${userId}`;
       await tx`delete from public.arandu_sessions where user_id = ${userId}`;
       await tx`delete from public.arandu_memories where user_id = ${userId}`;
-      await tx`delete from public.arandu_facts where user_id = ${userId}`;
       // Card questions already in the facts would come back on the next fold: keep them, but never fold them again.
       await tx`update public.stop_questions set summarized_at = coalesce(summarized_at, now()) where user_id = ${userId}`;
     });
