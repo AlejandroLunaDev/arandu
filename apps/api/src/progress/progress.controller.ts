@@ -1,5 +1,12 @@
-import type { BookProgress, Home, Wallet } from '@arandu/contracts';
+import type {
+  BookProgress,
+  BookReflection,
+  BookReflectionRequest,
+  Home,
+  Wallet,
+} from '@arandu/contracts';
 import {
+  Body,
   ConflictException,
   Controller,
   Get,
@@ -15,6 +22,15 @@ import { ProgressService } from './progress.service.js';
 
 const id = z.coerce.number().int().positive().max(2_147_483_647);
 const topic = z.coerce.number().int().min(0).max(200);
+const reflection = z
+  .object({
+    chips: z.array(z.string().trim().min(1).max(40)).max(5),
+    text: z.string().trim().min(1).max(500).nullable(),
+  })
+  .strict()
+  .refine((r) => r.chips.length > 0 || r.text !== null, {
+    message: 'A chip or their own words',
+  });
 
 @Controller()
 export class ProgressController {
@@ -35,6 +51,27 @@ export class ProgressController {
     @Param('disciplineId', { schema: id }) disciplineId: number,
   ): Promise<BookProgress> {
     return this.progress.book(userId, disciplineId);
+  }
+
+  /** S4: the book's reading. */
+  @Get('me/books/:disciplineId/reflection')
+  reflection(
+    @UserId() userId: string,
+    @Param('disciplineId', { schema: id }) disciplineId: number,
+  ): Promise<BookReflection> {
+    return this.progress.reflection(userId, disciplineId);
+  }
+
+  /** S4: how the book felt to the person. */
+  @Post('me/books/:disciplineId/reflection')
+  @HttpCode(204)
+  async reflect(
+    @UserId() userId: string,
+    @Param('disciplineId', { schema: id }) disciplineId: number,
+    @Body({ schema: reflection }) body: BookReflectionRequest,
+  ): Promise<void> {
+    await this.progress.book(userId, disciplineId); // 404 for an unknown subject
+    await this.repository.saveReflection(userId, disciplineId, body);
   }
 
   /** A mistake in an exercise (P5). */

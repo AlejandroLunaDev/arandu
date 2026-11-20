@@ -219,8 +219,10 @@ export interface Recommendations {
 export interface AranduMemory {
   /** The profile they confirmed; null until they do. */
   profile: AranduProfile | null;
-  /** Arandu's note on their past sessions, in Brazilian Portuguese, at most 1500 characters. */
+  /** The facts as one note, one per line: what Arandu reads before talking to them. */
   summary: string;
+  /** What Arandu remembers, oldest first; each one can be deleted (DELETE /arandu/memory/facts/:id). */
+  facts: AranduFact[];
   /** Newest first, the last 50. */
   sessions: {
     kind: "onboarding" | "career";
@@ -535,4 +537,33 @@ export interface Wardrobe {
 export interface WardrobeUpdate {
   wearing?: LeagueId | null;
   nickname?: string | null;
+}
+
+/** One short thing Arandu remembers about the person, in Brazilian Portuguese, and where it learned it. */
+export interface AranduFact {
+  id: number;
+  text: string;
+  source: "onboarding" | "stop" | "conversation";
+  createdAt: string;
+}
+
+/** POST /me/books/:disciplineId/reflection (S4): how the book felt, as chips, their own words, or both. */
+export interface BookReflectionRequest {
+  chips: string[];
+  text: string | null;
+}
+
+/** GET /me/books/:disciplineId/reflection (S4): Arandu's reading of the book, never a grade. */
+export interface BookReflection {
+  discipline: { id: number; name: string };
+  /** Every stop of the book is done. */
+  finished: boolean;
+  /** Exercise items answered right the first time, of all the items in the finished stops. */
+  items: { right: number; total: number };
+  questions: number;
+  /** Stops finished with no mistake. */
+  further: string[];
+  /** The stop with the most mistakes; null when none had any. */
+  stuck: string | null;
+  feeling: BookReflectionRequest | null;
 }

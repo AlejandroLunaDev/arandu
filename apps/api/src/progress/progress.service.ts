@@ -1,4 +1,9 @@
-import type { Achievement, BookProgress, Home } from '@arandu/contracts';
+import type {
+  Achievement,
+  BookProgress,
+  BookReflection,
+  Home,
+} from '@arandu/contracts';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { achievementsOf, addDays } from './progress.logic.js';
 import { ProgressRepository } from './progress.repository.js';
@@ -68,6 +73,38 @@ export class ProgressService {
   }
 
   /** The stops of a subject: done, the first one not done (current), and the rest locked. */
+  /** S4: Arandu's reading of a book, never a grade. */
+  async reflection(
+    userId: string,
+    disciplineId: number,
+  ): Promise<BookReflection> {
+    const book = await this.book(userId, disciplineId);
+    const { stops, questions, feeling } = await this.progress.reflection(
+      userId,
+      disciplineId,
+    );
+    const text = (topic: number) => book.stops[topic]?.text ?? '';
+    const worst = stops.reduce<(typeof stops)[number] | null>(
+      (w, s) => (s.mistakes > (w?.mistakes ?? 0) ? s : w),
+      null,
+    );
+    return {
+      discipline: book.discipline,
+      finished:
+        book.stops.length > 0 && book.stops.every((s) => s.state === 'done'),
+      // shortcut: an exercise counts as one item and each mistake as one item missed; count statements and pairs
+      // one by one if the reflection needs more precision.
+      items: {
+        right: stops.reduce((n, s) => n + Math.max(0, s.items - s.mistakes), 0),
+        total: stops.reduce((n, s) => n + s.items, 0),
+      },
+      questions,
+      further: stops.filter((s) => s.mistakes === 0).map((s) => text(s.topic)),
+      stuck: worst ? text(worst.topic) : null,
+      feeling,
+    };
+  }
+
   async book(userId: string, disciplineId: number): Promise<BookProgress> {
     const discipline = await this.progress.discipline(disciplineId);
     if (!discipline) throw new NotFoundException(`No subject ${disciplineId}`);

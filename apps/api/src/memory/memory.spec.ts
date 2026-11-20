@@ -17,7 +17,9 @@ describe('Memory', () => {
   let memory: ReturnType<typeof fakeMemoryRepository>;
 
   beforeEach(async () => {
-    model = fakeModel('Você gosta de lógica.  ');
+    model = fakeModel({
+      object: { facts: [{ text: 'Gosta de lógica.', source: 'conversation' }] },
+    });
     memory = fakeMemoryRepository();
     app = await createHttpApp([MemoryModule], model, [withMemory(memory)]);
   });
@@ -29,6 +31,14 @@ describe('Memory', () => {
       const remembered = {
         profile: null,
         summary: 'Gosta de lógica.',
+        facts: [
+          {
+            id: 1,
+            text: 'Gosta de lógica.',
+            source: 'conversation',
+            createdAt: '2026-11-01T00:00:00.000Z',
+          },
+        ],
         sessions: [
           {
             kind: 'career',
@@ -54,30 +64,60 @@ describe('Memory', () => {
     });
   });
 
+  describe('DELETE /arandu/memory/facts/:id', () => {
+    it('answers 204 and deletes the fact of the person', async () => {
+      await request(app.getHttpServer())
+        .delete('/arandu/memory/facts/5')
+        .expect(204);
+
+      expect(memory.deleteFact).toHaveBeenCalledWith(USER_ID, 5);
+    });
+
+    it('404s when the fact is not theirs', async () => {
+      memory.deleteFact.mockResolvedValue(false);
+
+      await request(app.getHttpServer())
+        .delete('/arandu/memory/facts/5')
+        .expect(404);
+    });
+
+    it.each(['0', '-1', 'abc', '1.5', '9007199254740993'])(
+      '400s for %s',
+      async (id) => {
+        await request(app.getHttpServer())
+          .delete(`/arandu/memory/facts/${id}`)
+          .expect(400);
+
+        expect(memory.deleteFact).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('openSession', () => {
     const open = () =>
       app.get(MemoryService).openSession(USER_ID, 'career', 'direito');
 
-    it('folds the unsummarized sessions into the summary with one model call', async () => {
+    it('folds the unsummarized sessions into the facts with one model call', async () => {
       memory.unsummarized.mockResolvedValue({
         sessionIds: ['s1', 's2'],
-        transcript: 'Session (onboarding):\nuser: Gosto de xadrez',
+        questionIds: [],
+        transcript: 'Session (source onboarding):\nuser: Gosto de xadrez',
       });
-      memory.read.mockResolvedValue({
-        profile: null,
-        summary: 'Nota antiga.',
-        sessions: [],
-      });
+      memory.facts.mockResolvedValue([
+        { id: 1, text: 'Nota antiga.', source: 'onboarding', createdAt: 'x' },
+      ]);
 
       const id = await open();
 
       expect(model.calls).toHaveLength(1);
       expect(model.lastCall?.lastUserMessage).toContain('Nota antiga.');
       expect(model.lastCall?.lastUserMessage).toContain('Gosto de xadrez');
-      expect(memory.saveSummary).toHaveBeenCalledWith(
+      expect(memory.saveFacts).toHaveBeenCalledWith(
         USER_ID,
-        'Você gosta de lógica.',
+        [1],
+        [{ text: 'Gosta de lógica.', source: 'conversation' }],
         ['s1', 's2'],
+        [],
       );
       expect(memory.createSession).toHaveBeenCalledWith(
         USER_ID,
@@ -87,12 +127,69 @@ describe('Memory', () => {
       expect(id).toBe(SESSION_ID);
     });
 
+    it('folds stop questions even with no unsummarized session', async () => {
+      memory.unsummarized.mockResolvedValue({
+        sessionIds: [],
+        questionIds: [9],
+        transcript:
+          'Questions on stop cards (source stop):\n- (Limites) Por quê?',
+      });
+
+      await open();
+
+      expect(model.calls).toHaveLength(1);
+      expect(model.lastCall?.lastUserMessage).toContain('Por quê?');
+      expect(memory.saveFacts).toHaveBeenCalledWith(
+        USER_ID,
+        [],
+        [{ text: 'Gosta de lógica.', source: 'conversation' }],
+        [],
+        [9],
+      );
+    });
+
+    it('still opens the session when the facts changed meanwhile and nothing was saved', async () => {
+      memory.unsummarized.mockResolvedValue({
+        sessionIds: ['s1'],
+        questionIds: [],
+        transcript: 't',
+      });
+      memory.saveFacts.mockResolvedValue(false);
+
+      await expect(open()).resolves.toBe(SESSION_ID);
+    });
+
     it('skips the model when there is nothing to fold', async () => {
       await open();
 
       expect(model.calls).toHaveLength(0);
-      expect(memory.saveSummary).not.toHaveBeenCalled();
+      expect(memory.saveFacts).not.toHaveBeenCalled();
       expect(memory.createSession).toHaveBeenCalledOnce();
+    });
+
+    it('does not open the session when the model gives more than 15 facts', async () => {
+      memory.unsummarized.mockResolvedValue({
+        sessionIds: ['s1'],
+        questionIds: [],
+        transcript: 't',
+      });
+      await app.close();
+      app = await createHttpApp(
+        [MemoryModule],
+        fakeModel({
+          object: {
+            facts: Array.from({ length: 16 }, () => ({
+              text: 'a',
+              source: 'stop',
+            })),
+          },
+        }),
+        [withMemory(memory)],
+      );
+
+      await expect(open()).rejects.toThrow();
+      expect(memory.saveFacts).not.toHaveBeenCalled();
+      expect(memory.createSession).not.toHaveBeenCalled();
     });
   });
 });

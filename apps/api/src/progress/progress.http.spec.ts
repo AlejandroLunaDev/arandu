@@ -5,6 +5,8 @@ import { createHttpApp, USER_ID } from '../../test/http-app.js';
 import { ProgressModule } from './progress.module.js';
 import { ProgressRepository } from './progress.repository.js';
 
+const list = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
+
 describe('progress routes', () => {
   let app: INestApplication;
   const wallet = {
@@ -25,6 +27,8 @@ describe('progress routes', () => {
     discipline: vi.fn(),
     spend: vi.fn(),
     reread: vi.fn(),
+    reflection: vi.fn(),
+    saveReflection: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -42,6 +46,12 @@ describe('progress routes', () => {
     repo.discipline.mockResolvedValue({ id: 7, name: 'C', topics: ['a', 'b'] });
     repo.spend.mockResolvedValue(wallet);
     repo.reread.mockResolvedValue(wallet);
+    repo.reflection.mockResolvedValue({
+      stops: [],
+      questions: 2,
+      feeling: null,
+    });
+    repo.saveReflection.mockResolvedValue(undefined);
     app = await createHttpApp([ProgressModule], fakeModel({ object: {} }), [
       [ProgressRepository, repo],
     ]);
@@ -79,6 +89,86 @@ describe('progress routes', () => {
       await server().get(`/me/books/${id}`).expect(400);
 
       expect(repo.discipline).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /me/books/:disciplineId/reflection', () => {
+    it("returns Arandu's reading of the book", async () => {
+      const res = await server().get('/me/books/7/reflection').expect(200);
+
+      expect(repo.reflection).toHaveBeenCalledWith(USER_ID, 7);
+      expect(res.body).toMatchObject({
+        discipline: { id: 7, name: 'C' },
+        finished: false,
+        questions: 2,
+        stuck: null,
+        feeling: null,
+      });
+    });
+
+    it('404s for an unknown subject', async () => {
+      repo.discipline.mockResolvedValue(null);
+
+      await server().get('/me/books/7/reflection').expect(404);
+    });
+
+    it.each(['0', 'abc', '2147483648'])('400s for %s', async (id) => {
+      await server().get(`/me/books/${id}/reflection`).expect(400);
+    });
+  });
+
+  describe('POST /me/books/:disciplineId/reflection', () => {
+    const post = (body: unknown, id = '7') =>
+      server()
+        .post(`/me/books/${id}/reflection`)
+        .send(body as object);
+
+    it.each([
+      [{ chips: ['difícil'], text: null }],
+      [{ chips: [], text: 'Gostei' }],
+      [{ chips: ['a', 'b', 'c', 'd', 'e'], text: 'x'.repeat(500) }],
+    ])('saves %j and answers 204', async (body) => {
+      await post(body).expect(204);
+
+      expect(repo.saveReflection).toHaveBeenCalledWith(USER_ID, 7, body);
+    });
+
+    it('trims the chips and the text', async () => {
+      await post({ chips: ['  ok '], text: ' oi ' }).expect(204);
+
+      expect(repo.saveReflection).toHaveBeenCalledWith(USER_ID, 7, {
+        chips: ['ok'],
+        text: 'oi',
+      });
+    });
+
+    it('404s for an unknown subject and saves nothing', async () => {
+      repo.discipline.mockResolvedValue(null);
+
+      await post({ chips: ['a'], text: null }).expect(404);
+
+      expect(repo.saveReflection).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['neither chips nor text', { chips: [], text: null }],
+      ['more than 5 chips', { chips: list(6), text: null }],
+      ['an empty chip', { chips: [''], text: null }],
+      ['a blank chip', { chips: ['   '], text: null }],
+      ['a chip over 40', { chips: ['x'.repeat(41)], text: null }],
+      ['an empty text', { chips: ['a'], text: '' }],
+      ['a text over 500', { chips: [], text: 'x'.repeat(501) }],
+      ['an unknown key', { chips: ['a'], text: null, extra: 1 }],
+      ['no text key', { chips: ['a'] }],
+      ['no body', {}],
+    ])('400s for %s', async (_, body) => {
+      await post(body).expect(400);
+
+      expect(repo.saveReflection).not.toHaveBeenCalled();
+    });
+
+    it('400s for a bad subject id', async () => {
+      await post({ chips: ['a'], text: null }, '0').expect(400);
     });
   });
 
