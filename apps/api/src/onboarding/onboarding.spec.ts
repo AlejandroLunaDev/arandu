@@ -194,3 +194,72 @@ describe('POST /arandu/onboarding', () => {
     expect(memory.sessionMessages).not.toHaveBeenCalled();
   });
 });
+
+describe('POST /arandu/onboarding/profile', () => {
+  let app: INestApplication;
+  let model: FakeModel;
+
+  const start = async (over: Record<string, unknown> = {}) => {
+    model = fakeModel({ object: profile(over) });
+    app = await createHttpApp([OnboardingModule], model, [
+      withMemory(fakeMemoryRepository()),
+    ]);
+  };
+  const post = (body: unknown) =>
+    request(app.getHttpServer())
+      .post('/arandu/onboarding/profile')
+      .send(body as object);
+
+  afterEach(() => app.close());
+
+  it('sets covered to the answered topics, whatever the model says', async () => {
+    await start({ covered: ALL_TOPICS });
+
+    const res = await post({
+      answers: [
+        { topic: 'interests', picks: ['música'], text: null },
+        { topic: 'situation', picks: [], text: 'Estou no 3º ano' },
+      ],
+    }).expect(200);
+
+    expect(res.body.covered).toEqual(['interests', 'situation']);
+  });
+
+  it.each([
+    ['an unknown topic', [{ topic: 'x', picks: [], text: null }]],
+    [
+      'a repeated topic',
+      [
+        { topic: 'interests', picks: [], text: null },
+        { topic: 'interests', picks: [], text: null },
+      ],
+    ],
+    [
+      '11 picks',
+      [{ topic: 'interests', picks: Array(11).fill('a'), text: null }],
+    ],
+    [
+      'a 201-char pick',
+      [{ topic: 'interests', picks: ['a'.repeat(201)], text: null }],
+    ],
+    [
+      'a 1001-char text',
+      [{ topic: 'interests', picks: [], text: 'a'.repeat(1001) }],
+    ],
+    ['8 answers', Array(8).fill({ topic: 'interests', picks: [], text: null })],
+  ])('400s without calling the model for %s', async (_, answers) => {
+    await start();
+
+    await post({ answers }).expect(400);
+
+    expect(model.calls).toHaveLength(0);
+  });
+
+  it('400s on an extra key', async () => {
+    await start();
+
+    await post({ answers: [], extra: 1 }).expect(400);
+
+    expect(model.calls).toHaveLength(0);
+  });
+});

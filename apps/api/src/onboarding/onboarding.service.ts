@@ -1,5 +1,7 @@
 import type {
+  AranduProfile,
   ChatMessage,
+  OnboardingAnswer,
   OnboardingReply,
   OnboardingRequest,
 } from '@arandu/contracts';
@@ -9,6 +11,7 @@ import { z } from 'zod';
 import { MemoryService } from '../memory/memory.service.js';
 import { profileSchema, TOPICS } from '../memory/profile.schema.js';
 import { onboardingInstructions } from './onboarding.prompt.js';
+import { profileReadingInstructions } from './profile-reading.prompt.js';
 
 // The profile comes first, so the model takes stock of what it knows before it writes the next question.
 const onboardingTurn = z.object({
@@ -61,6 +64,19 @@ export class OnboardingService {
       { role: 'assistant', content: turn.reply },
     ]);
     return { sessionId, ...turn };
+  }
+
+  /** O09: Arandu's reading of the person from their tapped and written answers (O02-O08). */
+  async read(answers: OnboardingAnswer[]): Promise<AranduProfile> {
+    const { object } = await this.ai.generateObject({
+      label: 'arandu-profile-reading',
+      schema: profileSchema,
+      instructions: profileReadingInstructions(),
+      prompt: `The answers:\n${JSON.stringify(answers, null, 2)}`,
+      maxOutputTokens: 600,
+    });
+    // Covered is what they answered, whatever the model says.
+    return { ...object, covered: answers.map((a) => a.topic) };
   }
 
   /** Arandu's next turn for the conversation so far; empty to start it. */

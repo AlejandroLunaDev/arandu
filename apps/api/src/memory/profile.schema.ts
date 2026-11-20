@@ -39,3 +39,18 @@ export const profileInput = z.object({
   careerIdea: item.nullable(),
   covered: z.array(z.enum(TOPICS)).max(TOPICS.length),
 });
+
+/** The onboarding's answers as a request carries them (O02-O08): one per topic at most. */
+export const answersInput = z
+  .array(
+    z.object({
+      topic: z.enum(TOPICS),
+      picks: items,
+      text: z.string().trim().min(1).max(1000).nullable(),
+    }),
+  )
+  .max(TOPICS.length)
+  .refine(
+    (answers) => new Set(answers.map((a) => a.topic)).size === answers.length,
+    'One answer per topic',
+  );

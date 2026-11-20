@@ -228,3 +228,119 @@ export interface AranduMemory {
     startedAt: string;
   }[];
 }
+
+/** One onboarding question as the person answered it (O02-O08): the options they tapped and their own words. */
+export interface OnboardingAnswer {
+  topic: OnboardingTopic;
+  picks: string[];
+  /** Typed or spoken (speech-to-text); never audio. */
+  text: string | null;
+}
+
+/** POST /arandu/onboarding/profile: the answers; the reply is Arandu's reading of the person as tags (O09). */
+export interface ProfileReadingRequest {
+  answers: OnboardingAnswer[];
+}
+
+/** A first-semester subject a path can start with: a book on the shelf, each topic one stop. */
+export interface PathSubject {
+  disciplineId: number;
+  code: string | null;
+  name: string;
+  /** The official topics, in the source's order; the index is the stop. */
+  topics: string[];
+}
+
+/** One course of the career and its first-semester subjects with topics (O11). */
+export interface CareerPath {
+  courseId: number;
+  institution: string;
+  course: string;
+  city: string;
+  shift: string | null;
+  subjects: PathSubject[];
+  source: Source;
+}
+
+/** GET /careers/:slug/paths: where the career can be lived, course by course. Empty when no course has topics. */
+export interface CareerPaths {
+  profession: { slug: string; name: string };
+  paths: CareerPath[];
+}
+
+/** What the person chose so far (O02-O20). Null until chosen. */
+export interface Journey {
+  answers: OnboardingAnswer[] | null;
+  professionSlug: string | null;
+  courseId: number | null;
+  /** The subject the path starts with. */
+  disciplineId: number | null;
+  /** Days of study per week (O12). */
+  weeklyGoal: 3 | 5 | 7 | null;
+  /** Self-declared (O20). */
+  age: number | null;
+}
+
+/** PATCH /me/journey: only the fields sent change. */
+export type JourneyUpdate = Partial<Journey>;
+
+/** One card Arandu explains a stop with: every card cites where it comes from. */
+export interface StopCard {
+  title: string;
+  text: string;
+  /** `quote` is copied word for word from the page at `url`, and the API checked it is there. */
+  source: { label: string; url: string; quote: string };
+}
+
+/** The exercises of a stop. Answers come with them: the client checks them and reports the mistakes. */
+export type Exercise =
+  | {
+      kind: "escolha_uma";
+      prompt: string;
+      options: string[];
+      answer: number;
+      why: string;
+    }
+  | {
+      kind: "una_os_pares";
+      prompt: string;
+      pairs: [string, string][];
+      why: string;
+    }
+  | {
+      kind: "verdadeiro_ou_falso";
+      statements: { text: string; answer: boolean; why: string }[];
+    }
+  /** `text` marks each gap with ___; `answers` fill them in order; `tiles` holds them plus distractors. */
+  | {
+      kind: "complete_a_frase";
+      text: string;
+      tiles: string[];
+      answers: string[];
+      why: string;
+    };
+
+/** GET /stops/:disciplineId/:topic: a stop of a subject, the same for everyone. */
+export interface StopContent {
+  discipline: { id: number; name: string };
+  topic: { index: number; text: string; total: number };
+  /** 1-3. */
+  cards: StopCard[];
+  exercises: Exercise[];
+}
+
+/** POST /stops/:disciplineId/:topic/result: how many mistakes the person made before getting every item right. */
+export interface StopResultRequest {
+  mistakes: number;
+}
+
+export type AchievementCode = "primeira_parada";
+
+export interface StopResult {
+  /** Sabedoria this finish gave: 0 when the stop was already finished. */
+  sabedoria: number;
+  /** The first stop of the day: a new patinha. */
+  patinha: boolean;
+  /** Achievements this finish earned. */
+  achievements: AchievementCode[];
+}
