@@ -1,4 +1,4 @@
-import type { Wallet } from '@arandu/contracts';
+import type { BookReflectionRequest, Wallet } from '@arandu/contracts';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
 import { PersonGoneError } from '../memory/memory.repository.js';
@@ -181,6 +181,35 @@ export class ProgressRepository {
           ? { id: row.id, name: row.name!, topics: row.topics! }
           : null,
     };
+  }
+
+  /** S4: each finished stop of a book with its mistakes and how many exercises it has, the questions and the feeling. */
+  async reflection(userId: string, disciplineId: number) {
+    const stops = await this.sql<
+      { topic: number; mistakes: number; items: number }[]
+    >`
+      select r.topic, r.mistakes, coalesce(jsonb_array_length(c.content -> 'exercises'), 0)::int as items
+      from public.stop_results r
+      left join public.stop_contents c on c.discipline_id = r.discipline_id and c.topic = r.topic
+      where r.user_id = ${userId} and r.discipline_id = ${disciplineId} order by r.topic`;
+    const [{ questions }] = await this.sql<{ questions: number }[]>`
+      select count(*)::int as questions from public.stop_questions
+      where user_id = ${userId} and discipline_id = ${disciplineId}`;
+    const [feeling] = await this.sql<BookReflectionRequest[]>`
+      select chips, text from public.book_reflections where user_id = ${userId} and discipline_id = ${disciplineId}`;
+    return { stops, questions, feeling: feeling ?? null };
+  }
+
+  async saveReflection(
+    userId: string,
+    disciplineId: number,
+    { chips, text }: BookReflectionRequest,
+  ): Promise<void> {
+    await asPerson(this.sql`
+      insert into public.book_reflections (user_id, discipline_id, chips, text)
+      values (${userId}, ${disciplineId}, ${chips}, ${text})
+      on conflict (user_id, discipline_id) do update
+        set chips = excluded.chips, text = excluded.text, updated_at = now()`);
   }
 
   async discipline(

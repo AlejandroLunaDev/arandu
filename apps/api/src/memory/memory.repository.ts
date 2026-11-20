@@ -1,4 +1,5 @@
 import type {
+  AranduFact,
   AranduMemory,
   AranduProfile,
   ChatMessage,
@@ -28,7 +29,12 @@ export class PersonGoneError extends UnauthorizedException {
 const USER_KEYS = new Set([
   'arandu_memories_user_id_fkey',
   'arandu_sessions_user_id_fkey',
+  'arandu_facts_user_id_fkey',
 ]);
+
+export type FactSource = AranduFact['source'];
+/** Card questions folded into the facts at a time. */
+const QUESTIONS_SUMMARIZED = 50;
 
 async function asPerson<T>(write: Promise<T>): Promise<T> {
   try {
@@ -50,10 +56,9 @@ export class MemoryRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
   async read(userId: string): Promise<AranduMemory> {
-    const [memory] = await this.sql<
-      { profile: AranduProfile | null; summary: string }[]
-    >`
-      select profile, summary from public.arandu_memories where user_id = ${userId}`;
+    const [memory] = await this.sql<{ profile: AranduProfile | null }[]>`
+      select profile from public.arandu_memories where user_id = ${userId}`;
+    const facts = await this.facts(userId);
     const sessions = await this.sql<
       { kind: SessionKind; professionSlug: string | null; startedAt: Date }[]
     >`
@@ -62,12 +67,34 @@ export class MemoryRepository {
       order by started_at desc limit ${SESSIONS_LISTED}`;
     return {
       profile: memory?.profile ?? null,
-      summary: memory?.summary ?? '',
+      summary: facts.map((f) => f.text).join('\n'),
+      facts,
       sessions: sessions.map((s) => ({
         ...s,
         startedAt: s.startedAt.toISOString(),
       })),
     };
+  }
+
+  /** What Arandu remembers, oldest first. */
+  async facts(userId: string): Promise<AranduFact[]> {
+    const rows = await this.sql<
+      { id: number; text: string; source: FactSource; created_at: Date }[]
+    >`
+      select id::int, text, source, created_at from public.arandu_facts where user_id = ${userId} order by id`;
+    return rows.map((r) => ({
+      id: r.id,
+      text: r.text,
+      source: r.source,
+      createdAt: r.created_at.toISOString(),
+    }));
+  }
+
+  /** Deletes one fact; false when it is not this person's. */
+  async deleteFact(userId: string, id: number): Promise<boolean> {
+    const rows = await this
+      .sql`delete from public.arandu_facts where id = ${id} and user_id = ${userId} returning 1`;
+    return rows.length > 0;
   }
 
   async createSession(
@@ -114,12 +141,28 @@ export class MemoryRepository {
   }
 
   /** The person's sessions not yet folded into the summary, and their newest messages as one transcript. */
-  async unsummarized(
-    userId: string,
-  ): Promise<{ sessionIds: string[]; transcript: string }> {
+  async unsummarized(userId: string): Promise<{
+    sessionIds: string[];
+    questionIds: number[];
+    transcript: string;
+  }> {
     const sessions = await this.sql<{ id: string }[]>`
       select id from public.arandu_sessions where user_id = ${userId} and summarized_at is null`;
-    if (!sessions.length) return { sessionIds: [], transcript: '' };
+    const questions = await this.sql<
+      { id: number; topic_text: string; question: string }[]
+    >`
+      select q.id::int, coalesce(d.topics[q.topic + 1], d.name) as topic_text, q.question
+      from public.stop_questions q join public.disciplines d on d.id = q.discipline_id
+      where q.user_id = ${userId} and q.summarized_at is null
+      order by q.id desc limit ${QUESTIONS_SUMMARIZED}`;
+    const asked = questions.length
+      ? `\n\nQuestions on stop cards (source stop):\n${questions
+          .map((q) => `- (${q.topic_text}) ${q.question}`)
+          .join('\n')}`
+      : '';
+    const questionIds = questions.map((q) => q.id);
+    if (!sessions.length)
+      return { sessionIds: [], questionIds, transcript: asked.trim() };
     const rows = await this.sql<
       {
         id: string;
@@ -140,33 +183,49 @@ export class MemoryRepository {
       .map((id) => {
         const lines = rows.filter((r) => r.id === id);
         const about =
-          lines[0].kind === 'career' ? `career ${lines[0].slug}` : 'onboarding';
+          lines[0].kind === 'career'
+            ? `source conversation, career ${lines[0].slug}`
+            : 'source onboarding';
         return `Session (${about}):\n${lines.map((r) => `${r.role}: ${r.content}`).join('\n')}`;
       })
       .join('\n\n');
-    return { sessionIds, transcript };
+    return { sessionIds, questionIds, transcript: transcript + asked };
   }
 
-  async saveSummary(
+  /** Replaces the person's facts with the new list and marks what it folded in. */
+  async saveFacts(
     userId: string,
-    summary: string,
+    facts: { text: string; source: FactSource }[],
     sessionIds: string[],
+    questionIds: number[],
   ): Promise<void> {
     await asPerson(
       this.sql.begin(async (tx) => {
-        await tx`
-        insert into public.arandu_memories (user_id, summary) values (${userId}, ${summary.slice(0, SUMMARY_MAX)})
-        on conflict (user_id) do update set summary = excluded.summary, updated_at = now()`;
-        await tx`update public.arandu_sessions set summarized_at = now() where id in ${tx(sessionIds)}`;
+        await tx`delete from public.arandu_facts where user_id = ${userId}`;
+        if (facts.length)
+          await tx`insert into public.arandu_facts ${tx(
+            facts.map((f) => ({
+              user_id: userId,
+              text: f.text.slice(0, 300),
+              source: f.source,
+            })),
+          )}`;
+        if (sessionIds.length)
+          await tx`update public.arandu_sessions set summarized_at = now() where id in ${tx(sessionIds)}`;
+        if (questionIds.length)
+          await tx`update public.stop_questions set summarized_at = now() where id in ${tx(questionIds)}`;
       }),
     );
   }
 
-  /** Forgets the person: their profile, summary, sessions and messages. Their account stays. */
+  /** Forgets the person: their profile, facts, sessions and messages. Their account stays. */
   async forget(userId: string): Promise<void> {
     await this.sql.begin(async (tx) => {
       await tx`delete from public.arandu_sessions where user_id = ${userId}`;
       await tx`delete from public.arandu_memories where user_id = ${userId}`;
+      await tx`delete from public.arandu_facts where user_id = ${userId}`;
+      // Card questions already in the facts would come back on the next fold: keep them, but never fold them again.
+      await tx`update public.stop_questions set summarized_at = coalesce(summarized_at, now()) where user_id = ${userId}`;
     });
   }
 }

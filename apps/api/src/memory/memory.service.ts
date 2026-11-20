@@ -5,12 +5,24 @@ import type {
 } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { z } from 'zod';
 import { summaryInstructions } from './memory.prompt.js';
 import {
   MemoryRepository,
   type SessionKind,
   SUMMARY_MAX,
 } from './memory.repository.js';
+
+const factList = z.object({
+  facts: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1).max(300),
+        source: z.enum(['onboarding', 'stop', 'conversation']),
+      }),
+    )
+    .max(15),
+});
 
 /** The newest part of the unsummarized transcript the summary reads; older text is already in the note. */
 const TRANSCRIPT_MAX = 12_000;
@@ -27,6 +39,12 @@ export class MemoryService {
 
   read(userId: string): Promise<AranduMemory> {
     return this.memory.read(userId);
+  }
+
+  /** Deletes one fact; 404 when it is not this person's. */
+  async deleteFact(userId: string, id: number): Promise<void> {
+    if (!(await this.memory.deleteFact(userId, id)))
+      throw new NotFoundException(`No fact ${id}`);
   }
 
   forget(userId: string): Promise<void> {
@@ -47,18 +65,25 @@ export class MemoryService {
     kind: SessionKind,
     professionSlug: string | null = null,
   ): Promise<string> {
-    const { sessionIds, transcript } = await this.memory.unsummarized(userId);
-    if (sessionIds.length) {
-      const { summary } = await this.memory.read(userId);
-      const { text } = await this.ai.generateText({
+    const { sessionIds, questionIds, transcript } =
+      await this.memory.unsummarized(userId);
+    if (sessionIds.length || questionIds.length) {
+      const current = await this.memory.facts(userId);
+      const { object } = await this.ai.generateObject({
         label: 'arandu-memory',
+        schema: factList,
         instructions: summaryInstructions(SUMMARY_MAX),
-        prompt: `Current note:\n${summary || '(empty)'}\n\nNew sessions:\n${transcript.slice(-TRANSCRIPT_MAX)}`,
-        maxOutputTokens: 600,
+        prompt: `Current facts:\n${JSON.stringify(current.map(({ text, source }) => ({ text, source })))}\n\nNew sessions:\n${transcript.slice(-TRANSCRIPT_MAX)}`,
+        maxOutputTokens: 900,
       });
-      await this.memory.saveSummary(userId, text.trim(), sessionIds);
+      await this.memory.saveFacts(
+        userId,
+        object.facts,
+        sessionIds,
+        questionIds,
+      );
       this.logger.log(
-        `Folded ${sessionIds.length} session(s) into the summary of user ${userId}`,
+        `Folded ${sessionIds.length} session(s) into the facts of user ${userId}`,
       );
     }
     return this.memory.createSession(userId, kind, professionSlug);
