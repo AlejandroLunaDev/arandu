@@ -23,7 +23,7 @@ interface WalletRow {
   marcadores: number;
 }
 
-function toWallet(row: WalletRow, now: Date): Wallet {
+export function toWallet(row: WalletRow, now: Date): Wallet {
   const { novelos, at } = refill(row.novelos, row.novelos_at, now);
   return {
     novelos,
@@ -37,7 +37,7 @@ function toWallet(row: WalletRow, now: Date): Wallet {
   };
 }
 
-async function asPerson<T>(work: Promise<T>): Promise<T> {
+export async function asPerson<T>(work: Promise<T>): Promise<T> {
   try {
     return await work;
   } catch (error) {
@@ -57,7 +57,7 @@ export class ProgressRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
   /** The person's wallet row, created full on first use and locked for the rest of the transaction. */
-  private async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
+  async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
     await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
     const [row] = await tx<WalletRow[]>`
       select novelos, novelos_at, peixinhos, marcadores from public.wallets where user_id = ${userId} for update`;
