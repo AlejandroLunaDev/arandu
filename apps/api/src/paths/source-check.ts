@@ -62,22 +62,52 @@ export const publicLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
+const MARKS: Record<string, string> = {
+  acute: '́',
+  grave: '̀',
+  circ: '̂',
+  tilde: '̃',
+  uml: '̈',
+  cedil: '̧',
+};
+
 /** The page's visible text, lower case, one space between words, quotes and dashes made plain. */
 export function normalize(text: string): string {
-  return text
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;|&#160;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;|&#34;|&ldquo;|&rdquo;/g, '"')
-    .replace(/&#39;|&apos;|&rsquo;|&lsquo;/g, "'")
-    .replace(/[“”«»]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, '-')
-    .normalize('NFC')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    text
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      // Accented letters written as entities (Tr&ecirc;s, &#227;, &#xE7;): NFC below joins letter and mark.
+      .replace(
+        /&([a-z])(acute|grave|circ|tilde|uml|cedil);/gi,
+        (_, letter: string, mark: string) => letter + MARKS[mark.toLowerCase()],
+      )
+      .replace(
+        /&#(\d+);|&#x([0-9a-f]+);/gi,
+        (entity, dec?: string, hex?: string) => {
+          const code = dec ? Number(dec) : parseInt(hex!, 16);
+          return code > 0 && code <= 0x10ffff
+            ? String.fromCodePoint(code)
+            : entity;
+        },
+      )
+      .replace(/&ordf;/g, 'ª')
+      .replace(/&ordm;/g, 'º')
+      .replace(/&hellip;/g, '...')
+      .replace(/&ndash;|&mdash;/g, '-')
+      .replace(/&laquo;|&raquo;/g, '"')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;|&#34;|&ldquo;|&rdquo;/g, '"')
+      .replace(/&#39;|&apos;|&rsquo;|&lsquo;/g, "'")
+      .replace(/[“”«»]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/[–—]/g, '-')
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 interface Page {
@@ -129,12 +159,22 @@ export function get(url: URL): Promise<Page> {
   });
 }
 
+/** Sites of documents uploaded by users, Wikipedia (anyone edits it) and placeholder domains: never a source.
+ * Tested on every hop's host, so a redirect, a `user@` prefix or a trailing dot does not get around it. */
+const REFUSED_HOST =
+  /^([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|wikipedia\.org|example\.(com|org|net))\.?$/i;
+
 async function fetchText(url: string): Promise<string | null> {
   let current = new URL(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     // URL keeps an IPv6 literal's brackets ("[::1]"). Literals skip the lookup, so they are refused here.
     const host = current.hostname.replace(/^\[|\]$/g, '');
-    if (current.protocol !== 'https:' || isIP(host) || host === 'localhost')
+    if (
+      current.protocol !== 'https:' ||
+      isIP(host) ||
+      host === 'localhost' ||
+      REFUSED_HOST.test(host)
+    )
       return null;
     const page = await get(current);
     if (page.status >= 300 && page.status < 400) {

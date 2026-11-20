@@ -27,6 +27,31 @@ describe('normalize', () => {
     );
     expect(normalize('&quot;a&quot; &rsquo;b&rsquo;')).toBe('"a" \'b\'');
   });
+
+  it('decodes accent entities so the sentence equals the plain one', () => {
+    const plain = 'Três ações da Ciência: a Única, o Órgão, ç, ü, à, ã';
+    const encoded =
+      'Tr&ecirc;s a&ccedil;&otilde;es da Ci&ecirc;ncia: a &Uacute;nica, o &Oacute;rg&atilde;o, &ccedil;, &uuml;, &agrave;, &atilde;';
+    expect(normalize(encoded)).toBe(normalize(plain));
+    expect(normalize('&Aacute;gua')).toBe('água');
+  });
+
+  it('decodes decimal and hex numeric entities', () => {
+    expect(normalize('a&#227;o &#xE7;&#XC7; &#233;')).toBe('aão çç é');
+    expect(normalize('&#227;')).toBe(normalize('ã'));
+  });
+
+  it('leaves out-of-range numeric entities as they are', () => {
+    expect(normalize('&#0;')).toBe('&#0;');
+    expect(normalize('&#99999999;')).toBe('&#99999999;');
+    expect(normalize('&#x110000;')).toBe('&#x110000;');
+  });
+
+  it('decodes ordinals, ellipsis, dashes and guillemets', () => {
+    expect(
+      normalize('1&ordf; e 2&ordm; &hellip; a&ndash;b&mdash;c &laquo;x&raquo;'),
+    ).toBe('1ª e 2º ... a-b-c "x"');
+  });
 });
 
 describe('isPrivateAddress', () => {
@@ -181,6 +206,57 @@ describe('quoteIsOnPage', () => {
     ).resolves.toBe(true);
   });
 
+  it('finds an entity-encoded quote against the plain text', async () => {
+    replies = [{ status: 200, body: '<p>Tr&ecirc;s a&ccedil;&#245;es</p>' }];
+
+    await expect(quoteIsOnPage('https://a.org/x', 'Três ações')).resolves.toBe(
+      true,
+    );
+  });
+
+  it.each([
+    'https://scribd.com/doc/1',
+    'https://www.scribd.com/doc/1',
+    'https://pt.passeidireto.com/arquivo/1',
+    'https://brainly.com.br/tarefa/1',
+    'https://brainly.com/question/1',
+    'https://brainly.lat/tarea/1',
+    'https://www.studocu.com/pt-br/x',
+    'https://example.com/x',
+    'https://a.example.org/x',
+    'https://example.net',
+    'https://wikipedia.org/wiki/X',
+    'https://pt.wikipedia.org/wiki/X',
+    'https://en.m.wikipedia.org/wiki/X',
+    'https://scribd.com:443/x',
+    'https://scribd.com?x=1',
+    'https://scribd.com#top',
+    'HTTPS://SCRIBD.COM/x',
+    'https://user@scribd.com/x',
+    'https://scribd.com./x',
+  ])('refuses %s without any request', async (url) => {
+    await expect(quoteIsOnPage(url, 'a')).resolves.toBe(false);
+    expect(request).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'https://notscribd.com/x',
+    'https://notwikipedia.org/x',
+    'https://wikipedia.org.evil.com/x',
+    'https://a.org/wikipedia.org/x',
+    'https://scribd.com.evil.org/x',
+    'https://a.org/scribd.com/x',
+    'https://a.org/?u=brainly.com.br',
+    'https://myexample.com/x',
+    'https://brainlyx.com/x',
+  ])('does not refuse %s by host', async (url) => {
+    replies = [{ status: 200, body: 'hello' }];
+
+    await expect(quoteIsOnPage(url, 'hello')).resolves.toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it('connects through publicLookup', async () => {
     replies = [{ status: 200, body: 'hello' }];
 
@@ -229,6 +305,16 @@ describe('quoteIsOnPage', () => {
   ])('refuses a redirect to %s', async (_, location) => {
     replies = [
       { status: 302, location },
+      { status: 200, body: 'a' },
+    ];
+
+    await expect(quoteIsOnPage('https://a.org/x', 'a')).resolves.toBe(false);
+    expect(urls()).toEqual(['https://a.org/x']);
+  });
+
+  it('refuses a redirect to a refused host after one request', async () => {
+    replies = [
+      { status: 301, location: 'https://pt.scribd.com/x' },
       { status: 200, body: 'a' },
     ];
 
