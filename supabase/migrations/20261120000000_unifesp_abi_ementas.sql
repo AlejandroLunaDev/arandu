@@ -2,7 +2,9 @@
 -- an ABI course, 'Área Básica de Ingresso': the first termos are the ABI's, and only the ABI course publishes their
 -- offers, so the degree's own matriz page stores no ementa. A subject of a Unifesp page with no discipline of its own
 -- now links to the discipline of the same name on the ABI page of the same city and shift ('ABI HISTÓRIA' for
--- 'HISTÓRIA - BACHARELADO'). The other branches are unchanged.
+-- 'HISTÓRIA - BACHARELADO'), whether the degree page or the ABI page is the one being normalized: the run reads
+-- sources in no set order, and an ABI that publishes a new ementa must reach degrees whose own pages did not change.
+-- The other branches are unchanged.
 
 create or replace function staging.link_disciplines(p_source_id bigint) returns integer
 language plpgsql
@@ -31,9 +33,11 @@ begin
     and s.discipline_id is distinct from d.id;
   get diagnostics described = row_count;
 
+  -- Run for the degree page or for its ABI page: an ABI that gains an ementa links the degrees that wait for it.
   update public.curriculum_subjects s set discipline_id = d.id
   from public.sources g, staging.curriculum_courses me, staging.curriculum_courses abi, public.disciplines d
-  where g.id = p_source_id and g.adapter = 'unifesp_curriculum' and s.source_id = g.id and s.discipline_id is null
+  where g.id = s.source_id and g.adapter = 'unifesp_curriculum' and s.discipline_id is null
+    and p_source_id in (me.source_id, abi.source_id)
     and me.source_id = g.id and abi.institution_inep_code = me.institution_inep_code
     and staging.name_key(abi.city) = staging.name_key(me.city) and abi.shift is not distinct from me.shift
     and staging.name_key(abi.name)

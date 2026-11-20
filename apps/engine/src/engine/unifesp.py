@@ -29,6 +29,9 @@ DEGREE = re.compile(r" (BACHARELADO|LICENCIATURA)$")
 TECHNOLOGY = re.compile(r"^CURSO SUPERIOR DE TECNOLOGIA (?!EM )")
 CAMPUS = re.compile(r"<strong>Campus: </strong>([^<]+)</p>")
 MATRIX = re.compile(r'<span>\d+ - ([^<]+)</span>\s*<a\s+href="([^"]+)"')
+# (letters that take it in Portuguese, the spacing mark typed after them, the combining accent it stands for)
+SPACING_ACCENTS = (("aeiouAEIOU", "´", "́"), ("aeoAEO", "^", "̂"), ("aoAO", "~", "̃"),
+                   ("aA", "`", "̀"), ("cC", "¸", "̧"))
 TERM = re.compile(r"<strong>(\d+)&ordm; Termo</strong>")
 
 
@@ -147,8 +150,11 @@ def _card(match):
     lines = (" ".join(entities.unescape(re.sub(r"<[^>]+>", " ", line)).split())
              for line in re.split(r"<br\s*/?>", match[1]))
     lines = (re.sub(r"¿([^¿\s][^¿]*?)¿", r"“\1”", re.sub(r"(^| )¿ ", r"\1– ", line)) for line in lines if line)
-    # Some units type an accent as a spacing ´ after its vowel ('filoso´ficas'): it becomes the accented vowel.
-    return unicodedata.normalize("NFC", re.sub(r"(?<=[aeiouAEIOU])´", "́", "\n".join(lines)))
+    # Some units type an accent as a spacing mark after its letter ('filoso´ficas', 'ac¸a~o'): it joins the letter.
+    text = "\n".join(lines)
+    for letters, mark, combining in SPACING_ACCENTS:
+        text = re.sub(rf"(?<=[{letters}]){re.escape(mark)}", combining, text)
+    return unicodedata.normalize("NFC", text)
 
 
 def parse_page(doc):
