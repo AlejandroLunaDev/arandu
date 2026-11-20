@@ -159,12 +159,22 @@ export function get(url: URL): Promise<Page> {
   });
 }
 
+/** Sites of documents uploaded by users, Wikipedia (anyone edits it) and placeholder domains: never a source.
+ * Tested on every hop's host, so a redirect, a `user@` prefix or a trailing dot does not get around it. */
+const REFUSED_HOST =
+  /^([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|wikipedia\.org|example\.(com|org|net))\.?$/i;
+
 async function fetchText(url: string): Promise<string | null> {
   let current = new URL(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     // URL keeps an IPv6 literal's brackets ("[::1]"). Literals skip the lookup, so they are refused here.
     const host = current.hostname.replace(/^\[|\]$/g, '');
-    if (current.protocol !== 'https:' || isIP(host) || host === 'localhost')
+    if (
+      current.protocol !== 'https:' ||
+      isIP(host) ||
+      host === 'localhost' ||
+      REFUSED_HOST.test(host)
+    )
       return null;
     const page = await get(current);
     if (page.status >= 300 && page.status < 400) {
@@ -177,16 +187,11 @@ async function fetchText(url: string): Promise<string | null> {
   return null;
 }
 
-/** Sites of documents uploaded by users, Wikipedia (anyone edits it) and placeholder domains: never a source, whatever the page says. */
-const REFUSED_HOST =
-  /^https?:\/\/([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|wikipedia\.org|example\.(com|org|net))([/:?#]|$)/i;
-
 /** True when the page at `url` holds `quote` word for word (case, spacing and quote marks aside). */
 export async function quoteIsOnPage(
   url: string,
   quote: string,
 ): Promise<boolean> {
-  if (REFUSED_HOST.test(url)) return false;
   try {
     const page = await fetchText(url);
     return page !== null && normalize(page).includes(normalize(quote));
