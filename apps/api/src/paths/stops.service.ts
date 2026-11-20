@@ -338,20 +338,15 @@ export class StopsService {
     if (mine) return mine;
 
     const start = topic - (topic % TOPICS_PER_SEARCH);
-    const block = topics
+    const whole = topics
       .slice(start, start + TOPICS_PER_SEARCH)
-      .map((text, i) => ({ index: start + i, text }))
-      .filter((t) => !stored.has(t.index));
-    const object = await orRetry(
-      this.ai.generateObject({
-        model: 'web',
-        label: 'arandu-subject-cards',
-        schema: subjectCardsDraft,
-        instructions: subjectCardsInstructions(),
-        prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}`,
-        maxOutputTokens: 1200 * block.length,
-      }),
-    );
+      .map((text, i) => ({ index: start + i, text }));
+    const block = whole.filter((t) => !stored.has(t.index));
+    // A block already searched (some topic of it stored) is not searched again: its uncovered topics search alone.
+    const object =
+      block.length === whole.length
+        ? await this.blockCards(id, name, block)
+        : null;
     if (object) {
       const checks = await Promise.all(
         object.cards.map((c) => quoteIsOnPage(c.source.url, c.source.quote)),
@@ -374,6 +369,32 @@ export class StopsService {
       if (cards) return cards;
     }
     return this.cards(name, topic, topics[topic], topics.length);
+  }
+
+  /**
+   * One web search for a block of topics. Null when its answer missed the schema or the provider failed: the stop then
+   * falls back to a search for its own topic.
+   */
+  private async blockCards(
+    id: number,
+    name: string,
+    block: { index: number; text: string }[],
+  ) {
+    try {
+      return await orRetry(
+        this.ai.generateObject({
+          model: 'web',
+          label: 'arandu-subject-cards',
+          schema: subjectCardsDraft,
+          instructions: subjectCardsInstructions(),
+          prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}`,
+          maxOutputTokens: 900 * block.length,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(`Subject ${id} block search failed: ${String(error)}`);
+      return null;
+    }
   }
 
   private async generate(

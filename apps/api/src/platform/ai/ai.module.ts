@@ -24,6 +24,13 @@ const logger = new Logger('AI');
           // generateObject sends a JSON schema, which OpenRouter passes on to the model.
           supportsStructuredOutputs: true,
         });
+        // The students are minors (LGPD): route only to providers that neither store nor train on prompts.
+        // Reasoning off: Haiku 5.5's thinking spent 307 of 400 output tokens and cut replies mid-sentence.
+        // A model's own providerOptions replace these defaults (not merged), so each model repeats them.
+        const routing = {
+          provider: { data_collection: 'deny' },
+          reasoning: { enabled: false },
+        };
         return {
           models: {
             // Prices in USD per million tokens, from openrouter.ai/anthropic/claude-haiku-5.5 (2026-11-17).
@@ -38,6 +45,7 @@ const logger = new Logger('AI');
               model: openrouter('anthropic/claude-haiku-5.5'),
               providerOptions: {
                 openrouter: {
+                  ...routing,
                   plugins: [{ id: 'web', engine: 'exa', max_results: 10 }],
                 },
               },
@@ -46,14 +54,7 @@ const logger = new Logger('AI');
           },
           defaults: {
             maxOutputTokens: 400,
-            // The students are minors (LGPD): route only to providers that neither store nor train on prompts.
-            // Reasoning off: Haiku 5.5's thinking spent 307 of 400 output tokens and cut replies mid-sentence.
-            providerOptions: {
-              openrouter: {
-                provider: { data_collection: 'deny' },
-                reasoning: { enabled: false },
-              },
-            },
+            providerOptions: { openrouter: routing },
           },
           onUsage: ({
             label,
