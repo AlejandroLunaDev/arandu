@@ -6,6 +6,6 @@ import { ProgressService } from './progress.service.js';
 @Module({
   controllers: [ProgressController],
   providers: [ProgressRepository, ProgressService],
-  exports: [ProgressService],
+  exports: [ProgressService, ProgressRepository],
 })
 export class ProgressModule {}

@@ -457,3 +457,82 @@ export interface BookProgress {
     state: "done" | "current" | "locked";
   }[];
 }
+
+/** The six leagues, in order (L0). Each dresses Arandu; an outfit is kept forever. */
+export type LeagueId =
+  "calouro" | "veterano" | "monitor" | "mestre" | "filosofo" | "sabio";
+
+/** GET /me/league (L1): this week's league of 12 by weekly sabedoria. Others show only a nickname and sabedoria. */
+export interface League {
+  league: { id: LeagueId; name: string; rank: number };
+  /** The week's Monday and when it ends (São Paulo time). */
+  week: { monday: string; endsAt: string };
+  /** How many move up at the end of the week. */
+  promoteTop: number;
+  /** Best first. `demo` rivals fill the league while there are few people. */
+  rows: {
+    position: number;
+    nickname: string;
+    sabedoria: number;
+    you: boolean;
+    demo: boolean;
+  }[];
+  /** A promotion the person has not seen yet (L7); cleared by POST /me/league/promotion/seen. */
+  promotion: { from: LeagueId; to: LeagueId; caixaId: number } | null;
+}
+
+export type SeasonReward =
+  | { kind: "peixinhos"; amount: number }
+  | { kind: "caixa" }
+  | { kind: "novelos_cheios" }
+  | { kind: "marcador" };
+
+/** GET /me/season (L3): a level every 50 sabedoria of the season, 8 levels. Only studying moves it. */
+export interface Season {
+  season: number;
+  endsOn: string;
+  sabedoria: number;
+  level: number;
+  perLevel: number;
+  free: {
+    level: number;
+    reward: SeasonReward;
+    ready: boolean;
+    claimed: boolean;
+  }[];
+  /** Shown locked: never purchasable here. */
+  plus: { level: number; item: string; locked: true }[];
+}
+
+/** What a caixa held, rolled on the server when opened (L4). */
+export interface CaixaContents {
+  peixinhos: number;
+  marcador: boolean;
+  novelosCheios: boolean;
+  /** A room item, e.g. "planta"; null when none. */
+  roomItem: string | null;
+}
+
+export interface Caixa {
+  id: number;
+  /** Why it was earned: "season:1:2", "promotion:veterano" or "demo_finished". */
+  reason: string;
+  createdAt: string;
+  openedAt: string | null;
+  contents: CaixaContents | null;
+}
+
+/** GET /me/wardrobe (L6): owned league outfits and room items, and what Arandu wears. */
+export interface Wardrobe {
+  outfits: { id: LeagueId; owned: boolean }[];
+  roomItems: string[];
+  /** The outfit worn: the chosen one, or the highest league reached. */
+  wearing: LeagueId;
+  nickname: string | null;
+}
+
+/** PUT /me/wardrobe: either field; null wears the highest league reached, or clears the nickname. */
+export interface WardrobeUpdate {
+  wearing?: LeagueId | null;
+  nickname?: string | null;
+}
