@@ -283,6 +283,11 @@ class CardTest(unittest.TestCase):
         self.assertEqual(out, "filosóficas e HISTÓRIA\nx ´ y, b´c")
         self.assertEqual(out, unicodedata.normalize("NFC", out))
 
+    def test_every_spacing_mark_composes_after_the_letters_that_take_it_and_stays_after_others(self):
+        out = self.card("Evoluc¸a~o aerodina^micos a` x~ s^ e~")
+        self.assertEqual(out, "Evolução aerodinâmicos à x~ s^ e~")
+        self.assertEqual(out, unicodedata.normalize("NFC", out))
+
 
 def query(year, semester):
     return f"&filter_anoLetivo={year}&filter_semestre={semester}&filter_termo=1"
