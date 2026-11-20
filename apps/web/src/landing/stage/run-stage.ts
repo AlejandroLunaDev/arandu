@@ -609,7 +609,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // The page's overlays (the TV's card, the steam) step aside for the whole flight, and the book's
     // pictures start loading now, so its pages are full when it lands open.
     document.documentElement.dataset.book = "";
-    // A TV playing the video keeps playing (hero.module.css): only an idle one switches off.
+    // A TV playing the video stays on and keeps its sound: only its picture steps aside (hero.module.css),
+    // since the page's video would draw over the 3D book. An idle TV switches off.
     tvOff = tvCard?.dataset.playing === undefined;
     if (tvOff) tvPower(false);
     const slug = prop.userData.slug as string | undefined;
