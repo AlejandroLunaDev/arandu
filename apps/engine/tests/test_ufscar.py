@@ -297,34 +297,117 @@ class MatrizPagesTest(unittest.TestCase):
             ufscar._matriz_pages(["texto"] * 20)
 
 
+def reading(text):
+    return ufscar.ocr.tokens(text)
+
+
+class HeldTest(unittest.TestCase):
+    def held(self, name, text, slips=None):
+        return ufscar._held(name, reading(text), slips or {})
+
+    def test_a_name_inside_a_longer_word_is_rejected(self):
+        self.assertEqual(self.held("Química", "Bioquímica 60"), [])
+
+    def test_a_one_letter_difference_is_rejected(self):
+        self.assertEqual(self.held("Estética", "Estática 60"), [])
+
+    def test_a_short_last_word_must_follow_at_once(self):
+        self.assertEqual(self.held("Cálculo Diferencial e Integral 2", "Cálculo Diferencial e Integral 1 90"), [])
+
+    def test_a_last_letter_must_match(self):
+        self.assertEqual(self.held("Física Experimental B", "Física Experimental A 30"), [])
+
+    def test_glued_words_are_accepted(self):
+        self.assertTrue(self.held("Estrutura e Funcionamento", "EstruturaeFuncionamento 60"))
+
+    def test_a_word_split_by_a_line_break_hyphen_is_accepted(self):
+        self.assertTrue(self.held("Introdução ao Pensamento Algorítmico",
+                                  "Introdução ao Pensamento Algorít- DC obrigatório 30 30 mico"))
+
+    def test_a_word_with_a_trailing_hyphen_still_matches(self):
+        self.assertTrue(self.held("Prática Profissional 1", "Prática Profissional 1- Saúde"))
+
+
+class TermsAndPlacedTest(unittest.TestCase):
+    TEXT = "1º Semestre Cálculo 1 60 2º Semestre Física Geral 60 3º Semestre Química Geral 60"
+
+    def placed(self, name, term, text=TEXT, slips=None):
+        return ufscar._placed(name, term, reading(text), slips or {})
+
+    def test_a_unit_under_its_heading_is_placed(self):
+        self.assertTrue(self.placed("Física Geral", 2))
+        self.assertTrue(self.placed("Química Geral", 3))  # the last semester runs to the end
+
+    def test_the_same_name_under_another_semester_is_not_placed(self):
+        self.assertFalse(self.placed("Física Geral", 1))
+        self.assertFalse(self.placed("Física Geral", 3))
+
+    def test_a_semester_with_no_heading_places_nothing(self):
+        self.assertFalse(self.placed("Física Geral", 4))
+
+    def test_a_reading_with_no_headings_places_nothing(self):
+        self.assertEqual(ufscar._terms(reading("Cálculo 1 60 Física Geral 60"), {}), [])
+        self.assertFalse(self.placed("Cálculo 1", 1, "Cálculo 1 60 Física Geral 60"))
+
+    def test_perfil_and_periodo_headings_count(self):
+        self.assertEqual(len(ufscar._terms(reading("Perfil 1 Cálculo Perfil 2 Física 3º período Química"), {})), 3)
+
+    def test_a_year_is_not_a_heading(self):
+        self.assertEqual(ufscar._terms(reading("1º ano Cálculo 1 2º ano Física"), {}), [])
+
+    def test_a_bare_ordinal_is_not_a_heading(self):
+        self.assertEqual(ufscar._terms(reading("1º Cálculo 2º Física"), {}), [])
+
+    def test_headings_must_run_in_order(self):
+        self.assertEqual(len(ufscar._terms(reading("2º Semestre A 1º Semestre B"), {})), 1)
+
+    def test_an_ocr_slip_in_the_heading_counts_with_slips(self):
+        text = reading("lº Semestre Cálculo 1 60 2º Semestre Física Geral 60").translate(ufscar.ocr.SLIPS)
+        self.assertEqual(len(ufscar._terms(text, ufscar.ocr.SLIPS)), 2)
+        self.assertEqual(ufscar._terms("|io|semestre|calculo|", ufscar.ocr.SLIPS), [0])
+        self.assertEqual(ufscar._terms("|io|semestre|calculo|", {}), [])
+
+
 class TranscribedTest(unittest.TestCase):
-    """The text layer of ufscar_matriz.pdf is the second reading; vision.read_json is mocked, so no network."""
+    """The PDF's text layer is the second reading; pypdfium2, rendering and vision.read_json are faked, so no network."""
 
-    def run_with(self, units):
-        with mock.patch.object(ufscar.vision, "read_json", return_value={"units": units}):
-            return ufscar._transcribed((FIXTURES / "ufscar_matriz.pdf").read_bytes())
+    LAYER = "1º Semestre Lógica Digital 90 Cálculo Diferencial e Integral 1 60 2º Semestre Física Geral 60 " + "x " * 100
 
-    def unit(self, name, term=1, hours=60, elective=False):
-        return {"term": term, "name": name, "hours": hours, "elective": elective}
+    def run_with(self, units, layer=LAYER):
+        page = mock.Mock()
+        page.get_textpage.return_value.get_text_range.return_value = layer
+        with mock.patch.object(ufscar.pypdfium2, "PdfDocument", return_value=[page]),                 mock.patch.object(ufscar.ocr, "render", return_value=[object()]),                 mock.patch.object(ufscar.vision, "read_json", return_value={"units": units}):
+            return ufscar._transcribed(b"")
 
-    def test_confirmed_names_come_back(self):
-        self.assertEqual(self.run_with([self.unit("Lógica Digital", hours=90), self.unit("Cálculo Diferencial e Integral 1")]),
-                         [(1, "Lógica Digital", 90, False), (1, "Cálculo Diferencial e Integral 1", 60, False)])
+    def unit(self, name, term=1, elective=False):
+        return {"term": term, "name": name, "elective": elective}
+
+    def test_placed_units_come_back_with_no_hours(self):
+        self.assertEqual(self.run_with([self.unit("Lógica Digital"), self.unit("Física Geral", term=2)]),
+                         [(1, "Lógica Digital", None, False), (2, "Física Geral", None, False)])
+
+    def test_a_unit_in_the_wrong_semester_fails_the_matriz(self):
+        with self.assertRaisesRegex(ValueError, r"does not confirm 1 units: \['Física Geral \(1\)'\]"):
+            self.run_with([self.unit("Lógica Digital"), self.unit("Física Geral", term=1)])
 
     def test_an_invented_name_fails(self):
-        with self.assertRaisesRegex(ValueError, "does not confirm 1 names"):
+        with self.assertRaisesRegex(ValueError, "does not confirm 1 units"):
             self.run_with([self.unit("Lógica Digital"), self.unit("Astrologia Quântica")])
 
     def test_a_question_mark_fails(self):
         with self.assertRaisesRegex(ValueError, "does not confirm"):
             self.run_with([self.unit("Lógica Digit?l")])
 
+    def test_a_matriz_with_no_headings_fails(self):
+        with self.assertRaisesRegex(ValueError, "does not confirm"):
+            self.run_with([self.unit("Lógica Digital")], layer="Lógica Digital 90 " + "x " * 100)
+
     def test_an_elective_without_a_term_is_dropped(self):
         self.assertEqual(self.run_with([self.unit("Lógica Digital"), self.unit("Astrologia", term=None, elective=True)]),
-                         [(1, "Lógica Digital", 60, False)])
+                         [(1, "Lógica Digital", None, False)])
 
     def test_a_non_elective_without_a_term_raises(self):
-        with self.assertRaisesRegex(ValueError, "no semester or hours"):
+        with self.assertRaisesRegex(ValueError, "no semester"):
             self.run_with([self.unit("Lógica Digital", term=None)])
 
 

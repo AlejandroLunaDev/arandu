@@ -11,20 +11,15 @@ class KeyTest(unittest.TestCase):
         self.assertEqual(ocr.key("Inforrnação"), ocr.key("Informação"))
 
 
-class ConfirmedTest(unittest.TestCase):
-    def test_exact_key_match(self):
-        self.assertTrue(ocr.confirmed("logica", {"logica"}))
+class TokensTest(unittest.TestCase):
+    def test_words_are_keyed_between_bars(self):
+        self.assertEqual(ocr.tokens("Cálculo 1,"), "|calculo|1|")
 
-    def test_a_roman_numeral_is_confirmed_by_il1_marks_of_its_length(self):
-        self.assertTrue(ocr.confirmed("iii", {"l1i"}))
-        self.assertFalse(ocr.confirmed("iii", {"ii"}))
+    def test_a_trailing_hyphen_is_kept(self):
+        self.assertEqual(ocr.tokens("Algorít- mico"), "|algorit-|mico|")
 
-    def test_one_edit_off_confirms_a_word_of_six_or_more_characters(self):
-        self.assertTrue(ocr.confirmed("calculo", {"calcule"}))
-        self.assertFalse(ocr.confirmed("fisic", {"fisia"}))  # 5 characters: too short to tolerate an edit
-
-    def test_two_edits_off_does_not_confirm(self):
-        self.assertFalse(ocr.confirmed("calculo", {"calcixo"}))
+    def test_a_word_of_punctuation_only_is_dropped(self):
+        self.assertEqual(ocr.tokens("a . b"), "|a|b|")
 
 
 if __name__ == "__main__":
