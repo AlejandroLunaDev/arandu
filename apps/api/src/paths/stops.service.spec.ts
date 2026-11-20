@@ -158,10 +158,9 @@ describe('StopsService', () => {
     expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
 
-  it('503s when fewer than 3 exercises are consistent', async () => {
+  it('503s when even one exercise is inconsistent (all 4 are needed)', async () => {
     const d = draft();
     d.escolhaUma.answer = 9;
-    d.completeAFrase.answers = ['x'];
     ai.generateObject.mockResolvedValue({ object: d });
 
     await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });

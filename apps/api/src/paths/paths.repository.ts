@@ -59,6 +59,7 @@ export class PathsRepository {
       join public.disciplines d on d.id = cs.discipline_id
       join public.sources s on s.id = cs.source_id
       where p.slug = ${slug} and (cs.term = 1 or (cs.term is null and cs.year = 1)) and cardinality(d.topics) > 0
+        and s.last_fetched_at is not null
       order by institution, c.city, c.id, cs.shift, d.name`;
 
     const paths = new Map<string, CareerPath>();
@@ -97,7 +98,7 @@ export class PathsRepository {
 
   async discipline(id: number): Promise<Discipline | null> {
     const [row] = await this.sql<Discipline[]>`
-      select id::int, name, topics from public.disciplines where id = ${id}`;
+      select id::int, name, coalesce(topics, '{}') as topics from public.disciplines where id = ${id}`;
     return row ?? null;
   }
 
@@ -130,6 +131,8 @@ export class PathsRepository {
   ): Promise<StopResult> {
     try {
       return await this.sql.begin(async (tx) => {
+        // One finish at a time per person, so two at once cannot both be "the first" of the day.
+        await tx`select pg_advisory_xact_lock(hashtext(${userId}))`;
         const inserted = await tx`
           insert into public.stop_results (user_id, discipline_id, topic, mistakes, sabedoria)
           values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${STOP_SABEDORIA})

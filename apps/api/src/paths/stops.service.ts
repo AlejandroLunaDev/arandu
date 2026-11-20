@@ -153,7 +153,7 @@ export class StopsService {
       this.logger.log(
         `Stop ${id}:${topic} attempt ${attempt}: ${cards.length}/${object.cards.length} cards verified, ${exercises.length} exercises`,
       );
-      if (!cards.length || exercises.length < 3) continue;
+      if (!cards.length || exercises.length < 4) continue;
       const content: StopContent = {
         discipline: { id, name },
         topic: { index: topic, text: topicText, total },

@@ -7,7 +7,7 @@ create table public.journeys (
   -- O02-O08 as the person answered (OnboardingAnswer[]): the options tapped and their own words, never audio.
   answers jsonb check (answers is null or jsonb_typeof(answers) = 'array'),
   -- O10-O11. A catalog reload that drops a row clears the choice instead of failing.
-  profession_slug text references public.professions (slug) on delete set null,
+  profession_slug text references public.professions (slug) on delete set null on update cascade,
   course_id bigint references public.courses (id) on delete set null,
   -- The subject the path starts with: the book with the paw.
   discipline_id bigint references public.disciplines (id) on delete set null,

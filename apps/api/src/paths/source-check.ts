@@ -1,5 +1,6 @@
-import { lookup } from 'node:dns/promises';
-import { BlockList, isIP } from 'node:net';
+import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
+import { request } from 'node:https';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 const MAX_BYTES = 3_000_000;
 const TIMEOUT_MS = 10_000;
@@ -14,26 +15,52 @@ for (const [net, prefix] of [
   ['127.0.0.0', 8],
   ['169.254.0.0', 16],
   ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
   ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
 ] as const)
   PRIVATE.addSubnet(net, prefix, 'ipv4');
 // IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) are checked against the IPv4 ranges above by BlockList itself.
 for (const [net, prefix] of [
   ['::', 127],
+  ['64:ff9b::', 96],
+  ['2002::', 16],
   ['fc00::', 7],
   ['fe80::', 10],
+  ['ff00::', 8],
 ] as const)
   PRIVATE.addSubnet(net, prefix, 'ipv6');
 
-async function isPublicHost(hostname: string): Promise<boolean> {
-  // URL keeps an IPv6 literal's brackets ("[::1]").
-  if (isIP(hostname.replace(/^\[|\]$/g, '')) || hostname === 'localhost')
-    return false;
-  const addresses = await lookup(hostname, { all: true });
-  return addresses.every(
-    (a) => !PRIVATE.check(a.address, a.family === 6 ? 'ipv6' : 'ipv4'),
-  );
+export function isPrivateAddress(address: string, family: number): boolean {
+  return PRIVATE.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }
+
+/**
+ * The DNS lookup the connection itself uses: it refuses a name with any private address, so the address checked is
+ * the address connected to (no DNS rebinding between a check and the request).
+ */
+export const publicLookup: LookupFunction = (hostname, options, callback) => {
+  dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
+    const list = addresses as unknown as LookupAddress[];
+    if (error) return callback(error, '', 0);
+    if (!list.length || list.some((a) => isPrivateAddress(a.address, a.family)))
+      return callback(
+        Object.assign(new Error(`${hostname} is not public`), {
+          code: 'ENOTFOUND',
+        }),
+        '',
+        0,
+      );
+    if (options.all)
+      return (callback as unknown as (e: null, a: LookupAddress[]) => void)(
+        null,
+        list,
+      );
+    callback(null, list[0].address, list[0].family);
+  });
+};
 
 /** The page's visible text, lower case, one space between words, quotes and dashes made plain. */
 export function normalize(text: string): string {
@@ -53,38 +80,69 @@ export function normalize(text: string): string {
     .trim();
 }
 
+interface Page {
+  status: number;
+  location: string | undefined;
+  /** Null unless the status is 2xx. Cut at MAX_BYTES. */
+  body: string | null;
+}
+
+/** One GET, without following redirects. */
+export function get(url: URL): Promise<Page> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      url,
+      {
+        lookup: publicLookup,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        headers: { 'User-Agent': 'AranduBot/1.0 (source check)' },
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        const location = res.headers.location;
+        if (status < 200 || status >= 300) {
+          res.resume();
+          return resolve({ status, location, body: null });
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        const done = () =>
+          resolve({
+            status,
+            location,
+            body: Buffer.concat(chunks).toString('utf8'),
+          });
+        res.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > MAX_BYTES) {
+            res.destroy();
+            return done();
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', done);
+        res.on('error', reject);
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 async function fetchText(url: string): Promise<string | null> {
-  let current = url;
+  let current = new URL(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const parsed = new URL(current);
-    if (parsed.protocol !== 'https:' || !(await isPublicHost(parsed.hostname)))
+    // URL keeps an IPv6 literal's brackets ("[::1]"). Literals skip the lookup, so they are refused here.
+    const host = current.hostname.replace(/^\[|\]$/g, '');
+    if (current.protocol !== 'https:' || isIP(host) || host === 'localhost')
       return null;
-    const response = await fetch(parsed, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { 'User-Agent': 'AranduBot/1.0 (source check)' },
-    });
-    if (response.status >= 300 && response.status < 400) {
-      const next = response.headers.get('location');
-      if (!next) return null;
-      current = new URL(next, parsed).toString();
+    const page = await get(current);
+    if (page.status >= 300 && page.status < 400) {
+      if (!page.location) return null;
+      current = new URL(page.location, current);
       continue;
     }
-    if (!response.ok || !response.body) return null;
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_BYTES) {
-        await reader.cancel();
-        break;
-      }
-      chunks.push(value);
-    }
-    return Buffer.concat(chunks).toString('utf8');
+    return page.body;
   }
   return null;
 }
