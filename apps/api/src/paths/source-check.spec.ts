@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { request } from 'node:https';
 import { Readable } from 'node:stream';
 import {
+  decode,
   isPrivateAddress,
   normalize,
   publicLookup,
@@ -165,7 +166,14 @@ describe('publicLookup', () => {
 });
 
 describe('quoteIsOnPage', () => {
-  type Reply = { status: number; location?: string; body?: string } | Error;
+  type Reply =
+    | {
+        status: number;
+        location?: string;
+        body?: string | Buffer;
+        contentType?: string;
+      }
+    | Error;
   let replies: Reply[];
 
   // Stands in for node:https: each request gets the next reply.
@@ -188,7 +196,10 @@ describe('quoteIsOnPage', () => {
         onResponse(
           Object.assign(Readable.from([Buffer.from(reply.body ?? '')]), {
             statusCode: reply.status,
-            headers: { location: reply.location },
+            headers: {
+              location: reply.location,
+              'content-type': reply.contentType,
+            },
           }),
         );
       };
@@ -222,6 +233,8 @@ describe('quoteIsOnPage', () => {
     'https://brainly.com/question/1',
     'https://brainly.lat/tarea/1',
     'https://www.studocu.com/pt-br/x',
+    'https://slideshare.net/x',
+    'https://www.slideshare.net/x/y',
     'https://example.com/x',
     'https://a.example.org/x',
     'https://example.net',
@@ -255,6 +268,20 @@ describe('quoteIsOnPage', () => {
 
     await expect(quoteIsOnPage(url, 'hello')).resolves.toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads an ISO-8859-1 page by the charset in its header', async () => {
+    replies = [
+      {
+        status: 200,
+        body: Buffer.from('<p>Três ações</p>', 'latin1'),
+        contentType: 'text/html; charset=ISO-8859-1',
+      },
+    ];
+
+    await expect(quoteIsOnPage('https://a.org/x', 'Três ações')).resolves.toBe(
+      true,
+    );
   });
 
   it('connects through publicLookup', async () => {
@@ -349,5 +376,63 @@ describe('quoteIsOnPage', () => {
     await expect(quoteIsOnPage('https://a.org/x', 'needle')).resolves.toBe(
       false,
     );
+  });
+});
+
+describe('decode', () => {
+  const latin1 = (html: string) => Buffer.from(html, 'latin1');
+
+  it('uses the charset of the Content-Type header', () => {
+    expect(decode(latin1('Três ações'), 'text/html; charset=ISO-8859-1')).toBe(
+      'Três ações',
+    );
+  });
+
+  it('uses a quoted header charset, whatever its case', () => {
+    expect(decode(latin1('ação'), 'text/html; CHARSET="iso-8859-1"')).toBe(
+      'ação',
+    );
+  });
+
+  it('falls back to the meta charset when the header names none', () => {
+    const body = latin1('<meta charset="iso-8859-1"><p>ação</p>');
+
+    expect(decode(body, 'text/html')).toContain('ação');
+    expect(decode(body, undefined)).toContain('ação');
+  });
+
+  it('reads the http-equiv meta form too', () => {
+    const body = latin1(
+      '<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"><p>ação</p>',
+    );
+
+    expect(decode(body, undefined)).toContain('ação');
+  });
+
+  it('prefers the header over the meta tag', () => {
+    const body = Buffer.from('<meta charset="iso-8859-1">ação', 'utf8');
+
+    expect(decode(body, 'text/html; charset=utf-8')).toContain('ação');
+  });
+
+  it('ignores a meta tag after the first 4 KB', () => {
+    const body = latin1(`${' '.repeat(4096)}<meta charset="iso-8859-1">ação`);
+
+    expect(decode(body, undefined)).toContain('a��o');
+  });
+
+  it('reads utf-8 when there is no charset anywhere', () => {
+    expect(decode(Buffer.from('Três ações', 'utf8'), 'text/html')).toBe(
+      'Três ações',
+    );
+    expect(decode(Buffer.from('Três ações', 'utf8'), undefined)).toBe(
+      'Três ações',
+    );
+  });
+
+  it('reads utf-8 when the charset label is unknown', () => {
+    expect(
+      decode(Buffer.from('Três ações', 'utf8'), 'text/html; charset=nope-9'),
+    ).toBe('Três ações');
   });
 });

@@ -117,6 +117,23 @@ interface Page {
   body: string | null;
 }
 
+/**
+ * The body as text, in the charset the server names (header, else the page's meta tag): many Brazilian pages are
+ * ISO-8859-1, and read as UTF-8 their accents break every quote. Unknown or missing charsets read as UTF-8.
+ */
+export function decode(body: Buffer, contentType: string | undefined): string {
+  const charset =
+    /charset=["']?([\w-]+)/i.exec(contentType ?? '')?.[1] ??
+    /<meta[^>]+charset=["']?([\w-]+)/i.exec(
+      body.subarray(0, 4096).toString('latin1'),
+    )?.[1];
+  try {
+    return new TextDecoder(charset ?? 'utf-8').decode(body);
+  } catch {
+    return body.toString('utf8');
+  }
+}
+
 /** One GET, without following redirects. */
 export function get(url: URL): Promise<Page> {
   return new Promise((resolve, reject) => {
@@ -140,7 +157,7 @@ export function get(url: URL): Promise<Page> {
           resolve({
             status,
             location,
-            body: Buffer.concat(chunks).toString('utf8'),
+            body: decode(Buffer.concat(chunks), res.headers['content-type']),
           });
         res.on('data', (chunk: Buffer) => {
           size += chunk.length;
@@ -162,7 +179,7 @@ export function get(url: URL): Promise<Page> {
 /** Sites of documents uploaded by users, Wikipedia (anyone edits it) and placeholder domains: never a source.
  * Tested on every hop's host, so a redirect, a `user@` prefix or a trailing dot does not get around it. */
 const REFUSED_HOST =
-  /^([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|wikipedia\.org|example\.(com|org|net))\.?$/i;
+  /^([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|slideshare\.net|wikipedia\.org|example\.(com|org|net))\.?$/i;
 
 async function fetchText(url: string): Promise<string | null> {
   let current = new URL(url);

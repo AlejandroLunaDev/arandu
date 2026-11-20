@@ -15,7 +15,14 @@ import { z } from 'zod';
 import { ProgressService } from '../progress/progress.service.js';
 import { PathsRepository } from './paths.repository.js';
 import { quoteIsOnPage } from './source-check.js';
-import { cardsInstructions, exercisesInstructions } from './stop.prompt.js';
+import {
+  cardsInstructions,
+  exercisesInstructions,
+  subjectCardsInstructions,
+} from './stop.prompt.js';
+
+/** Topics whose cards one web search writes: the search is paid once for them, not once per stop. */
+export const TOPICS_PER_SEARCH = 6;
 
 const text = z.string().min(1);
 const index = z.number().int();
@@ -30,6 +37,13 @@ const two = z.object({ first: text, second: text });
 // A stop is written in steps: the cards with a web search, then its exercises from the verified cards. Each schema is
 // kept small (and without tuples): the provider's structured output refuses large grammars and `prefixItems`.
 const cardsDraft = z.object({ cards: z.array(card).min(1).max(3) });
+// Cards for several topics of a subject from one search; `topic` is the topic's number as listed (1-based).
+const subjectCardsDraft = z.object({
+  cards: z
+    .array(card.extend({ topic: index }))
+    .min(1)
+    .max(2 * TOPICS_PER_SEARCH),
+});
 
 // The first stop of a subject (O15-O18) has the four basic kinds; every other stop has all of them (R01-R12).
 const basicExercises = z.object({
@@ -234,8 +248,7 @@ export class StopsService {
         discipline.id,
         discipline.name,
         topic,
-        topicText,
-        discipline.topics.length,
+        discipline.topics,
       ).finally(() => this.pending.delete(key));
       this.pending.set(key, generation);
     }
@@ -310,14 +323,89 @@ export class StopsService {
     );
   }
 
+  /**
+   * The stop's cards: stored ones, else one search for its block of topics (saving every topic's verified cards), else
+   * a search for this topic alone.
+   */
+  private async stopCards(
+    id: number,
+    name: string,
+    topic: number,
+    topics: string[],
+  ): Promise<StopCard[]> {
+    const stored = await this.paths.stopCards(id, topics);
+    const mine = stored.get(topic);
+    if (mine) return mine;
+
+    const start = topic - (topic % TOPICS_PER_SEARCH);
+    const whole = topics
+      .slice(start, start + TOPICS_PER_SEARCH)
+      .map((text, i) => ({ index: start + i, text }));
+    const block = whole.filter((t) => !stored.has(t.index));
+    // A block already searched (some topic of it stored) is not searched again: its uncovered topics search alone.
+    const object =
+      block.length === whole.length
+        ? await this.blockCards(id, name, block)
+        : null;
+    if (object) {
+      const checks = await Promise.all(
+        object.cards.map((c) => quoteIsOnPage(c.source.url, c.source.quote)),
+      );
+      const found = block
+        .map((t, i) => ({
+          topic: t.index,
+          topicText: t.text,
+          cards: object.cards
+            .filter((c, j) => checks[j] && c.topic === i + 1)
+            .slice(0, 3)
+            .map(({ title, text, source }) => ({ title, text, source })),
+        }))
+        .filter((e) => e.cards.length);
+      this.logger.log(
+        `Subject ${id} cards for topics ${start + 1}-${start + block.length}: ${checks.filter(Boolean).length}/${object.cards.length} verified, ${found.length}/${block.length} topics`,
+      );
+      await this.paths.saveStopCards(id, found);
+      const cards = found.find((e) => e.topic === topic)?.cards;
+      if (cards) return cards;
+    }
+    return this.cards(name, topic, topics[topic], topics.length);
+  }
+
+  /**
+   * One web search for a block of topics. Null when its answer missed the schema or the provider failed: the stop then
+   * falls back to a search for its own topic.
+   */
+  private async blockCards(
+    id: number,
+    name: string,
+    block: { index: number; text: string }[],
+  ) {
+    try {
+      return await orRetry(
+        this.ai.generateObject({
+          model: 'web',
+          label: 'arandu-subject-cards',
+          schema: subjectCardsDraft,
+          instructions: subjectCardsInstructions(),
+          prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}`,
+          maxOutputTokens: 900 * block.length,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(`Subject ${id} block search failed: ${String(error)}`);
+      return null;
+    }
+  }
+
   private async generate(
     id: number,
     name: string,
     topic: number,
-    topicText: string,
-    total: number,
+    topics: string[],
   ): Promise<StopContent> {
-    const cards = await this.cards(name, topic, topicText, total);
+    const topicText = topics[topic];
+    const total = topics.length;
+    const cards = await this.stopCards(id, name, topic, topics);
     const facts = JSON.stringify(
       cards.map((c) => ({ title: c.title, text: c.text })),
     );

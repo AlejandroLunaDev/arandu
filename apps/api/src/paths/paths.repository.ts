@@ -1,6 +1,7 @@
 import type {
   CareerPath,
   CareerPaths,
+  StopCard,
   StopContent,
   StopResult,
 } from '@arandu/contracts';
@@ -113,6 +114,34 @@ export class PathsRepository {
       select content from public.stop_contents
       where discipline_id = ${disciplineId} and topic = ${topic} and topic_text = ${topicText}`;
     return row?.content ?? null;
+  }
+
+  /** The subject's stored cards by topic, those made from the same topic text. */
+  async stopCards(
+    disciplineId: number,
+    topics: string[],
+  ): Promise<Map<number, StopCard[]>> {
+    const rows = await this.sql<
+      { topic: number; topic_text: string; cards: StopCard[] }[]
+    >`
+      select topic::int, topic_text, cards from public.stop_cards where discipline_id = ${disciplineId}`;
+    return new Map(
+      rows
+        .filter((r) => topics[r.topic] === r.topic_text)
+        .map((r) => [r.topic, r.cards]),
+    );
+  }
+
+  async saveStopCards(
+    disciplineId: number,
+    entries: { topic: number; topicText: string; cards: StopCard[] }[],
+  ): Promise<void> {
+    for (const e of entries)
+      await this.sql`
+        insert into public.stop_cards (discipline_id, topic, topic_text, cards)
+        values (${disciplineId}, ${e.topic}, ${e.topicText}, ${this.sql.json(e.cards as never)})
+        on conflict (discipline_id, topic) do update
+          set topic_text = excluded.topic_text, cards = excluded.cards, created_at = now()`;
   }
 
   async saveStopContent(content: StopContent): Promise<void> {
