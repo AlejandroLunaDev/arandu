@@ -125,10 +125,13 @@ describe('AuthGuard', () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
-  it('401s for an anonymous token', async () => {
-    await expect(
-      run(`Bearer ${await sign({ is_anonymous: true })}`).result,
-    ).rejects.toMatchObject({ status: 401 });
+  it('admits an anonymous token and sets the userId', async () => {
+    const { request, result } = run(
+      `Bearer ${await sign({ is_anonymous: true })}`,
+    );
+
+    await expect(result).resolves.toBe(true);
+    expect(request.userId).toBe('user-1');
   });
 
   it('lets a valid token in and sets the userId', async () => {
