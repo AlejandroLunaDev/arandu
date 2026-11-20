@@ -1,0 +1,480 @@
+/* Over the open 3D book. The spread is laid out at one size, 630 by 450 (420 by 300 on a narrow
+   screen, which shows less), and book-pages.tsx scales it by --k to the 3D book's size. The pages are
+   paper in every theme, so the print stays dark ink. */
+.book {
+  --pad: 16px;
+  position: fixed;
+  z-index: 6;
+  top: 50%;
+  left: 50%;
+  width: 630px;
+  height: 450px;
+  translate: -50% -50%;
+  scale: var(--k, 1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* The pages' row takes the whole height: the proofs' holder (book-pages.tsx) falls into a second, empty
+     row, which would otherwise share the free height and leave short pages short of the 3D ones. */
+  grid-template-rows: minmax(0, 1fr);
+  column-gap: 8px;
+  padding: 1px 1px 11px;
+  color: var(--text);
+  outline: none;
+  /* Up as soon as the book is tapped, unseen and untouched until run-stage has it open. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-out;
+}
+
+:global(html[data-book="open"]) .book {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The pages laid out once more, off screen, to be drawn into the 3D book's pictures (book-pages.tsx). */
+.book[data-proof] {
+  translate: -400vw 0;
+  scale: 1;
+  transition: none;
+}
+
+.page {
+  display: flex;
+  min-height: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* While the leaf turns over them, the pages' print is gone. */
+.book[data-turning] > .page {
+  opacity: 0;
+}
+
+/* Each page of the book is a screen of the app, edge to edge: its dark theme, its type, as the
+   hero's phone shows it. */
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.card :is(h3, h4, p, ul) {
+  margin: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px var(--pad) 44px;
+}
+
+.head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.label {
+  color: var(--primary);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.cap {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* Census names run long and in capitals: one line. */
+.head .cap {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Arandu's own books: long sections, so small print, and what still does not fit scrolls. */
+.own {
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  /* The turning corners' room stays outside what scrolls, so no line runs under the page count. */
+  padding-bottom: 8px;
+  margin-bottom: 36px;
+}
+
+.fact {
+  display: grid;
+  gap: 1px;
+}
+
+.text {
+  font-size: 10.5px;
+  line-height: 14px;
+}
+
+.text strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* A paragraph's shares, one thin bar each on a 0 to 100 track: what it measures over the bar, the share beside it.
+   Every track is the page's width, so the charts share one scale on every screen. */
+.bars {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 1px 8px;
+  margin: 2px 0 4px;
+}
+
+/* Two to a page, so each charted paragraph stands apart from the next. */
+.fact:has(.bars) {
+  margin-bottom: 12px;
+}
+
+.chart {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+}
+
+.bars .cap {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.track {
+  display: block;
+  border-radius: 0 3px 3px 0;
+  background: var(--surface-raised);
+}
+
+.bar {
+  fill: var(--primary);
+}
+
+.value {
+  text-align: end;
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.photo {
+  position: relative;
+  flex: none;
+  aspect-ratio: 12 / 5;
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+
+.photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.credit {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink-950) 62%, transparent);
+  color: var(--cream-50);
+  font-size: 9px;
+  line-height: 13px;
+  text-decoration: none;
+}
+
+.logo {
+  position: relative;
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  height: 34px;
+  margin: 14px 0 0 var(--pad);
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--cream-50);
+}
+
+.logo[data-on-photo] {
+  margin: -18px 0 -4px var(--pad);
+}
+
+.logo img {
+  display: block;
+  height: 100%;
+  max-width: 110px;
+  width: auto;
+  object-fit: contain;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 0;
+  list-style: none;
+}
+
+/* One line each: the whole name is in its title. */
+.chips li {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+}
+
+.subject {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.name {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.topics {
+  display: grid;
+  gap: 2px;
+  padding-left: 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* The product book's screens of the app: three phones side by side, each over its step. */
+.screens {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: auto 0;
+}
+
+.screens figure {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.screens img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+
+.screens figcaption {
+  text-align: center;
+}
+
+/* One paragraph describing the subject, not a list: no indent. */
+.about {
+  display: block;
+  padding-left: 0;
+}
+
+/* What does not fit gives way; the source always shows. */
+.body > section {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.src {
+  flex: none;
+  margin-top: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.subject .src,
+.fact .src {
+  margin-top: 0;
+}
+
+.src a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* In the book's bottom margin: back under the left page's corner, on under the right page's. */
+.turn {
+  position: absolute;
+  inset: 0;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.count {
+  position: absolute;
+  right: 48px;
+  bottom: 20px;
+}
+
+/* A page's corner, folded up: the back of the leaf over the corner it uncovers. It lifts more under the pointer. */
+.corner {
+  position: absolute;
+  right: 1px;
+  bottom: 11px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-top-left-radius: 4px;
+  background: linear-gradient(to top left, transparent 50%, var(--surface-raised) 50%);
+  filter: drop-shadow(-1px -1px 2px var(--ink-950));
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    width 0.2s ease,
+    height 0.2s ease;
+}
+
+.back {
+  right: auto;
+  left: 1px;
+  border-top-left-radius: 0;
+  border-top-right-radius: 4px;
+  background: linear-gradient(to top right, transparent 50%, var(--surface-raised) 50%);
+  filter: drop-shadow(1px -1px 2px var(--ink-950));
+}
+
+.corner:hover,
+.corner:focus-visible {
+  width: 36px;
+  height: 36px;
+}
+
+.corner:disabled {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .corner {
+    transition: none;
+  }
+}
+
+.shut {
+  display: grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.corner:focus-visible,
+.shut:focus-visible,
+.src a:focus-visible,
+.credit:focus-visible,
+.logo:focus-visible {
+  outline: 2px solid var(--violet-600);
+  outline-offset: 2px;
+}
+
+.shut {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: var(--surface-raised);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shut:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 639px) {
+  .book {
+    --pad: 12px;
+    width: 420px;
+    height: 300px;
+    column-gap: 5px;
+    padding: 1px 1px 7px;
+  }
+
+  /* Small pages keep the essentials: who, a few subjects and topics, and the sources. */
+  .card .roomy,
+  .chips li:nth-child(n + 3),
+  .topics li:nth-child(n + 3),
+  .subject:nth-of-type(n + 2) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book {
+    transition: none;
+  }
+
+  .page {
+    transition: none;
+  }
+}
+
+/* Under a finger the corners are bigger to hit, and a sideways swipe is the book's, not the page's. */
+@media (pointer: coarse) {
+  .book {
+    touch-action: pan-y;
+  }
+
+  .corner {
+    width: 36px;
+    height: 36px;
+  }
+}

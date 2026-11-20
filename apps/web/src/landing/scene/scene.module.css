@@ -1,0 +1,106 @@
+.scene {
+  position: relative;
+}
+
+/* The hero is the whole page for now: one viewport, nothing pinned past it. */
+.hero {
+  height: auto;
+}
+
+.pin {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: calc(var(--space-8) + var(--space-4));
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 400px;
+}
+
+.art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100%;
+}
+
+.flip .art {
+  order: -1;
+  justify-content: flex-end;
+}
+
+.flip .copy {
+  justify-self: end;
+}
+
+/*
+ * The hero is Arandu's room at night, whatever the page's theme: one column, the room as large as the
+ * space allows, its floor's color behind it. Its copy is the TV's
+ * title card (see hero), which leaves the flow once the stage lays it over the TV.
+ */
+.hero {
+  background: var(--ink-900);
+}
+
+/* Above the stage, so its copy shows over the room's wall; clicks pass through to the room. */
+.hero .pin {
+  z-index: 6;
+  pointer-events: none;
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.hero .copy {
+  max-width: none;
+  pointer-events: auto;
+}
+
+/* Centred in the screen: what the room leaves over splits above and below it, the floor's edge and the chair's feet showing under it. */
+.hero .art {
+  container-type: size;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * One column: the copy on top, the art centred in the rest. Centred, not on the bottom: the shelf
+ * brackets hang below the room's footprint and would leave the viewport.
+ */
+@media (width < 768px) {
+  .pin {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+
+  .copy {
+    gap: var(--space-2);
+  }
+
+  .art,
+  .flip .art {
+    order: 0;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .flip .copy {
+    justify-self: start;
+  }
+}

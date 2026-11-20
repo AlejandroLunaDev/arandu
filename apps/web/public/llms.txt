@@ -1,0 +1,34 @@
+# Arandu
+
+> Arandu é um app de orientação vocacional com inteligência artificial, em desenvolvimento no Brasil. Um gato preto e curioso, também chamado Arandu, conversa com a pessoa, entende do que ela gosta e a ajuda a escolher um curso superior, com dados reais dos cursos das universidades de São Paulo.
+
+"Arandu" vem do guarani e quer dizer sabedoria. O lema do app é "A busca da sabedoria começa por você."
+
+## Estado
+
+- O Arandu está em desenvolvimento para o Hack Brasil 2026.
+- O site apresenta a ideia: o quarto do Arandu em 3D, com o gato e as telas do app.
+- Já existem os dados dos cursos e a API que conversa com a pessoa. O app em si ainda está sendo construído.
+
+## Para quem é
+
+- Para qualquer pessoa que está escolhendo um curso superior no Brasil, de qualquer idade: quem está começando a faculdade e quem busca uma nova graduação.
+- O Arandu ajuda a escolher, não decide pela pessoa.
+
+## Como vai funcionar
+
+1. **Conhecer a pessoa:** o Arandu faz perguntas rápidas, uma de cada vez, sobre matérias, interesses e tempo livre.
+2. **Mostrar cursos que combinam:** cada curso vem com dados reais e com a fonte: as matérias da grade curricular e onde estudar.
+3. **Experimentar antes de escolher:** a pessoa experimenta uma ou duas matérias reais do primeiro semestre do curso, numa experiência feita para ela pela inteligência artificial.
+
+## Dados
+
+- As grades e as ementas dos cursos vêm das páginas públicas das universidades de São Paulo.
+- O catálogo de cursos e instituições vem do Censo da Educação Superior, do INEP.
+- O Arandu não inventa dados: quando um dado não existe, ele não aparece.
+
+## Links
+
+- [Site do Arandu](https://aranduvocacional.com): a apresentação do app, com o quarto do Arandu em 3D.
+- [Código no GitHub](https://github.com/AlejandroLunaDev/arandu): o código público do site, da API e do motor de dados.
+- [Alejandro Luna](https://alejandrolunadev.site/es): quem criou o Arandu.

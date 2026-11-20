@@ -1,0 +1,58 @@
+{
+ "cursos": [
+  {
+   "slugNomeCurso": "administracao",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tradicionais/administracao.aspx",
+   "nomeFormatado": "Administração",
+   "modalidade": "PRESENCIAL"
+  },
+  {
+   "slugNomeCurso": "administracao",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tradicionais/administracao.aspx",
+   "nomeFormatado": "Administração",
+   "modalidade": "DIGITAL"
+  },
+  {
+   "slugNomeCurso": "analise-e-desenvolvimento-de-sistemas",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tecnologicos/analise_desenvolvimento_sistemas.aspx",
+   "nomeFormatado": "Análise e Desenvolvimento de Sistemas",
+   "modalidade": "PRESENCIAL"
+  },
+  {
+   "slugNomeCurso": "analise-e-desenvolvimento-de-sistemas",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tecnologicos/analise_desenvolvimento_sistemas.aspx",
+   "nomeFormatado": "Análise e Desenvolvimento de Sistemas",
+   "modalidade": "DIGITAL"
+  },
+  {
+   "slugNomeCurso": "biomedicina",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tradicionais/biomedicina.aspx",
+   "nomeFormatado": "Biomedicina",
+   "modalidade": "PRESENCIAL"
+  },
+  {
+   "slugNomeCurso": "biomedicina",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tradicionais/biomedicina.aspx",
+   "nomeFormatado": "Biomedicina",
+   "modalidade": "FLEX"
+  },
+  {
+   "slugNomeCurso": "ciencia-da-computacao",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tradicionais/ciencia_computacao.aspx",
+   "nomeFormatado": "Ciência da Computação",
+   "modalidade": "PRESENCIAL"
+  },
+  {
+   "slugNomeCurso": "ciencia-da-computacao",
+   "urlPaginaCurso": "https://www.unip.br/cursos/graduacao/tradicionais/ciencia_computacao.aspx",
+   "nomeFormatado": "Ciência da Computação",
+   "modalidade": "DIGITAL"
+  },
+  {
+   "slugNomeCurso": "medicina",
+   "urlPaginaCurso": "https://unip.br/cursos/graduacao/tradicionais/medicina.aspx",
+   "nomeFormatado": "Medicina",
+   "modalidade": "Presencial"
+  }
+ ]
+}

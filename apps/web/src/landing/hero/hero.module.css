@@ -1,0 +1,278 @@
+/*
+ * The TV's title card: the brand over the pitch and the button. It is laid out at one size, 640 by
+ * 360 (the TV's 16:9), and run-stage lays it over the TV's screen: it sets [data-on-tv], where the
+ * card sits (--tv-x, --tv-y) and how much it scales (--tv-k). Without 3D, it stays in the page's flow.
+ */
+.tv {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-5);
+}
+
+/* Until the room is up, its title card waits unseen (still read): no flash of it at the top of the page. */
+.tv:not([data-on-tv]) {
+  opacity: 0;
+}
+
+/* Out of the flow too, so the room's box, and the loading head in its middle, are centred in the screen. */
+:global(html:not(.no3d)) .tv:not([data-on-tv]) {
+  position: absolute;
+}
+
+:global(.no3d) .tv {
+  opacity: 1;
+}
+
+.tv[data-on-tv] {
+  position: fixed;
+  z-index: 6;
+  top: 0;
+  left: 0;
+  width: 640px;
+  height: 360px;
+  padding: 0 48px;
+  translate: var(--tv-x) var(--tv-y);
+  scale: var(--tv-k);
+  transform-origin: 0 0;
+  /* A tap on the screen closes in on it (run-stage); once in, it is read, not tapped. */
+  cursor: pointer;
+}
+
+:global(html[data-zoom="tv"]) .tv {
+  cursor: auto;
+}
+
+/*
+ * The logo's wordmark: arandu, one word, its u a cat on its back. Its face, size, tracking and
+ * leading are measured from the logo, so they are not steps of the type scale.
+ */
+.brand {
+  display: flex;
+  align-items: baseline;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-bricolage), var(--font-display);
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 0.76;
+  letter-spacing: -0.02em;
+  /* The tight leading lets the ink hang below the box: room for it before the pitch. */
+  padding-bottom: 0.16em;
+}
+
+/* The cat's u sits on the baseline; its head and paws rise above the x-height, like the d. */
+.u {
+  width: 0.8em;
+  height: 0.72em;
+  margin-left: 0.05em;
+  overflow: visible;
+  fill: currentColor;
+}
+
+.ear {
+  fill: var(--violet-400);
+}
+
+.eye {
+  fill: var(--amber-500);
+}
+
+/* The play button: round, in the screen's empty top right, beside the brand; it swells under the pointer. */
+.play {
+  position: absolute;
+  top: 104px;
+  right: 64px;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    scale 0.2s ease,
+    background 0.2s ease;
+}
+
+.play svg {
+  width: 34px;
+  height: 34px;
+  translate: 2px 0;
+}
+
+.play:hover,
+.play:focus-visible {
+  scale: 1.08;
+  background: color-mix(in srgb, var(--primary) 34%, transparent);
+}
+
+.play:focus-visible {
+  outline: 2px solid var(--violet-600);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play {
+    transition: none;
+  }
+}
+
+/* Playing, the video fills the screen; the title waits under it, unseen but still read. */
+.tv[data-playing] > :not(.video, .unplay) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.unplay {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.pitch {
+  max-width: 30rem;
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+/* What the app is, read at a glance: a step up from the pitch, in the brand's color. */
+.key {
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/*
+ * The room's footprint: as wide as the space allows at its own proportions (--room-aspect, which the
+ * stage sets), its origin on this box's bottom-left corner (see stage/rooms.ts, heroRoom). Leaning back
+ * (TILT), what stands out from the wall, the chair's base and the sofa's front, shows below that corner:
+ * --room-under, a share of the footprint's height, is kept free under it so they never leave the screen.
+ */
+.room {
+  --room-under: 0.11;
+  --room-width: min(100cqw, 100cqh / (1 + var(--room-under)) * var(--room-aspect, 2.2));
+  position: relative;
+  flex: none;
+  width: var(--room-width);
+  aspect-ratio: var(--room-aspect, 2.2);
+  margin-bottom: calc(var(--room-width) / var(--room-aspect, 2.2) * var(--room-under));
+}
+
+/* While the room loads, the cat's head, small, breathing in the middle of where it will stand. */
+.loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+:global(html:has([data-on-tv])) .loading,
+:global(.no3d) .loading {
+  display: none;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.4;
+    scale: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+  }
+}
+
+/* Without WebGL, the drawn cat sits on a plain plank where the 3D cat would. */
+.fallback {
+  display: none;
+}
+
+:global(.no3d) .room {
+  border-bottom: 1px solid var(--border-strong);
+}
+
+:global(.no3d) .fallback {
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 40%;
+  height: auto;
+  translate: -50% 0;
+}
+
+/* On a phone the room is the tall one (stage/rooms.ts); in the page's flow, without the TV, the brand shrinks. */
+@media (width < 768px) {
+  .room {
+    --room-layout: tall;
+    --room-under: 0;
+  }
+
+  .tv:not([data-on-tv]) .brand {
+    font-size: 56px;
+  }
+}
+
+/*
+ * The TV switches off for an open book and back on once it is shut (run-stage shows the cat's head on
+ * the 3D screen meanwhile): the picture goes out at once, and comes back once the head has.
+ */
+.tv[data-on-tv] > * {
+  animation: picture-on 1.4s ease-out;
+}
+
+:global(html[data-book]) .tv {
+  pointer-events: none;
+}
+
+:global(html[data-book]) .tv > * {
+  animation: picture-off 0.2s ease-in forwards;
+}
+
+@keyframes picture-on {
+  0%,
+  75% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes picture-off {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv[data-on-tv] > * {
+    animation: none;
+  }
+
+  :global(html[data-book]) .tv {
+    visibility: hidden;
+  }
+
+  :global(html[data-book]) .tv > * {
+    animation: none;
+  }
+}

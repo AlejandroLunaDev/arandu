@@ -1,0 +1,12 @@
+.git
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+# Every workspace's env files: .env* alone matches only the root (apps/api/.env would be copied in).
+**/.env*
+!**/.env.example
+apps/engine/data
+apps/engine/.venv
+supabase/.temp
+supabase/.branches

@@ -1,0 +1,30 @@
+# Render Blueprint (ADR-0003): the API runs on Render; the landing deploys on Vercel.
+# The engine is run by hand during the hackathon, so it has no service here (ADR-0003).
+services:
+  - type: web
+    name: arandu-api
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - apps/api/**
+        - packages/**
+        - package.json
+        - package-lock.json
+    envVars:
+      # Asked for only when the Blueprint is first created, so it is declared before the API reads it.
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # https://<project-ref>.supabase.co: its Auth signs the tokens the API checks.
+      - key: SUPABASE_URL
+        sync: false
+      # The web app's origins, comma-separated (the Vercel URL).
+      - key: CORS_ORIGINS
+        sync: false
