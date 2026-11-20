@@ -5,11 +5,16 @@ import { createHttpApp, USER_ID } from '../../test/http-app.js';
 import { JourneyModule } from '../journey/journey.module.js';
 import { JourneyRepository } from '../journey/journey.repository.js';
 import { PathsModule } from './paths.module.js';
+import { ProgressRepository } from '../progress/progress.repository.js';
 import { PathsRepository } from './paths.repository.js';
 
 describe('paths and journey routes', () => {
   let app: INestApplication;
   const journey = { read: vi.fn(), update: vi.fn() };
+  const progress = {
+    finishes: vi.fn(),
+    topicCounts: vi.fn(),
+  };
   const paths = {
     careerPaths: vi.fn(),
     discipline: vi.fn(),
@@ -26,10 +31,12 @@ describe('paths and journey routes', () => {
       name: 'C',
       topics: ['a', 'b'],
     });
+    progress.finishes.mockResolvedValue([]);
+    progress.topicCounts.mockResolvedValue(new Map());
     paths.finishStop.mockResolvedValue({
       sabedoria: 15,
+      peixinhos: 5,
       patinha: true,
-      achievements: ['primeira_parada'],
     });
     app = await createHttpApp(
       [JourneyModule, PathsModule],
@@ -37,6 +44,7 @@ describe('paths and journey routes', () => {
       [
         [JourneyRepository, journey],
         [PathsRepository, paths],
+        [ProgressRepository, progress],
       ],
     );
   });
@@ -120,6 +128,8 @@ describe('paths and journey routes', () => {
 
       expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2);
       expect(res.body.sabedoria).toBe(15);
+      expect(res.body.peixinhos).toBe(5);
+      expect(res.body.achievements).toEqual([]);
     });
 
     it.each([

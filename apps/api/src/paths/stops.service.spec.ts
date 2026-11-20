@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import type { AiService } from '@nestjs/ai';
+import type { ProgressService } from '../progress/progress.service.js';
 import type { PathsRepository } from './paths.repository.js';
 import { quoteIsOnPage } from './source-check.js';
 import { exercisesOf, type StopDraft, StopsService } from './stops.service.js';
@@ -88,6 +89,7 @@ describe('StopsService', () => {
     saveStopContent: ReturnType<typeof vi.fn>;
     finishStop: ReturnType<typeof vi.fn>;
   };
+  let progress: { achievements: ReturnType<typeof vi.fn> };
   let service: StopsService;
 
   beforeEach(() => {
@@ -97,11 +99,15 @@ describe('StopsService', () => {
       discipline: vi.fn().mockResolvedValue(discipline),
       stopContent: vi.fn().mockResolvedValue(null),
       saveStopContent: vi.fn().mockResolvedValue(undefined),
-      finishStop: vi.fn().mockResolvedValue({ sabedoria: 15 }),
+      finishStop: vi
+        .fn()
+        .mockResolvedValue({ sabedoria: 15, peixinhos: 5, patinha: true }),
     };
+    progress = { achievements: vi.fn().mockResolvedValue([]) };
     service = new StopsService(
       ai as unknown as AiService,
       paths as unknown as PathsRepository,
+      progress as unknown as ProgressService,
     );
   });
 
@@ -185,5 +191,44 @@ describe('StopsService', () => {
     await service.finish('u', 7, 1, 3);
 
     expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3);
+  });
+
+  const earned = (...codes: string[]) =>
+    codes.map((code) => ({ code, earnedAt: '2026-01-01T00:00:00.000Z' }));
+
+  it('finish returns only the achievements earned by this finish', async () => {
+    progress.achievements
+      .mockResolvedValueOnce(earned('primeira_parada'))
+      .mockResolvedValueOnce(
+        earned('primeira_parada', 'nenhum_novelo_perdido'),
+      );
+
+    const result = await service.finish('u', 7, 1, 0);
+
+    expect(result).toEqual({
+      sabedoria: 15,
+      peixinhos: 5,
+      patinha: true,
+      achievements: ['nenhum_novelo_perdido'],
+    });
+  });
+
+  it('finish on a replay (sabedoria 0) returns no achievements and skips the second read', async () => {
+    paths.finishStop.mockResolvedValue({
+      sabedoria: 0,
+      peixinhos: 0,
+      patinha: false,
+    });
+    progress.achievements.mockResolvedValue(earned('primeira_parada'));
+
+    const result = await service.finish('u', 7, 1, 0);
+
+    expect(result.achievements).toEqual([]);
+    expect(progress.achievements).toHaveBeenCalledTimes(1);
+  });
+
+  it('finish does not read achievements for a topic out of range', async () => {
+    await expect(service.finish('u', 7, 2, 0)).rejects.toThrow();
+    expect(progress.achievements).not.toHaveBeenCalled();
   });
 });
