@@ -609,7 +609,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // The page's overlays (the TV's card, the steam) step aside for the whole flight, and the book's
     // pictures start loading now, so its pages are full when it lands open.
     document.documentElement.dataset.book = "";
-    tvPower(false);
+    // A TV playing the video stays on and keeps its sound: only its picture steps aside (hero.module.css),
+    // since the page's video would draw over the 3D book. An idle TV switches off.
+    tvOff = tvCard?.dataset.playing === undefined;
+    if (tvOff) tvPower(false);
     const slug = prop.userData.slug as string | undefined;
     if (slug)
       getBook(slug).then(
@@ -637,7 +640,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
           book = null;
           unpaper();
           delete document.documentElement.dataset.book;
-          tvPower(true);
+          if (tvOff) tvPower(true);
         },
       })
       .to(s, { fly: 1, duration: 0.7 * pace, ease: "power2.inOut" })
@@ -1022,6 +1025,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   };
   head.src = "/img/head.svg";
   let tvTween: gsap.core.Timeline | null = null;
+  /** Whether the open book switched the TV off, so its shutting switches it back on. */
+  let tvOff = false;
   const tvPower = (on: boolean) => {
     if (!tvGlass || !tvOn) return;
     tvTween?.kill();

@@ -1,81 +1,86 @@
-# Arandu
+<p align="center">
+  <img src=".github/readme/banner.png" alt="arandu: orientação vocacional com inteligência artificial" width="100%">
+</p>
 
-Vocational orientation for anyone in Brazil heading to university, from high-school (ensino médio) students to those who already finished school, guided by Arandu, a curious black cat. Built for Hack Brasil 2026, education track.
+<p align="center">
+  <a href="https://aranduvocacional.com"><img src="https://img.shields.io/badge/site-aranduvocacional.com-9B72CF?style=flat-square&labelColor=09090D" alt="Site: aranduvocacional.com"></a>
+  <img src="https://img.shields.io/badge/Hack%20Brasil-2026-D99A32?style=flat-square&labelColor=09090D" alt="Hack Brasil 2026">
+  <img src="https://img.shields.io/badge/trilha-Acesso%20%C3%A0%20educa%C3%A7%C3%A3o-F1EBDD?style=flat-square&labelColor=09090D" alt="Trilha: Acesso à educação">
+</p>
 
-## The problem
+<p align="center">
+  <a href="https://aranduvocacional.com"><img src=".github/readme/quarto.png" alt="O quarto do Arandu no site: a TV, o neon, as estantes de livros e o gato" width="100%"></a>
+</p>
 
-Choosing a university career at 16 or 17 is hard, and a wrong choice is costly: dropout in Brazilian higher education reaches 24.8% in in-person courses and 41.6% in distance courses (Semesp). The free vocational tools available today are mostly run by universities or course platforms that steer students toward their own offer. Students choose without having lived what a career is really like, and families and schools have little visibility to help.
+O **Arandu** é um app de orientação vocacional com inteligência artificial para quem está escolhendo um curso superior no Brasil, em qualquer momento da vida. Quem acompanha é o próprio Arandu, um gato preto curioso e honesto. "Arandu" vem do guarani e quer dizer **sabedoria**.
 
-## The solution
+## O problema
 
-Arandu lets the student try a career before choosing it.
+Escolher um curso é difícil, e errar custa caro. Em 2024, **24,8%** dos estudantes de cursos presenciais deixaram o curso, e **41,6%** no ensino a distância ([Semesp](https://www.semesp.org.br/mapa/edicao-16/brasil/)). De quem entrou em 2015, só **39%** se formou em dez anos ([INEP](https://download.inep.gov.br/publicacoes/institucionais/avaliacoes_e_exames_da_educacao_superior/resumo_tecnico_do_censo_da_educacao_superior_2024.pdf)).
 
-1. **Get to know her.** A short, Duolingo-style questionnaire builds her profile.
-2. **Show real options.** Arandu suggests careers that fit her, with real data from universities in São Paulo: where each one is offered, how to get in (SISU, ProUni, Fuvest) and the cut-off, always with its source.
-3. **Live the career.** She picks a path made of 1–2 real first-semester subjects. Every day Arandu tells her something new about the career, gives her a real exercise and answers her questions. The exercise depends on the career: solve a problem in computing, reason through a clinical case in medicine, argue a case in law.
-4. **Stop and reflect.** At each checkpoint ("a bolinha", the cat's toy), Arandu shows an evidence-based read of what she did and enjoyed. She decides: continue, try another career, or go back to a previous one.
-5. **Know herself.** Her profile, "Quem sou eu", fills in over the journey.
+Escolhe-se pelo nome da profissão, sem nunca ter experimentado o que se estuda.
 
-The student is not alone. Her **family** and her **school** receive reports on her journey, so they can support her and act when needed. Nobody but the student sees her conversation with Arandu, and every report is built only from what she did and what she can see in her own profile.
+## A solução
 
-## Principles
+**Experimentar antes de escolher.**
 
-- **Neutral:** recommendations are never influenced by who pays.
-- **Real, cited data:** curricula, entry routes and cut-offs come from public sources, with links and editions. Facts only, never copied prose.
-- **Transparent:** no hidden inferences about the student reach her family or school.
-- **Synthetic data in the demo:** no real personal data is used (Hack Brasil rule 6.9).
+<table>
+  <tr>
+    <td align="center" width="33%"><img src=".github/readme/conhecer.webp" alt="O Arandu pergunta o que você curte fazer no tempo livre" width="220"></td>
+    <td align="center" width="33%"><img src=".github/readme/opcoes.webp" alt="O curso de Psicologia da USP, com as matérias do primeiro semestre como livros numa estante" width="220"></td>
+    <td align="center" width="33%"><img src=".github/readme/experimentar.webp" alt="Um exercício de Psicologia: Pavlov estudou o condicionamento clássico com quais animais" width="220"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>1 · Conhecer você.</b> O Arandu conversa com você, uma pergunta de cada vez.</td>
+    <td valign="top"><b>2 · Opções reais.</b> Cursos que combinam com você, com as matérias reais do primeiro semestre.</td>
+    <td valign="top"><b>3 · Experimentar.</b> Exercícios curtos de uma matéria de verdade.</td>
+  </tr>
+</table>
 
-## Repository
+A decisão é sua: continuar, experimentar outro curso ou voltar a um que já testou. Cada dado tem fonte pública, e quando um dado não existe, ele não aparece.
 
-A Turborepo monorepo on npm workspaces (`docs/adr/0003-backend-architecture-and-monorepo.md`).
+**Feito com dados reais:** 540+ instituições e 7.800+ cursos de São Paulo ([INEP](https://download.inep.gov.br/microdados/microdados_censo_da_educacao_superior_2024.zip)), 66 mil+ matérias das grades de 24 instituições e 2 mil+ fontes públicas citadas.
 
-| Path | What it is |
+## Estado
+
+Em desenvolvimento para o **Hack Brasil 2026**, na trilha Acesso à educação.
+
+- ✅ O site, [aranduvocacional.com](https://aranduvocacional.com): o quarto do Arandu em 3D, com os livros dos cursos.
+- ✅ Os dados e a API que conversa com a pessoa.
+- 🛠️ O app ainda está sendo construído.
+
+## Para desenvolver
+
+Monorepo Turborepo com workspaces do npm ([ADR 0003](docs/adr/0003-backend-architecture-and-monorepo.md)).
+
+| Pasta | O que é |
 |---|---|
-| `apps/web` | The Next.js landing, deployed on Vercel (`docs/adr/0001-web-landing-stack-and-architecture.md`) |
-| `apps/api` | The NestJS API, the only door to the data (deployed on Render) |
-| `apps/engine` | The Python ingestion engine that keeps the public data up to date |
-| `packages/contracts` | The API's response types, shared by `api` and `web` (the book contract: `docs/adr/0004-profession-book-contract-and-ingestion-scope.md`) |
-| `packages/db-types` | Types generated from the database schema |
-| `supabase/` | Migrations and database tests, the only place the schema changes |
+| `apps/web` | O site em Next.js, na Vercel ([ADR 0001](docs/adr/0001-web-landing-stack-and-architecture.md)) |
+| `apps/api` | A API em NestJS, a única porta para os dados, no Render |
+| `apps/engine` | O motor de dados em Python, que mantém os dados públicos atualizados |
+| `packages/contracts` | Os tipos das respostas da API ([ADR 0004](docs/adr/0004-profession-book-contract-and-ingestion-scope.md)) |
+| `packages/db-types` | Os tipos derivados do esquema do banco |
+| `supabase/` | Migrations e testes do banco |
 
 ```sh
-npm install           # every workspace, from the root
-npm run dev           # the landing and the API
-npm run build         # lint, typecheck and test work the same way
-npx supabase start    # local database (needs Docker); npx supabase test db runs its tests
-npm run db:types      # regenerate packages/db-types from the local database
+npm install           # todos os workspaces
+npm run dev           # o site e a API
+npx supabase start    # banco local (precisa de Docker)
+npm run check         # build, typecheck, lint e testes; rode antes de cada merge (não há CI)
 ```
 
-Copy `.env.example` to `.env` for the Supabase project values; `.env` is never committed.
+Copie `.env.example` para `.env` com os valores do projeto Supabase; o `.env` nunca é commitado.
 
-The engine runs by hand from its Docker image, with `DATABASE_URL` (the session pooler) in `.env`:
-
-```sh
-docker build -f apps/engine/Dockerfile -t arandu-engine .
-docker run --rm --env-file .env arandu-engine inep_census
-```
-
-Before each merge (there is no CI), run `npm run check`: build, typecheck, lint and tests of every workspace, the landing's tokens check and the database tests.
-
-### Deploy
-
-| Surface | Where | How |
+| Parte | Produção (`main`) | Desenvolvimento (`dev`) |
 |---|---|---|
-| `apps/web` | Vercel | Import the repo with Root Directory `apps/web`; keep "skip unaffected projects" on |
-| `apps/api` | Render (Virginia) | Create a Blueprint from `render.yaml` |
-| Database | Supabase (`us-east-1`) | Before merging a migration: `npx supabase db push --remote="postgresql://postgres.<ref>:<password>@<pooler host>:5432/postgres"` |
+| `apps/web` (Vercel) | [aranduvocacional.com](https://aranduvocacional.com) | prévias |
+| `apps/api` (Render) | `arandu-api-prod` | `arandu-api` |
+| Banco (Supabase) | `npx supabase db push` antes de mergear uma migration | |
 
-### Landing (`apps/web`)
+## Quem fez
 
-- `src/app` holds the routes only; code is grouped by business area (`src/landing`, `src/design-system`).
-- `src/design-system/tokens.json` is the design system's tokens file, copied as it is. `npm run tokens` regenerates `tokens.css` from it, and `npm run tokens:check` fails when that file is out of date.
-- Tailwind's default palette, type scale, spacing, radii and shadows are switched off: only token utilities exist (`bg-surface`, `text-text-muted`, `p-3`, `rounded-card`, `type-h1`).
-- `npm run lint` blocks raw design values in the app: hex and rgb colors, px and rem lengths, Tailwind arbitrary values and inline styles.
+[Alejandro Luna](https://alejandrolunadev.site/es).
 
-## Status
+## Licença
 
-Early stage. The product design is in [`docs/01-product-design.md`](docs/01-product-design.md). The landing runs; the data layer is in progress (`docs/plans/0001-data-layer.md`); the app itself is not built yet.
-
-## License
-
-To be defined before the final submission.
+[Apache 2.0](LICENSE).
