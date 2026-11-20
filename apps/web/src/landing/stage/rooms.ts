@@ -365,14 +365,16 @@ function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: 
   // The plant stands POT_EDGE (0.12 m) behind the shelf's front edge (0.17 m from its middle).
   const x2 = top[0] - 0.5;
   put(content, kit.make("ShelfMedium"), top[0], top[1]);
-  put(content, kit.make("PlantPot"), x2 + 0.25, top[1], 0.05);
-  if (phone) ownCovers(kit, content, "BookShort", x2 + 0.72, top[1], OWN_ON_SHELF);
-  else
+  // On a phone the own books are the grand ones, as on the side table: they fill the plank, so the plant stays off.
+  if (phone) ownCovers(kit, content, "BookGrand", top[0], top[1], OWN_ON_SHELF);
+  else {
+    put(content, kit.make("PlantPot"), x2 + 0.25, top[1], 0.05);
     standBooks(kit, content, x2 + 0.6, top[1], [
       ["BookSlim", LOOK.v8, "Física"],
       ["BookPaperback", LOOK.a6, "Odontologia"],
       ["BookShort", LOOK.v4, "Pedagogia"],
     ]);
+  }
 
   return { seat, left, right };
 }
@@ -417,7 +419,8 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
   let row: ReturnType<typeof shelves>;
   if (phone) {
     row = shelves(kit, content, [1, 0.35], [1, 1.1], [1, 1.85], true);
-    place(content, kit, "NeonSign", 1, 2.6, ON_WALL);
+    // High enough that its panel (0.56 m) clears the grand books' tops on the shelf under it.
+    place(content, kit, "NeonSign", 1, 2.68, ON_WALL);
     place(content, kit, "Tv", 1, 3.55, ON_WALL).scale.setScalar(1.75 / 2.2);
     // The link to Arandu's code hangs from a nail under the TV's right corner.
     place(content, kit, "GithubPlaque", 1.62, 2.86, ON_WALL);
