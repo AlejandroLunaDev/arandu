@@ -219,12 +219,12 @@ Rules:
 - name: exactly as printed, with its capitalization and accents. Join a name wrapped over lines; drop a hyphen that
   only splits a word at a line break. Leave out any subject code printed before the name.
 - term: the semester number the unit belongs to.
-- hours: the unit's total hours as printed (the Total or Carga Horária column), or null when none is printed.
 - elective: true when the matriz marks it optativa or eletiva.
 - Leave out totals, subtotals, headers, footnotes, and requisites.
 - Never guess: if a character is unreadable, write it as "?".
-Answer with JSON only: {"units": [{"term": 1, "name": "...", "hours": 60, "elective": false}]}"""
+Answer with JSON only: {"units": [{"term": 1, "name": "...", "elective": false}]}"""
 MAX_PAGES = 12  # a longer PDF is a whole PPC: only its matriz pages are read
+GAP = 8  # words of other cells a wrapped name's lines may sit apart by
 
 
 def _read(data):
@@ -262,11 +262,59 @@ def _matriz_pages(texts):
     return pages
 
 
-def _transcribed(data):
-    """The matriz as a vision model reads its pages, kept only when a second reading confirms every word of every name.
+TERM_WORD = "(?:semestre|perfil|periodo|termo|etapa)"
 
-    The second reading is the PDF's own text layer when it has one, else Tesseract's OCR of the same pages. A name
-    with a word the second reading does not hold fails the whole matriz: a wrong name is worse than a missing grade.
+
+def _terms(reading, slips):
+    """Where each semester's heading starts in a tokens() reading ('1º Semestre', 'Perfil 2'), in order 1, 2, 3...
+
+    A bare '1º' is not a heading: it also numbers years ('1º ano') and anything else, so it would place by chance.
+    """
+    starts, at, term = [], 0, 1
+    while match := re.compile(rf"\|(?:{(n := str(term).translate(slips))}o?\|{TERM_WORD}|{TERM_WORD}\|{n})\|").search(reading, at):
+        starts.append(match.start())
+        at, term = match.end() - 1, term + 1
+    return starts
+
+
+def _placed(name, term, reading, slips):
+    """The name stands in the reading under its own semester's heading, before the next one's."""
+    starts = _terms(reading, slips)
+    if term > len(starts):
+        return False
+    end = starts[term] if term < len(starts) else len(reading)
+    return any(starts[term - 1] <= at < end for at in _held(name, reading, slips))
+
+
+def _held(name, reading, slips):
+    """Where the name's words run through the tokens() reading whole, in order, each starting and ending a word.
+
+    Before each word sit at most GAP other words (a wrapped cell's tail is read after the cells beside it), except a
+    short last word ('2', 'II', 'B'), which must follow at once so an hours or credits column never stands in for it.
+    No separator at all is a text layer that glues words. A word may be split where OCR broke it ('Inform acionais'),
+    and a word hyphenated at a line break ('Algorít-') may have its tail up to GAP words later.
+    """
+    words = [w for w in (ocr.key(w).translate(slips) for w in name.split()) if w]
+    if not words:
+        return []
+    gap = rf"(?:\|(?:[^|]*\|){{0,{GAP}}})?"
+    inside = rf"(?:\|?|-\|(?:[^|]*\|){{0,{GAP}}})"
+    spell = lambda word: inside.join(map(re.escape, word)) + "-?"  # a word printed with a trailing hyphen
+    pattern = r"\|" + spell(words[0])
+    for n, word in enumerate(words[1:], 2):
+        pattern += (r"\|?" if n == len(words) and len(word) < 4 else gap) + spell(word)
+    return [match.start() for match in re.finditer(pattern + r"\|", reading)]
+
+
+def _transcribed(data):
+    """The matriz as a vision model reads its pages, kept only when a second reading confirms every unit.
+
+    The second reading is the PDF's own text layer when it has one, else Tesseract's OCR of the same pages. A unit is
+    confirmed when its name's words are words of that reading, exactly (case, accents and punctuation aside) and in
+    order (_held), under the heading of the semester the model gave it and before the next one's (_placed). One
+    unconfirmed unit fails the whole matriz: a wrong name or semester is worse than a missing grade; a matriz that
+    prints no semester headings cannot be confirmed and fails too.
+    Hours are not read: the product uses a subject's name and content, never its load (owner, 2026-11-19).
     """
     texts = [page.get_textpage().get_text_range() for page in pypdfium2.PdfDocument(data)]
     pages = _matriz_pages(texts)
@@ -274,26 +322,25 @@ def _transcribed(data):
     units = vision.read_json(TRANSCRIBE, [images[i] for i in pages])["units"]
     layer = " ".join(texts[i] for i in pages)
     if len(layer.split()) >= 100:
-        words = layer.split()
-        seen = {ocr.key(w) for w in words} | {ocr.key(a + b) for a, b in zip(words, words[1:])}
-        spaceless = ocr.key(layer)  # a layer that glues words ('EstruturaeFuncionamento') still holds them
-        confirmed = lambda word: ocr.confirmed(word, seen) or (len(word) >= 4 and word in spaceless)
-    else:
-        seen = set().union(*(ocr.words(image) for dpi in ocr.DPIS for i, image in enumerate(ocr.render(data, dpi))
-                             if i in pages))
-        confirmed = lambda word: ocr.confirmed(word, seen)
+        readings, slips = [ocr.tokens(layer)], {}
+    else:  # each OCR pass (resolution and layout mode) over every page, as each misreads some names another reads right
+        readings = []
+        for dpi in ocr.DPIS:
+            passes = [ocr.texts(image) for i, image in enumerate(ocr.render(data, dpi)) if i in pages]
+            readings += ["".join(page[mode] for page in passes) for mode in range(len(ocr.MODES))]
+        slips = ocr.SLIPS
     subjects, unconfirmed = [], []
     for unit in units:
-        name, term, hours = _spaced(" ".join(str(unit.get("name") or "").split())), unit.get("term"), unit.get("hours")
+        name, term = _spaced(" ".join(str(unit.get("name") or "").split())), unit.get("term")
         if term is None and unit.get("elective"):
             continue  # an elective listed apart from the semesters: it belongs to none of them
-        if not isinstance(term, int) or term < 1 or not (hours is None or isinstance(hours, int)):
-            raise ValueError(f"the transcription gave no semester or hours for {name!r}: {unit}")
-        if not name or "?" in name or not all(confirmed(w) for w in map(ocr.key, name.split()) if w):
-            unconfirmed.append(name)
-        subjects.append((term, name, hours, bool(unit.get("elective"))))
+        if not isinstance(term, int) or term < 1:
+            raise ValueError(f"the transcription gave no semester for {name!r}: {unit}")
+        if "?" in name or not any(_placed(name, term, reading, slips) for reading in readings):
+            unconfirmed.append(f"{name} ({term})")
+        subjects.append((term, name, None, bool(unit.get("elective"))))
     if unconfirmed:
-        raise ValueError(f"the second reading does not confirm {len(unconfirmed)} names: {unconfirmed[:3]}")
+        raise ValueError(f"the second reading does not confirm {len(unconfirmed)} units: {unconfirmed[:3]}")
     if not subjects:
         raise ValueError("the transcription found no subject")
     return subjects
