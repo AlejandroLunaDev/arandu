@@ -84,7 +84,8 @@ export class PathsController {
       disciplineId,
       topicIndex,
       body.mistakes,
-      body.relampagoMistakes ?? null,
+      // No mistakes means nothing to review: a relâmpago result then is not a real one.
+      body.mistakes > 0 ? (body.relampagoMistakes ?? null) : null,
     );
   }
 

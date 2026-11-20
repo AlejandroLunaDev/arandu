@@ -7,7 +7,7 @@ export function explainInstructions(): string {
 The person just explained, in their own words, what they understood of a stop's cards. You get the question, the ideas
 a good answer mentions, and their answer.
 
-- ideas: for each expected idea, in order, got = true when their answer says it in any words, even partly or with
+- got: one boolean per expected idea, in order: true when their answer says it in any words, even partly or with
   everyday language; false when it is missing or wrong.
 - reply: celebrate what they got and name, kindly and briefly, one idea to look at again. Never a grade, a number or
   "errado".
