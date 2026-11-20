@@ -12,6 +12,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { ProgressService } from '../progress/progress.service.js';
 import { PathsRepository } from './paths.repository.js';
 import { quoteIsOnPage } from './source-check.js';
 import { stopInstructions } from './stop.prompt.js';
@@ -87,6 +88,7 @@ export class StopsService {
   constructor(
     private readonly ai: AiService,
     private readonly paths: PathsRepository,
+    private readonly progress: ProgressService,
   ) {}
 
   async stop(disciplineId: number, topic: number): Promise<StopContent> {
@@ -126,7 +128,21 @@ export class StopsService {
       throw new NotFoundException(
         `No stop ${topic} in subject ${disciplineId}`,
       );
-    return this.paths.finishStop(userId, disciplineId, topic, mistakes);
+    const before = new Set(
+      (await this.progress.achievements(userId)).map((a) => a.code),
+    );
+    const result = await this.paths.finishStop(
+      userId,
+      disciplineId,
+      topic,
+      mistakes,
+    );
+    const achievements = result.sabedoria
+      ? (await this.progress.achievements(userId))
+          .map((a) => a.code)
+          .filter((code) => !before.has(code))
+      : [];
+    return { ...result, achievements };
   }
 
   private async generate(

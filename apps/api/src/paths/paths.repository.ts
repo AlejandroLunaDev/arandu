@@ -1,5 +1,4 @@
 import type {
-  AchievementCode,
   CareerPath,
   CareerPaths,
   StopContent,
@@ -12,8 +11,10 @@ import { SQL, type Sql } from '../platform/database/database.module.js';
 /** Sabedoria a finished stop gives (demo value). */
 export const STOP_SABEDORIA = 15;
 
-/** Days, patinhas and weeks are counted in Brazil's time. */
-const TIME_ZONE = 'America/Sao_Paulo';
+/** Peixinhos a finished stop gives (demo value). */
+export const STOP_PEIXINHOS = 10;
+
+import { TIME_ZONE } from '../progress/progress.repository.js';
 
 export interface Discipline {
   id: number;
@@ -122,13 +123,13 @@ export class PathsRepository {
         set topic_text = excluded.topic_text, content = excluded.content, created_at = now()`;
   }
 
-  /** Records a finished stop. Only the first finish counts: a replay gives nothing. */
+  /** Records a finished stop. Only the first finish counts: a replay gives nothing. Achievements are added by the caller. */
   async finishStop(
     userId: string,
     disciplineId: number,
     topic: number,
     mistakes: number,
-  ): Promise<StopResult> {
+  ): Promise<Omit<StopResult, 'achievements'>> {
     try {
       return await this.sql.begin(async (tx) => {
         // One finish at a time per person, so two at once cannot both be "the first" of the day.
@@ -138,22 +139,20 @@ export class PathsRepository {
           values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${STOP_SABEDORIA})
           on conflict do nothing returning 1`;
         if (!inserted.length)
-          return { sabedoria: 0, patinha: false, achievements: [] };
+          return { sabedoria: 0, peixinhos: 0, patinha: false };
 
-        const [{ finished, today }] = await tx<
-          { finished: number; today: number }[]
-        >`
-          select count(*)::int as finished,
-            count(*) filter (
-              where (completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date
-            )::int as today
-          from public.stop_results where user_id = ${userId}`;
-        const achievements: AchievementCode[] =
-          finished === 1 ? ['primeira_parada'] : [];
+        await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
+        await tx`
+          update public.wallets set peixinhos = peixinhos + ${STOP_PEIXINHOS}, updated_at = now()
+          where user_id = ${userId}`;
+        const [{ today }] = await tx<{ today: number }[]>`
+          select count(*)::int as today from public.stop_results
+          where user_id = ${userId}
+            and (completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`;
         return {
           sabedoria: STOP_SABEDORIA,
+          peixinhos: STOP_PEIXINHOS,
           patinha: today === 1,
-          achievements,
         };
       });
     } catch (error) {

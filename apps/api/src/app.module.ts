@@ -19,6 +19,7 @@ import { MemoryModule } from './memory/memory.module.js';
 import { JourneyModule } from './journey/journey.module.js';
 import { OnboardingModule } from './onboarding/onboarding.module.js';
 import { PathsModule } from './paths/paths.module.js';
+import { ProgressModule } from './progress/progress.module.js';
 import { AiModule } from './platform/ai/ai.module.js';
 import { DatabaseModule } from './platform/database/database.module.js';
 import { AllExceptionsFilter } from './platform/http/all-exceptions.filter.js';
@@ -41,6 +42,7 @@ import { RecommendationsModule } from './recommendations/recommendations.module.
     CareerChatModule,
     JourneyModule,
     PathsModule,
+    ProgressModule,
   ],
   controllers: [AppController],
   providers: [
