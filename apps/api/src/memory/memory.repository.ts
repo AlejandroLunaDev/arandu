@@ -192,19 +192,55 @@ export class MemoryRepository {
     return { sessionIds, questionIds, transcript: transcript + asked };
   }
 
-  /** Replaces the person's facts with the new list and marks what it folded in. */
+  /**
+   * Replaces the person's facts with the new list and marks what it folded in. The list was written from `readIds`:
+   * when the person deleted a fact or forgot everything meanwhile, nothing is saved (false), so nothing comes back;
+   * the sessions stay unfolded for the next time.
+   */
   async saveFacts(
     userId: string,
+    readIds: number[],
     facts: { text: string; source: FactSource }[],
     sessionIds: string[],
     questionIds: number[],
-  ): Promise<void> {
-    await asPerson(
+  ): Promise<boolean> {
+    return asPerson(
       this.sql.begin(async (tx) => {
-        await tx`delete from public.arandu_facts where user_id = ${userId}`;
-        if (facts.length)
+        const now = await tx<{ id: number; text: string }[]>`
+          select id::int, text from public.arandu_facts where user_id = ${userId} order by id for update`;
+        // Still there and unfolded: forgetting deletes the sessions and marks the questions folded.
+        const sessions = sessionIds.length
+          ? (
+              await tx`
+                select 1 from public.arandu_sessions
+                where user_id = ${userId} and summarized_at is null and id in ${tx(sessionIds)} for update`
+            ).length
+          : 0;
+        const questions = questionIds.length
+          ? (
+              await tx`
+                select 1 from public.stop_questions
+                where user_id = ${userId} and summarized_at is null and id in ${tx(questionIds)} for update`
+            ).length
+          : 0;
+        if (
+          now.map((f) => f.id).join() !== readIds.join() ||
+          sessions !== sessionIds.length ||
+          questions !== questionIds.length
+        )
+          return false;
+        // Facts the new list keeps word for word keep their id and date.
+        const texts = facts.map((f) => f.text.slice(0, 300));
+        const gone = now
+          .filter((f) => !texts.includes(f.text))
+          .map((f) => f.id);
+        if (gone.length)
+          await tx`delete from public.arandu_facts where id in ${tx(gone)}`;
+        const kept = new Set(now.map((f) => f.text));
+        const added = facts.filter((f) => !kept.has(f.text.slice(0, 300)));
+        if (added.length)
           await tx`insert into public.arandu_facts ${tx(
-            facts.map((f) => ({
+            added.map((f) => ({
               user_id: userId,
               text: f.text.slice(0, 300),
               source: f.source,
@@ -214,6 +250,7 @@ export class MemoryRepository {
           await tx`update public.arandu_sessions set summarized_at = now() where id in ${tx(sessionIds)}`;
         if (questionIds.length)
           await tx`update public.stop_questions set summarized_at = now() where id in ${tx(questionIds)}`;
+        return true;
       }),
     );
   }

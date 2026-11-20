@@ -76,15 +76,17 @@ export class MemoryService {
         prompt: `Current facts:\n${JSON.stringify(current.map(({ text, source }) => ({ text, source })))}\n\nNew sessions:\n${transcript.slice(-TRANSCRIPT_MAX)}`,
         maxOutputTokens: 900,
       });
-      await this.memory.saveFacts(
+      const saved = await this.memory.saveFacts(
         userId,
+        current.map((f) => f.id),
         object.facts,
         sessionIds,
         questionIds,
       );
-      this.logger.log(
-        `Folded ${sessionIds.length} session(s) into the facts of user ${userId}`,
-      );
+      if (saved)
+        this.logger.log(
+          `Folded ${sessionIds.length} session(s) into the facts of user ${userId}`,
+        );
     }
     return this.memory.createSession(userId, kind, professionSlug);
   }
