@@ -40,6 +40,9 @@ describe('ProgressService', () => {
       questionTimes: vi.fn().mockResolvedValue([]),
       topicCounts: vi.fn().mockResolvedValue(new Map([[7, 3]])),
       discipline: vi.fn().mockResolvedValue(discipline),
+      reflection: vi
+        .fn()
+        .mockResolvedValue({ stops: [], questions: 0, feeling: null }),
     };
     service = new ProgressService(repo as unknown as ProgressRepository);
   });
@@ -192,6 +195,97 @@ describe('ProgressService', () => {
       const { stops } = await service.book('u', 7);
 
       expect(stops.every((s) => s.state === 'done')).toBe(true);
+    });
+  });
+
+  describe('reflection', () => {
+    const reading = (over: object) =>
+      repo.reflection.mockResolvedValue({
+        stops: [],
+        questions: 0,
+        feeling: null,
+        ...over,
+      });
+
+    it('404s for an unknown subject', async () => {
+      repo.discipline.mockResolvedValue(null);
+
+      await expect(service.reflection('u', 1)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(repo.reflection).not.toHaveBeenCalled();
+    });
+
+    it('is not finished and empty when nothing was read', async () => {
+      expect(await service.reflection('u', 7)).toEqual({
+        discipline: { id: 7, name: 'Cálculo' },
+        finished: false,
+        items: { right: 0, total: 0 },
+        questions: 0,
+        further: [],
+        stuck: null,
+        feeling: null,
+      });
+    });
+
+    it('counts right items as items minus mistakes, never below zero', async () => {
+      reading({
+        stops: [
+          { topic: 0, mistakes: 1, items: 4 },
+          { topic: 1, mistakes: 9, items: 3 },
+          { topic: 2, mistakes: 0, items: 5 },
+        ],
+      });
+
+      const { items } = await service.reflection('u', 7);
+
+      expect(items).toEqual({ right: 3 + 0 + 5, total: 12 });
+    });
+
+    it('goes further on stops with no mistakes and is stuck on the one with most', async () => {
+      reading({
+        stops: [
+          { topic: 0, mistakes: 0, items: 2 },
+          { topic: 1, mistakes: 1, items: 2 },
+          { topic: 2, mistakes: 3, items: 2 },
+        ],
+      });
+
+      const r = await service.reflection('u', 7);
+
+      expect(r.further).toEqual(['a']);
+      expect(r.stuck).toBe('c');
+    });
+
+    it('is not stuck when there were no mistakes', async () => {
+      reading({ stops: [{ topic: 0, mistakes: 0, items: 2 }] });
+
+      expect((await service.reflection('u', 7)).stuck).toBeNull();
+    });
+
+    it('is finished once every stop is done', async () => {
+      repo.finishes.mockResolvedValue(
+        [0, 1, 2].map((t) => finish('2026-03-09', t)),
+      );
+
+      expect((await service.reflection('u', 7)).finished).toBe(true);
+    });
+
+    it('is not finished when a subject has no stops', async () => {
+      repo.discipline.mockResolvedValue({ ...discipline, topics: [] });
+
+      expect((await service.reflection('u', 7)).finished).toBe(false);
+    });
+
+    it('passes the questions and the feeling through', async () => {
+      const feeling = { chips: ['difícil'], text: null };
+      reading({ questions: 6, feeling });
+
+      const r = await service.reflection('u', 7);
+
+      expect(r.questions).toBe(6);
+      expect(r.feeling).toEqual(feeling);
+      expect(repo.reflection).toHaveBeenCalledWith('u', 7);
     });
   });
 
