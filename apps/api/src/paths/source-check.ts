@@ -62,22 +62,52 @@ export const publicLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
+const MARKS: Record<string, string> = {
+  acute: '́',
+  grave: '̀',
+  circ: '̂',
+  tilde: '̃',
+  uml: '̈',
+  cedil: '̧',
+};
+
 /** The page's visible text, lower case, one space between words, quotes and dashes made plain. */
 export function normalize(text: string): string {
-  return text
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;|&#160;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;|&#34;|&ldquo;|&rdquo;/g, '"')
-    .replace(/&#39;|&apos;|&rsquo;|&lsquo;/g, "'")
-    .replace(/[“”«»]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, '-')
-    .normalize('NFC')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    text
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      // Accented letters written as entities (Tr&ecirc;s, &#227;, &#xE7;): NFC below joins letter and mark.
+      .replace(
+        /&([a-z])(acute|grave|circ|tilde|uml|cedil);/gi,
+        (_, letter: string, mark: string) => letter + MARKS[mark.toLowerCase()],
+      )
+      .replace(
+        /&#(\d+);|&#x([0-9a-f]+);/gi,
+        (entity, dec?: string, hex?: string) => {
+          const code = dec ? Number(dec) : parseInt(hex!, 16);
+          return code > 0 && code <= 0x10ffff
+            ? String.fromCodePoint(code)
+            : entity;
+        },
+      )
+      .replace(/&ordf;/g, 'ª')
+      .replace(/&ordm;/g, 'º')
+      .replace(/&hellip;/g, '...')
+      .replace(/&ndash;|&mdash;/g, '-')
+      .replace(/&laquo;|&raquo;/g, '"')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;|&#34;|&ldquo;|&rdquo;/g, '"')
+      .replace(/&#39;|&apos;|&rsquo;|&lsquo;/g, "'")
+      .replace(/[“”«»]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/[–—]/g, '-')
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 interface Page {
@@ -147,11 +177,16 @@ async function fetchText(url: string): Promise<string | null> {
   return null;
 }
 
+/** Sites of documents uploaded by users, and placeholder domains: never a source, whatever the page says. */
+const REFUSED_HOST =
+  /^https?:\/\/([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|example\.(com|org|net))([/:?#]|$)/i;
+
 /** True when the page at `url` holds `quote` word for word (case, spacing and quote marks aside). */
 export async function quoteIsOnPage(
   url: string,
   quote: string,
 ): Promise<boolean> {
+  if (REFUSED_HOST.test(url)) return false;
   try {
     const page = await fetchText(url);
     return page !== null && normalize(page).includes(normalize(quote));
