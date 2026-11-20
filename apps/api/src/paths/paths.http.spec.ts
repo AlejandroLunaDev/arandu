@@ -123,6 +123,21 @@ describe('paths and journey routes', () => {
   });
 
   describe('POST /stops/:disciplineId/:topic/result', () => {
+    beforeEach(() => {
+      paths.stopContent.mockResolvedValue({ cards: [], exercises: [] });
+    });
+
+    it('404s when the stop was never opened (no stored content)', async () => {
+      paths.stopContent.mockResolvedValue(null);
+
+      await server()
+        .post('/stops/7/1/result')
+        .send({ mistakes: 0 })
+        .expect(404);
+
+      expect(paths.finishStop).not.toHaveBeenCalled();
+    });
+
     it('records the finish for the user', async () => {
       const res = await server()
         .post('/stops/7/1/result')

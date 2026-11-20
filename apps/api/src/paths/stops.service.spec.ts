@@ -1,13 +1,15 @@
+import type { Mock } from 'vitest';
+import { AiModelError, AiOutputError, type AiService } from '@nestjs/ai';
 import { NotFoundException } from '@nestjs/common';
-import type { AiService } from '@nestjs/ai';
 import type { ProgressService } from '../progress/progress.service.js';
 import type { PathsRepository } from './paths.repository.js';
 import { quoteIsOnPage } from './source-check.js';
 import { exercisesOf, type StopDraft, StopsService } from './stops.service.js';
+import { exercisesInstructions } from './stop.prompt.js';
 
 vi.mock('./source-check.js', () => ({ quoteIsOnPage: vi.fn() }));
 
-const draft = (): StopDraft => ({
+const cardsReply = () => ({
   cards: [
     {
       title: 't1',
@@ -20,13 +22,16 @@ const draft = (): StopDraft => ({
       source: { label: 'l', url: 'https://a.org/2', quote: 'q2' },
     },
   ],
+});
+
+const draft = (): StopDraft => ({
   escolhaUma: { prompt: 'p', options: ['a', 'b', 'c'], answer: 1, why: 'w' },
   unaOsPares: {
     prompt: 'p',
     pairs: [
-      ['a', '1'],
-      ['b', '2'],
-      ['c', '3'],
+      { term: 'a', match: '1' },
+      { term: 'b', match: '2' },
+      { term: 'c', match: '3' },
     ],
     why: 'w',
   },
@@ -62,8 +67,8 @@ const full = (): StopDraft => ({
   },
   naGrade: {
     prompt: 'p',
-    rows: ['r0', 'r1'],
-    columns: ['c0', 'c1'],
+    rows: { first: 'r0', second: 'r1' },
+    columns: { first: 'c0', second: 'c1' },
     items: [
       { text: 'a', row: 0, column: 0 },
       { text: 'b', row: 0, column: 1 },
@@ -74,7 +79,7 @@ const full = (): StopDraft => ({
   },
   separeNasCestas: {
     prompt: 'p',
-    baskets: ['x', 'y'],
+    baskets: { first: 'x', second: 'y' },
     items: [
       { text: 'a', basket: 0 },
       { text: 'b', basket: 1 },
@@ -199,25 +204,86 @@ describe('exercisesOf', () => {
   });
 });
 
+describe('exercisesOf (objects back to contract tuples)', () => {
+  const find = (kind: string) =>
+    exercisesOf(full()).find((e) => e.kind === kind);
+
+  it('una_os_pares: {term, match} becomes [term, match]', () => {
+    expect(find('una_os_pares')).toMatchObject({
+      pairs: [
+        ['a', '1'],
+        ['b', '2'],
+        ['c', '3'],
+      ],
+    });
+  });
+
+  it('na_grade: rows and columns become [first, second]', () => {
+    expect(find('na_grade')).toMatchObject({
+      rows: ['r0', 'r1'],
+      columns: ['c0', 'c1'],
+    });
+  });
+
+  it('separe_nas_cestas: baskets become [first, second]', () => {
+    expect(find('separe_nas_cestas')).toMatchObject({ baskets: ['x', 'y'] });
+  });
+});
+
 describe('StopsService', () => {
   const discipline = {
     id: 7,
     name: 'Cálculo',
     topics: ['Limites', 'Derivadas'],
   };
-  let ai: { generateObject: ReturnType<typeof vi.fn> };
+  type Fn = Mock<(...args: any[]) => any>;
+  // One mock per step; `ai.generateObject` routes to it by the call's model / instructions.
+  let steps: { cards: Fn; basic: Fn; extra: Fn };
+  let ai: { generateObject: Fn };
   let paths: {
-    discipline: ReturnType<typeof vi.fn>;
-    stopContent: ReturnType<typeof vi.fn>;
-    saveStopContent: ReturnType<typeof vi.fn>;
-    finishStop: ReturnType<typeof vi.fn>;
+    discipline: Fn;
+    stopContent: Fn;
+    saveStopContent: Fn;
+    finishStop: Fn;
   };
-  let progress: { achievements: ReturnType<typeof vi.fn> };
+  let progress: { achievements: Fn };
   let service: StopsService;
+
+  const basicOf = (d: StopDraft) => ({
+    escolhaUma: d.escolhaUma,
+    unaOsPares: d.unaOsPares,
+    verdadeiroOuFalso: d.verdadeiroOuFalso,
+    completeAFrase: d.completeAFrase,
+  });
+  const extraOf = (d: StopDraft) => ({
+    monteAFrase: d.monteAFrase,
+    escolhaAFraseCerta: d.escolhaAFraseCerta,
+    naGrade: d.naGrade,
+    separeNasCestas: d.separeNasCestas,
+    toqueNoTrecho: d.toqueNoTrecho,
+    ordene: d.ordene,
+    expliqueParaOArandu: d.expliqueParaOArandu,
+  });
+  const reply = (object: unknown) => ({ object });
+  const outputError = () => new AiOutputError('bad schema', '{}');
+  const extraPromptOf = () => steps.extra.mock.calls[0][0].prompt as string;
 
   beforeEach(() => {
     vi.mocked(quoteIsOnPage).mockReset().mockResolvedValue(true);
-    ai = { generateObject: vi.fn().mockResolvedValue({ object: draft() }) };
+    steps = {
+      cards: vi.fn().mockResolvedValue(reply(cardsReply())),
+      basic: vi.fn().mockResolvedValue(reply(basicOf(full()))),
+      extra: vi.fn().mockResolvedValue(reply(extraOf(full()))),
+    };
+    ai = {
+      generateObject: vi.fn((o: { model?: string; instructions: string }) =>
+        o.model === 'web'
+          ? steps.cards(o)
+          : o.instructions === exercisesInstructions('basic')
+            ? steps.basic(o)
+            : steps.extra(o),
+      ),
+    };
     paths = {
       discipline: vi.fn().mockResolvedValue(discipline),
       stopContent: vi.fn().mockResolvedValue(null),
@@ -254,25 +320,48 @@ describe('StopsService', () => {
     expect(ai.generateObject).not.toHaveBeenCalled();
   });
 
-  it('generates with the web model, saves, and keeps only verified cards', async () => {
+  it('generates in two steps, saves, and keeps only verified cards', async () => {
     vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
-    ai.generateObject.mockResolvedValue({ object: full() });
 
     const stop = await service.stop(7, 1);
 
-    expect(ai.generateObject).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'web' }),
-    );
+    expect(steps.cards).toHaveBeenCalledTimes(1);
+    expect(steps.cards.mock.calls[0][0]).toMatchObject({ model: 'web' });
+    expect(steps.basic).toHaveBeenCalledTimes(1);
+    expect(steps.extra).toHaveBeenCalledTimes(1);
+    expect(steps.basic.mock.calls[0][0].model).toBeUndefined();
+    expect(extraPromptOf()).toBe(steps.basic.mock.calls[0][0].prompt);
     expect(stop.cards.map((c) => c.title)).toEqual(['t2']);
     expect(stop.topic).toEqual({ index: 1, text: 'Derivadas', total: 2 });
     expect(stop.exercises).toHaveLength(11);
     expect(paths.saveStopContent).toHaveBeenCalledWith(stop);
   });
 
+  it('writes the exercises from the verified cards only', async () => {
+    vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
+
+    await service.stop(7, 1);
+
+    const prompt = extraPromptOf();
+    expect(prompt).toContain('Derivadas');
+    expect(prompt).toContain('"title":"t2"');
+    expect(prompt).not.toContain('t1');
+  });
+
+  it('on the first topic makes only the basic exercises call', async () => {
+    const stop = await service.stop(7, 0);
+
+    expect(steps.extra).not.toHaveBeenCalled();
+    expect(steps.basic).toHaveBeenCalledTimes(1);
+    expect(stop.exercises).toHaveLength(4);
+  });
+
   it('503s on a later stop when only the 4 basic exercises come back', async () => {
-    ai.generateObject.mockResolvedValue({ object: draft() });
+    steps.extra.mockResolvedValue(reply({}));
 
     await expect(service.stop(7, 1)).rejects.toMatchObject({ status: 503 });
+    expect(steps.basic).toHaveBeenCalledTimes(2);
+    expect(steps.extra).toHaveBeenCalledTimes(2);
     expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
 
@@ -287,7 +376,7 @@ describe('StopsService', () => {
   };
 
   it('keeps a later stop with exactly 8 consistent exercises', async () => {
-    ai.generateObject.mockResolvedValue({ object: minus(8) });
+    steps.extra.mockResolvedValue(reply(extraOf(minus(8))));
 
     const stop = await service.stop(7, 1);
 
@@ -295,101 +384,205 @@ describe('StopsService', () => {
   });
 
   it('503s on a later stop with 7 consistent exercises', async () => {
-    ai.generateObject.mockResolvedValue({ object: minus(7) });
+    steps.extra.mockResolvedValue(reply(extraOf(minus(7))));
 
     await expect(service.stop(7, 1)).rejects.toMatchObject({ status: 503 });
+    expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
 
-  it('retries once when no card verifies, then succeeds', async () => {
+  it('retries the exercises once when they are below the minimum, then succeeds', async () => {
+    steps.extra
+      .mockResolvedValueOnce(reply({}))
+      .mockResolvedValueOnce(reply(extraOf(full())));
+
+    const stop = await service.stop(7, 1);
+
+    expect(steps.cards).toHaveBeenCalledTimes(1);
+    expect(steps.basic).toHaveBeenCalledTimes(2);
+    expect(stop.exercises).toHaveLength(11);
+  });
+
+  it('retries the cards once when no card verifies, then succeeds', async () => {
     vi.mocked(quoteIsOnPage)
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false);
 
     const stop = await service.stop(7, 0);
 
-    expect(ai.generateObject).toHaveBeenCalledTimes(2);
+    expect(steps.cards).toHaveBeenCalledTimes(2);
     expect(stop.cards).toHaveLength(2);
   });
 
-  it('503s when no card is ever verified, and saves nothing', async () => {
+  it('503s when no card is ever verified, and writes no exercises', async () => {
     vi.mocked(quoteIsOnPage).mockResolvedValue(false);
 
     await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
-    expect(ai.generateObject).toHaveBeenCalledTimes(2);
+    expect(steps.cards).toHaveBeenCalledTimes(2);
+    expect(steps.basic).not.toHaveBeenCalled();
     expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
 
-  it('503s when even one exercise is inconsistent (all 4 are needed)', async () => {
-    const d = draft();
+  it('retries cards after an AiOutputError, then succeeds', async () => {
+    steps.cards
+      .mockRejectedValueOnce(outputError())
+      .mockResolvedValueOnce(reply(cardsReply()));
+
+    const stop = await service.stop(7, 0);
+
+    expect(steps.cards).toHaveBeenCalledTimes(2);
+    expect(stop.cards).toHaveLength(2);
+  });
+
+  it('503s when the cards miss the schema on every attempt', async () => {
+    steps.cards.mockRejectedValue(outputError());
+
+    await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+    expect(steps.cards).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['basic', 0],
+    ['extra', 1],
+  ] as const)(
+    'retries after an AiOutputError in the %s exercises, then succeeds',
+    async (which, topic) => {
+      steps[which].mockRejectedValueOnce(outputError());
+
+      const stop = await service.stop(7, topic);
+
+      expect(steps[which]).toHaveBeenCalledTimes(2);
+      expect(stop.exercises).toHaveLength(topic === 0 ? 4 : 11);
+      expect(paths.saveStopContent).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('503s when the exercises miss the schema on every attempt', async () => {
+    steps.basic.mockRejectedValue(outputError());
+
+    await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+    expect(steps.basic).toHaveBeenCalledTimes(2);
+    expect(paths.saveStopContent).not.toHaveBeenCalled();
+  });
+
+  it.each(['cards', 'basic', 'extra'] as const)(
+    'an AiModelError in the %s call propagates without a retry',
+    async (which) => {
+      const error = new AiModelError([]);
+      steps[which].mockRejectedValue(error);
+
+      await expect(service.stop(7, 1)).rejects.toBe(error);
+      expect(steps[which]).toHaveBeenCalledTimes(1);
+      expect(paths.saveStopContent).not.toHaveBeenCalled();
+    },
+  );
+
+  it('503s when even one basic exercise is inconsistent (all 4 are needed)', async () => {
+    const d = basicOf(full());
     d.escolhaUma.answer = 9;
-    ai.generateObject.mockResolvedValue({ object: d });
+    steps.basic.mockResolvedValue(reply(d));
 
     await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
     expect(paths.saveStopContent).not.toHaveBeenCalled();
+  });
+
+  it('saves the tuple shapes of the contract', async () => {
+    const stop = await service.stop(7, 1);
+
+    expect(stop.exercises.find((e) => e.kind === 'una_os_pares')).toMatchObject(
+      {
+        pairs: [
+          ['a', '1'],
+          ['b', '2'],
+          ['c', '3'],
+        ],
+      },
+    );
+    expect(stop.exercises.find((e) => e.kind === 'na_grade')).toMatchObject({
+      rows: ['r0', 'r1'],
+      columns: ['c0', 'c1'],
+    });
   });
 
   it('shares one generation between concurrent calls for the same stop', async () => {
     const [a, b] = await Promise.all([service.stop(7, 0), service.stop(7, 0)]);
 
-    expect(ai.generateObject).toHaveBeenCalledTimes(1);
+    expect(steps.cards).toHaveBeenCalledTimes(1);
+    expect(steps.basic).toHaveBeenCalledTimes(1);
     expect(a).toBe(b);
   });
 
-  it('finish 404s for a topic out of range and writes nothing', async () => {
-    await expect(service.finish('u', 7, 2, 0)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-    expect(paths.finishStop).not.toHaveBeenCalled();
-  });
+  describe('finish', () => {
+    beforeEach(() => {
+      paths.stopContent.mockResolvedValue({ cards: [], exercises: [] });
+    });
 
-  it('finish records the result for a valid topic', async () => {
-    await service.finish('u', 7, 1, 3);
-
-    expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3, null);
-  });
-
-  it('finish passes the relampago mistakes on', async () => {
-    await service.finish('u', 7, 1, 3, 0);
-
-    expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3, 0);
-  });
-
-  const earned = (...codes: string[]) =>
-    codes.map((code) => ({ code, earnedAt: '2026-01-01T00:00:00.000Z' }));
-
-  it('finish returns only the achievements earned by this finish', async () => {
-    progress.achievements
-      .mockResolvedValueOnce(earned('primeira_parada'))
-      .mockResolvedValueOnce(
-        earned('primeira_parada', 'nenhum_novelo_perdido'),
+    it('404s for a topic out of range and writes nothing', async () => {
+      await expect(service.finish('u', 7, 2, 0)).rejects.toBeInstanceOf(
+        NotFoundException,
       );
-
-    const result = await service.finish('u', 7, 1, 0);
-
-    expect(result).toEqual({
-      sabedoria: 15,
-      peixinhos: 5,
-      patinha: true,
-      achievements: ['nenhum_novelo_perdido'],
+      expect(paths.finishStop).not.toHaveBeenCalled();
     });
-  });
 
-  it('finish on a replay (sabedoria 0) returns no achievements and skips the second read', async () => {
-    paths.finishStop.mockResolvedValue({
-      sabedoria: 0,
-      peixinhos: 0,
-      patinha: false,
+    it('404s when the stop content is not stored, before writing anything', async () => {
+      paths.stopContent.mockResolvedValue(null);
+
+      await expect(service.finish('u', 7, 1, 0)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(paths.stopContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
+      expect(progress.achievements).not.toHaveBeenCalled();
+      expect(paths.finishStop).not.toHaveBeenCalled();
     });
-    progress.achievements.mockResolvedValue(earned('primeira_parada'));
 
-    const result = await service.finish('u', 7, 1, 0);
+    it('records the result for a valid topic', async () => {
+      await service.finish('u', 7, 1, 3);
 
-    expect(result.achievements).toEqual([]);
-    expect(progress.achievements).toHaveBeenCalledTimes(1);
-  });
+      expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3, null);
+    });
 
-  it('finish does not read achievements for a topic out of range', async () => {
-    await expect(service.finish('u', 7, 2, 0)).rejects.toThrow();
-    expect(progress.achievements).not.toHaveBeenCalled();
+    it('passes the relampago mistakes on', async () => {
+      await service.finish('u', 7, 1, 3, 0);
+
+      expect(paths.finishStop).toHaveBeenCalledWith('u', 7, 1, 3, 0);
+    });
+
+    const earned = (...codes: string[]) =>
+      codes.map((code) => ({ code, earnedAt: '2026-01-01T00:00:00.000Z' }));
+
+    it('returns only the achievements earned by this finish', async () => {
+      progress.achievements
+        .mockResolvedValueOnce(earned('primeira_parada'))
+        .mockResolvedValueOnce(
+          earned('primeira_parada', 'nenhum_novelo_perdido'),
+        );
+
+      const result = await service.finish('u', 7, 1, 0);
+
+      expect(result).toEqual({
+        sabedoria: 15,
+        peixinhos: 5,
+        patinha: true,
+        achievements: ['nenhum_novelo_perdido'],
+      });
+    });
+
+    it('on a replay (sabedoria 0) returns no achievements and skips the second read', async () => {
+      paths.finishStop.mockResolvedValue({
+        sabedoria: 0,
+        peixinhos: 0,
+        patinha: false,
+      });
+      progress.achievements.mockResolvedValue(earned('primeira_parada'));
+
+      const result = await service.finish('u', 7, 1, 0);
+
+      expect(result.achievements).toEqual([]);
+      expect(progress.achievements).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not read achievements for a topic out of range', async () => {
+      await expect(service.finish('u', 7, 2, 0)).rejects.toThrow();
+      expect(progress.achievements).not.toHaveBeenCalled();
+    });
   });
 });
