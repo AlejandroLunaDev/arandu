@@ -25,13 +25,19 @@ class FakeAuthGuard implements CanActivate {
 
 /** A MemoryRepository with nothing stored: a new person, and sessions that open with SESSION_ID. */
 export const fakeMemoryRepository = () => ({
-  read: vi.fn().mockResolvedValue({ profile: null, summary: '', sessions: [] }),
+  read: vi
+    .fn()
+    .mockResolvedValue({ profile: null, summary: '', facts: [], sessions: [] }),
+  facts: vi.fn().mockResolvedValue([]),
+  deleteFact: vi.fn().mockResolvedValue(true),
   createSession: vi.fn().mockResolvedValue(SESSION_ID),
   sessionMessages: vi.fn().mockResolvedValue([]),
   addMessages: vi.fn().mockResolvedValue(undefined),
   saveProfile: vi.fn().mockResolvedValue(undefined),
-  unsummarized: vi.fn().mockResolvedValue({ sessionIds: [], transcript: '' }),
-  saveSummary: vi.fn().mockResolvedValue(undefined),
+  unsummarized: vi
+    .fn()
+    .mockResolvedValue({ sessionIds: [], questionIds: [], transcript: '' }),
+  saveFacts: vi.fn().mockResolvedValue(true),
   forget: vi.fn().mockResolvedValue(undefined),
 });
 
