@@ -225,6 +225,9 @@ describe('quoteIsOnPage', () => {
     'https://example.com/x',
     'https://a.example.org/x',
     'https://example.net',
+    'https://wikipedia.org/wiki/X',
+    'https://pt.wikipedia.org/wiki/X',
+    'https://en.m.wikipedia.org/wiki/X',
     'https://scribd.com:443/x',
     'https://scribd.com?x=1',
     'https://scribd.com#top',
@@ -237,6 +240,9 @@ describe('quoteIsOnPage', () => {
 
   it.each([
     'https://notscribd.com/x',
+    'https://notwikipedia.org/x',
+    'https://wikipedia.org.evil.com/x',
+    'https://a.org/wikipedia.org/x',
     'https://scribd.com.evil.org/x',
     'https://a.org/scribd.com/x',
     'https://a.org/?u=brainly.com.br',
