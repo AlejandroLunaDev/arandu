@@ -40,9 +40,12 @@ async function asPerson<T>(work: Promise<T>): Promise<T> {
   try {
     return await work;
   } catch (error) {
-    const { code } = error as { code?: string };
-    // The only foreign key a wallet or re-read insert can break for a valid subject is the person's.
-    if (code === '23503') throw new PersonGoneError();
+    const { code, constraint_name } = error as {
+      code?: string;
+      constraint_name?: string;
+    };
+    if (code === '23503' && constraint_name?.endsWith('_user_id_fkey'))
+      throw new PersonGoneError();
     throw error;
   }
 }
@@ -95,7 +98,8 @@ export class ProgressRepository {
       this.sql.begin(async (tx) => {
         const row = await this.lockWallet(tx, userId);
         const now = new Date();
-        if (refill(row.novelos, row.novelos_at, now).novelos > 0)
+        const { novelos, at } = refill(row.novelos, row.novelos_at, now);
+        if (novelos > 0)
           throw new ConflictException('Re-reading gives a novelo only at 0');
         const inserted = await tx`
           insert into public.stop_rereads (user_id, discipline_id, topic) values (${userId}, ${disciplineId}, ${topic})
@@ -103,7 +107,7 @@ export class ProgressRepository {
         if (!inserted.length)
           throw new ConflictException('This stop already gave its novelo');
         const [updated] = await tx<WalletRow[]>`
-          update public.wallets set novelos = 1, novelos_at = ${now}, updated_at = now()
+          update public.wallets set novelos = 1, novelos_at = ${at}, updated_at = now()
           where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`;
         return toWallet(updated, now);
       }),

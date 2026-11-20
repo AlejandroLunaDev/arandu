@@ -345,6 +345,8 @@ export type AchievementCode =
 export interface StopResult {
   /** Sabedoria this finish gave: 0 when the stop was already finished. */
   sabedoria: number;
+  /** Peixinhos this finish gave: 0 when the stop was already finished. */
+  peixinhos: number;
   /** The first stop of the day: a new patinha. */
   patinha: boolean;
   /** Achievements this finish earned. */

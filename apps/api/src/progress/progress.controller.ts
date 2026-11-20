@@ -1,5 +1,6 @@
 import type { BookProgress, Home, Wallet } from '@arandu/contracts';
 import {
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -51,11 +52,16 @@ export class ProgressController {
     @Param('disciplineId', { schema: id }) disciplineId: number,
     @Param('topic', { schema: topic }) topicIndex: number,
   ): Promise<Wallet> {
-    const discipline = await this.repository.discipline(disciplineId);
-    if (!discipline || topicIndex >= discipline.topics.length)
+    const stop = (await this.progress.book(userId, disciplineId)).stops[
+      topicIndex
+    ];
+    if (!stop)
       throw new NotFoundException(
         `No stop ${topicIndex} in subject ${disciplineId}`,
       );
+    // Only the stop the person is on, or one they finished: never a novelo per stop of the catalog.
+    if (stop.state === 'locked')
+      throw new ConflictException('This stop is not open yet');
     return this.repository.reread(userId, disciplineId, topicIndex);
   }
 }
