@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import re
+import unicodedata
 import unittest
 import urllib.error
 import zipfile
@@ -276,6 +277,11 @@ class CardTest(unittest.TestCase):
 
     def test_one_line_per_br_with_tags_entities_and_whitespace_cleaned_and_empty_lines_dropped(self):
         self.assertEqual(self.card("a  <b>b</b> &amp; c<br>\n<br />\t<BR/>d"), "a b & c\nd")
+
+    def test_a_spacing_acute_after_a_vowel_becomes_the_composed_accented_vowel_and_a_lone_one_stays(self):
+        out = self.card("filoso´ficas e HISTO´RIA<br>x ´ y, b´c")
+        self.assertEqual(out, "filosóficas e HISTÓRIA\nx ´ y, b´c")
+        self.assertEqual(out, unicodedata.normalize("NFC", out))
 
 
 def query(year, semester):
