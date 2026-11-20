@@ -31,10 +31,16 @@ const logger = new Logger('AI');
               model: openrouter('anthropic/claude-haiku-5.5'),
               pricing: { input: 0.1, output: 0.5 },
             },
-            // The same model with OpenRouter's web search (":online", Anthropic's native search): only for writing a
-            // stop's cards from real sources. The search is billed on top and not counted in `cost`.
+            // The same model with OpenRouter's web search on Exa (US$ 0.007 a search, up to 10 results, whatever the
+            // model), only for writing stops' cards from real sources. Anthropic's native search (":online") cost
+            // several times more. The search is billed on top and not counted in `cost`.
             web: {
-              model: openrouter('anthropic/claude-haiku-5.5:online'),
+              model: openrouter('anthropic/claude-haiku-5.5'),
+              providerOptions: {
+                openrouter: {
+                  plugins: [{ id: 'web', engine: 'exa', max_results: 10 }],
+                },
+              },
               pricing: { input: 0.1, output: 0.5 },
             },
           },
