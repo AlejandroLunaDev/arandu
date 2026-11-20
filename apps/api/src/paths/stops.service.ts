@@ -4,7 +4,7 @@ import type {
   StopContent,
   StopResult,
 } from '@arandu/contracts';
-import { AiService } from '@nestjs/ai';
+import { AiOutputError, AiService } from '@nestjs/ai';
 import {
   Injectable,
   Logger,
@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { ProgressService } from '../progress/progress.service.js';
 import { PathsRepository } from './paths.repository.js';
 import { quoteIsOnPage } from './source-check.js';
-import { stopInstructions } from './stop.prompt.js';
+import { cardsInstructions, exercisesInstructions } from './stop.prompt.js';
 
 const text = z.string().min(1);
 const index = z.number().int();
@@ -25,9 +25,14 @@ const card = z.object({
   source: z.object({ label: text, url: z.url(), quote: text }),
 });
 
+const two = z.object({ first: text, second: text });
+
+// A stop is written in steps: the cards with a web search, then its exercises from the verified cards. Each schema is
+// kept small (and without tuples): the provider's structured output refuses large grammars and `prefixItems`.
+const cardsDraft = z.object({ cards: z.array(card).min(1).max(3) });
+
 // The first stop of a subject (O15-O18) has the four basic kinds; every other stop has all of them (R01-R12).
-const basicDraft = z.object({
-  cards: z.array(card).min(1).max(3),
+const basicExercises = z.object({
   escolhaUma: z.object({
     prompt: text,
     options: z.array(text).min(3).max(4),
@@ -37,7 +42,7 @@ const basicDraft = z.object({
   unaOsPares: z.object({
     prompt: text,
     pairs: z
-      .array(z.tuple([text, text]))
+      .array(z.object({ term: text, match: text }))
       .min(3)
       .max(5),
     why: text,
@@ -56,10 +61,10 @@ const basicDraft = z.object({
   }),
 });
 
-const fullDraft = basicDraft.extend({
+const extraExercises = z.object({
   monteAFrase: z.object({
     prompt: text,
-    answer: z.array(text).min(3).max(12),
+    answer: z.array(text).min(3).max(16),
     distractors: z.array(text).max(3),
     why: text,
   }),
@@ -71,8 +76,8 @@ const fullDraft = basicDraft.extend({
   }),
   naGrade: z.object({
     prompt: text,
-    rows: z.tuple([text, text]),
-    columns: z.tuple([text, text]),
+    rows: two,
+    columns: two,
     items: z
       .array(z.object({ text, row: index, column: index }))
       .min(4)
@@ -81,7 +86,7 @@ const fullDraft = basicDraft.extend({
   }),
   separeNasCestas: z.object({
     prompt: text,
-    baskets: z.tuple([text, text]),
+    baskets: two,
     items: z
       .array(z.object({ text, basket: index }))
       .min(4)
@@ -106,13 +111,18 @@ const fullDraft = basicDraft.extend({
   }),
 });
 
-export type StopDraft = z.infer<typeof basicDraft> &
-  Partial<z.infer<typeof fullDraft>>;
+export type StopDraft = z.infer<typeof basicExercises> &
+  Partial<z.infer<typeof extraExercises>>;
+
+const pair = (t: { first: string; second: string }): [string, string] => [
+  t.first,
+  t.second,
+];
 
 const inRange = (i: number, list: unknown[]) => i >= 0 && i < list.length;
 const bit = (i: number): i is 0 | 1 => i === 0 || i === 1;
 
-/** The draft's exercises, in R01-R12 order, without any the model got inconsistent (an answer out of range, a gap
+/** The drafted exercises, in R01-R12 order, without any the model got inconsistent (an answer out of range, a gap
  * without its word, a cell outside the grid). */
 export function exercisesOf(draft: StopDraft): Exercise[] {
   const out: Exercise[] = [];
@@ -124,7 +134,13 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
   } = draft;
   if (inRange(eu.answer, eu.options))
     out.push({ kind: 'escolha_uma', mode: 'reconhecer', ...eu });
-  out.push({ kind: 'una_os_pares', mode: 'reconhecer', ...up });
+  out.push({
+    kind: 'una_os_pares',
+    mode: 'reconhecer',
+    prompt: up.prompt,
+    pairs: up.pairs.map((p) => [p.term, p.match]),
+    why: up.why,
+  });
   out.push({ kind: 'verdadeiro_ou_falso', mode: 'reconhecer', ...vf });
   if (
     cf.text.split('___').length - 1 === cf.answers.length &&
@@ -147,8 +163,8 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
       kind: 'na_grade',
       mode: 'reconhecer',
       prompt: ng.prompt,
-      rows: ng.rows,
-      columns: ng.columns,
+      rows: pair(ng.rows),
+      columns: pair(ng.columns),
       items: ng.items.map((i) => ({
         text: i.text,
         cell: [i.row as 0 | 1, i.column as 0 | 1],
@@ -160,7 +176,7 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
       kind: 'separe_nas_cestas',
       mode: 'reconhecer',
       prompt: sc.prompt,
-      baskets: sc.baskets,
+      baskets: pair(sc.baskets),
       items: sc.items.map((i) => ({ text: i.text, basket: i.basket as 0 | 1 })),
       why: sc.why,
     });
@@ -173,6 +189,16 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
 
 /** Exercises a stop needs to be kept: all four on a subject's first stop, most of them on the others. */
 export const minExercises = (topic: number) => (topic === 0 ? 4 : 8);
+
+/** The model's object, or null when its answer missed the schema (a list too long, a field left out): retried. */
+async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
+  try {
+    return (await draft).object;
+  } catch (error) {
+    if (error instanceof AiOutputError) return null;
+    throw error;
+  }
+}
 
 /** Tries to write a stop with verified sources this many times before giving up. */
 const ATTEMPTS = 2;
@@ -224,7 +250,12 @@ export class StopsService {
     relampagoMistakes: number | null = null,
   ): Promise<StopResult> {
     const discipline = await this.paths.discipline(disciplineId);
-    if (!discipline || topic >= discipline.topics.length)
+    const topicText = discipline?.topics[topic];
+    // Only a stop that was served can be finished: its content exists once someone opened it.
+    if (
+      topicText === undefined ||
+      !(await this.paths.stopContent(disciplineId, topic, topicText))
+    )
       throw new NotFoundException(
         `No stop ${topic} in subject ${disciplineId}`,
       );
@@ -246,6 +277,39 @@ export class StopsService {
     return { ...result, achievements };
   }
 
+  /** The stop's cards from a web search, keeping only those whose quote is on its page. */
+  private async cards(
+    name: string,
+    topic: number,
+    topicText: string,
+    total: number,
+  ): Promise<StopCard[]> {
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      const object = await orRetry(
+        this.ai.generateObject({
+          model: 'web',
+          label: 'arandu-stop-cards',
+          schema: cardsDraft,
+          instructions: cardsInstructions(),
+          prompt: `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}`,
+          maxOutputTokens: 2500,
+        }),
+      );
+      if (!object) continue;
+      const checks = await Promise.all(
+        object.cards.map((c) => quoteIsOnPage(c.source.url, c.source.quote)),
+      );
+      const cards = object.cards.filter((_, i) => checks[i]);
+      this.logger.log(
+        `Stop cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified`,
+      );
+      if (cards.length) return cards;
+    }
+    throw new ServiceUnavailableException(
+      'Arandu could not prepare this stop with checked sources; try again later',
+    );
+  }
+
   private async generate(
     id: number,
     name: string,
@@ -253,24 +317,45 @@ export class StopsService {
     topicText: string,
     total: number,
   ): Promise<StopContent> {
+    const cards = await this.cards(name, topic, topicText, total);
+    const facts = JSON.stringify(
+      cards.map((c) => ({ title: c.title, text: c.text })),
+    );
+    const prompt = `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}\n\nCards:\n${facts}`;
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-      const { object } = await this.ai.generateObject({
-        model: 'web',
-        label: 'arandu-stop',
-        schema: topic === 0 ? basicDraft : fullDraft,
-        instructions: stopInstructions(topic === 0),
-        prompt: `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}`,
-        maxOutputTokens: topic === 0 ? 3000 : 6000,
-      });
-      const checks = await Promise.all(
-        object.cards.map((c) => quoteIsOnPage(c.source.url, c.source.quote)),
-      );
-      const cards: StopCard[] = object.cards.filter((_, i) => checks[i]);
-      const exercises = exercisesOf(object);
+      const [basic, extra] = await Promise.all([
+        orRetry(
+          this.ai.generateObject({
+            label: 'arandu-stop-exercises',
+            schema: basicExercises,
+            instructions: exercisesInstructions('basic'),
+            prompt,
+            maxOutputTokens: 3000,
+          }),
+        ),
+        topic === 0
+          ? null
+          : orRetry(
+              this.ai.generateObject({
+                label: 'arandu-stop-exercises',
+                schema: extraExercises,
+                instructions: exercisesInstructions('extra'),
+                prompt,
+                maxOutputTokens: 4000,
+              }),
+            ),
+      ]);
+      if (!basic || (topic > 0 && !extra)) {
+        this.logger.warn(
+          `Stop ${id}:${topic} exercises attempt ${attempt}: an answer missed its schema`,
+        );
+        continue;
+      }
+      const exercises = exercisesOf({ ...basic, ...extra });
       this.logger.log(
-        `Stop ${id}:${topic} attempt ${attempt}: ${cards.length}/${object.cards.length} cards verified, ${exercises.length} exercises`,
+        `Stop ${id}:${topic} exercises attempt ${attempt}: ${exercises.length} consistent`,
       );
-      if (!cards.length || exercises.length < minExercises(topic)) continue;
+      if (exercises.length < minExercises(topic)) continue;
       const content: StopContent = {
         discipline: { id, name },
         topic: { index: topic, text: topicText, total },
