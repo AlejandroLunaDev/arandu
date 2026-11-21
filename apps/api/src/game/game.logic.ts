@@ -36,21 +36,22 @@ function seeded(...parts: (string | number)[]): number {
 }
 
 /**
- * Demo rivals of a league's week: stable names and a week total that grows as the week goes by (`elapsed` 0..1).
+ * Demo rivals of a league round: stable names and a weekly pace of sabedoria, times the weeks of the round gone by
+ * (a full 1-day round is 1/7), so a short round asks as much per day as a week does.
  * shortcut: they stand in while there are few people; drop them once leagues fill with real ones.
  */
 export function rivals(
   rank: number,
-  monday: string,
+  start: string,
   count: number,
-  elapsed: number,
+  weeks: number,
 ) {
   return Array.from({ length: count }, (_, i) => {
-    const seed = seeded(rank, monday, i);
+    const seed = seeded(rank, start, i);
     const total = (rank - 1) * 15 + (seed % 120);
     return {
       nickname: RIVALS[(seed >>> 8) % RIVALS.length],
-      sabedoria: Math.round(total * elapsed),
+      sabedoria: Math.round(total * weeks),
     };
   });
 }
