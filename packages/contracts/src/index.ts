@@ -206,8 +206,13 @@ export interface CareerOption {
   profession: { slug: string; name: string };
   /** One line that links the career back to the profile. */
   reason: string;
-  /** Where it has a real first-term curriculum, so its path can be lived. */
-  offerings: { institution: string; city: string }[];
+  /** Where it has a real first-term curriculum, so its path can be lived: one per course; courseId is the CareerPath's. */
+  offerings: {
+    courseId: number;
+    course: string;
+    institution: Institution;
+    city: string;
+  }[];
 }
 
 export interface Recommendations {

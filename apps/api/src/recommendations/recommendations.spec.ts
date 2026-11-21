@@ -21,15 +21,24 @@ const profile = (over: Record<string, unknown> = {}) => ({
   covered: [],
   ...over,
 });
-const career = (
-  slug: string,
-  offerings = [{ institution: 'USP', city: 'São Paulo' }],
-) => ({ profession: { slug, name: slug.toUpperCase() }, offerings });
+const offering = (courseId: number, name: string) => ({
+  courseId,
+  course: `Curso ${name}`,
+  institution: {
+    name,
+    shortName: null,
+    kind: 'public' as const,
+    logo: null,
+    photo: null,
+  },
+  city: 'São Paulo',
+});
+const career = (slug: string, offerings = [offering(1, 'USP')]) => ({
+  profession: { slug, name: slug.toUpperCase() },
+  offerings,
+});
 const catalog = [
-  career('a', [
-    { institution: 'USP', city: 'São Paulo' },
-    { institution: 'FIAP', city: 'São Paulo' },
-  ]),
+  career('a', [offering(1, 'USP'), offering(2, 'FIAP')]),
   ...['b', 'c', 'd', 'e'].map((s) => career(s)),
 ];
 

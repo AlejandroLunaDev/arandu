@@ -1,6 +1,7 @@
 import type {
   Book,
   BookSummary,
+  Institution,
   Offering,
   OwnBook,
   StoryPage,
@@ -60,13 +61,11 @@ const GRADE = `
   join public.professions p on p.id = c.profession_id
   where p.slug = $1 and coalesce(cs.year, (cs.term + 1) / 2) = 1 and cs.is_elective is not true`;
 
-interface OfferingRow {
-  course_id: string;
-  /** Null for a FIAP course whose grade is unknown. */
-  grade_source_id: string | null;
+/** An institution's columns, `name` selected as `institution`. */
+export interface InstitutionRow {
   institution: string;
   short_name: string | null;
-  kind: Offering['institution']['kind'];
+  kind: Institution['kind'];
   logo_url: string | null;
   logo_license: string | null;
   logo_source_url: string | null;
@@ -74,6 +73,36 @@ interface OfferingRow {
   photo_credit: string | null;
   photo_license: string | null;
   photo_source_url: string | null;
+}
+
+/** The institution as screens show it: a logo or photo only when all its credit fields are there. */
+export const toInstitution = (r: InstitutionRow): Institution => ({
+  name: r.institution,
+  shortName: r.short_name,
+  kind: r.kind,
+  logo:
+    r.logo_url && r.logo_license && r.logo_source_url
+      ? {
+          url: r.logo_url,
+          license: r.logo_license,
+          sourceUrl: r.logo_source_url,
+        }
+      : null,
+  photo:
+    r.photo_url && r.photo_credit && r.photo_license && r.photo_source_url
+      ? {
+          url: r.photo_url,
+          credit: r.photo_credit,
+          license: r.photo_license,
+          sourceUrl: r.photo_source_url,
+        }
+      : null,
+});
+
+interface OfferingRow extends InstitutionRow {
+  course_id: string;
+  /** Null for a FIAP course whose grade is unknown. */
+  grade_source_id: string | null;
   course: string;
   degree: Offering['course']['degree'];
   duration_years: string | null;
@@ -138,31 +167,7 @@ export class BooksRepository {
         (s) => s.course_id === r.course_id && s.source_id === r.grade_source_id,
       );
       return {
-        institution: {
-          name: r.institution,
-          shortName: r.short_name,
-          kind: r.kind,
-          logo:
-            r.logo_url && r.logo_license && r.logo_source_url
-              ? {
-                  url: r.logo_url,
-                  license: r.logo_license,
-                  sourceUrl: r.logo_source_url,
-                }
-              : null,
-          photo:
-            r.photo_url &&
-            r.photo_credit &&
-            r.photo_license &&
-            r.photo_source_url
-              ? {
-                  url: r.photo_url,
-                  credit: r.photo_credit,
-                  license: r.photo_license,
-                  sourceUrl: r.photo_source_url,
-                }
-              : null,
-        },
+        institution: toInstitution(r),
         course: {
           name: r.course,
           degree: r.degree,
