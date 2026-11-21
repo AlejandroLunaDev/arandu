@@ -16,6 +16,18 @@ export const TIME_ZONE = 'America/Sao_Paulo';
 
 type Tx = Sql | TransactionSql;
 
+/**
+ * SQL for how many leading topics of the discipline aliased `d` have a stored stop for the same topic text: the stops a
+ * book offers (the paths list the same run), so no screen points at a stop that would be generated live.
+ */
+export const madeStops = (sql: Tx) => sql`
+  coalesce((
+    select min(g.t)::int from generate_series(0, cardinality(coalesce(d.topics, '{}')) - 1) g(t)
+    where not exists (
+      select 1 from public.stop_contents s
+      where s.discipline_id = d.id and s.topic = g.t and s.topic_text = d.topics[g.t + 1])
+  ), cardinality(coalesce(d.topics, '{}')))`;
+
 interface WalletRow {
   novelos: number;
   novelos_at: Date;
@@ -136,7 +148,7 @@ export class ProgressRepository {
   async topicCounts(disciplineIds: number[]): Promise<Map<number, number>> {
     if (!disciplineIds.length) return new Map();
     const rows = await this.sql<{ id: number; n: number }[]>`
-      select id::int, cardinality(coalesce(topics, '{}'))::int as n from public.disciplines where id in ${this.sql(disciplineIds)}`;
+      select d.id::int, ${madeStops(this.sql)} as n from public.disciplines d where d.id in ${this.sql(disciplineIds)}`;
     return new Map(rows.map((r) => [r.id, r.n]));
   }
 
@@ -171,7 +183,7 @@ export class ProgressRepository {
         topics: string[] | null;
       }[]
     >`
-      select j.weekly_goal, d.id::int, d.name, coalesce(d.topics, '{}') as topics
+      select j.weekly_goal, d.id::int, d.name, coalesce(d.topics[1:${madeStops(this.sql)}], '{}') as topics
       from public.journeys j left join public.disciplines d on d.id = j.discipline_id
       where j.user_id = ${userId}`;
     return {
@@ -218,7 +230,8 @@ export class ProgressRepository {
     const [row] = await this.sql<
       { id: number; name: string; topics: string[] }[]
     >`
-      select id::int, name, coalesce(topics, '{}') as topics from public.disciplines where id = ${id}`;
+      select d.id::int, d.name, coalesce(d.topics[1:${madeStops(this.sql)}], '{}') as topics
+      from public.disciplines d where d.id = ${id}`;
     return row ?? null;
   }
 }
