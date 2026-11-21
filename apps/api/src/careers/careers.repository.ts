@@ -1,5 +1,9 @@
 import type { CareerOption, Source } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
+import {
+  type InstitutionRow,
+  toInstitution,
+} from '../books/books.repository.js';
 import { SQL, type Sql } from '../platform/database/database.module.js';
 
 /** One course's first-term subjects in one shift, as one curriculum source publishes them. */
@@ -47,29 +51,48 @@ export type Career = Omit<CareerOption, 'reason'>;
 export class CareersRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
-  /** The careers with a real first-term curriculum. */
+  /** The careers with a path people can open now: a real first-term curriculum and its first stop made. */
   async withFirstTerm(): Promise<Career[]> {
     const sql = this.sql;
     const rows = await sql<
-      { slug: string; name: string; institution: string; city: string }[]
+      (InstitutionRow & {
+        slug: string;
+        name: string;
+        course_id: number;
+        course: string;
+        city: string;
+      })[]
     >`
-      select distinct p.slug, p.name, coalesce(i.short_name, i.name) as institution, c.city
+      select p.slug, p.name, c.id::int as course_id, c.name as course, c.city, i.name as institution, i.short_name, i.kind,
+        i.logo_url, i.logo_license, i.logo_source_url, i.photo_url, i.photo_credit, i.photo_license, i.photo_source_url
       from public.professions p
       join public.courses c on c.profession_id = p.id
       join public.institutions i on i.id = c.institution_id
+      -- The same rule as GET /careers/:slug/paths: a first-semester subject with topics, a fetched source and its first
+      -- stop made, so every offering's courseId opens a path.
       where exists (
         select 1 from public.curriculum_subjects cs
+        join public.disciplines d on d.id = cs.discipline_id
+        join public.sources s on s.id = cs.source_id
+        join public.stop_contents sc on sc.discipline_id = d.id and sc.topic = 0 and sc.topic_text = d.topics[1]
         where cs.course_id = c.id and (cs.term = 1 or (cs.term is null and cs.year = 1))
+          and cardinality(d.topics) > 0 and s.last_fetched_at is not null
       )
-      order by p.name, institution, c.city`;
+      order by p.name, coalesce(i.short_name, i.name), c.city, c.id`;
 
     const careers = new Map<string, Career>();
-    for (const { slug, name, institution, city } of rows) {
+    for (const row of rows) {
+      const { slug, name } = row;
       const career = careers.get(slug) ?? {
         profession: { slug, name },
         offerings: [],
       };
-      career.offerings.push({ institution, city });
+      career.offerings.push({
+        courseId: row.course_id,
+        course: row.course,
+        institution: toInstitution(row),
+        city: row.city,
+      });
       careers.set(slug, career);
     }
     return [...careers.values()];
