@@ -203,8 +203,9 @@ function Pairs({ exercise, onDone }: { exercise: Of<"una_os_pares">; onDone: Don
 
   const pickRight = (i: number) => {
     if (left === null) return;
-    // Any tile with the right text is right.
-    if (exercise.pairs[i]![1] !== exercise.pairs[left]![1]) {
+    // Any tile with the right text is right, and so is the definition of a term that reads the same.
+    const [term, meaning] = exercise.pairs[left]!;
+    if (exercise.pairs[i]![1] !== meaning && exercise.pairs[i]![0] !== term) {
       setWrongs(wrongs + 1);
       setFlash(i);
       return;
