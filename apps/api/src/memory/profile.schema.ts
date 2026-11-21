@@ -45,10 +45,16 @@ export const profileInput = z.object({
 
 /** The model's profile cut to profileInput's bounds, so the client can send back what the API gave it. */
 export function boundProfile(p: z.infer<typeof profileSchema>): AranduProfile {
-  const one = (s: string | null) => s?.trim().slice(0, ITEM_MAX) || null;
+  // A cut emoji leaves a lone high surrogate, which Postgres rejects in jsonb.
+  const cut = (s: string) =>
+    s
+      .trim()
+      .slice(0, ITEM_MAX)
+      .replace(/[\uD800-\uDBFF]$/, '');
+  const one = (s: string | null) => (s === null ? null : cut(s) || null);
   const many = (list: string[]) =>
     list
-      .map((s) => s.trim().slice(0, ITEM_MAX))
+      .map(cut)
       .filter(Boolean)
       .slice(0, ITEMS_MAX);
   return {

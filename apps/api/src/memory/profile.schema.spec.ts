@@ -38,6 +38,21 @@ describe('boundProfile', () => {
     expect(profileInput.safeParse(boundProfile(messy)).success).toBe(true);
   });
 
+  it('drops a high surrogate left by cutting an emoji at the limit', () => {
+    const item = 'a'.repeat(199) + '😀';
+    const out = boundProfile({
+      ...clean,
+      situation: item,
+      likedSubjects: [item],
+    });
+
+    expect(out.situation).toBe('a'.repeat(199));
+    expect(out.likedSubjects).toEqual(['a'.repeat(199)]);
+    expect(JSON.stringify(out)).not.toContain('\\ud83d');
+    expect(out.situation).not.toMatch(/[\uD800-\uDBFF]$/);
+    expect(profileInput.safeParse(out).success).toBe(true);
+  });
+
   it('leaves a clean profile unchanged', () => {
     expect(boundProfile(clean)).toEqual(clean);
   });
