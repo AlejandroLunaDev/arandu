@@ -239,6 +239,28 @@ describe('exercisesOf (repeated choices)', () => {
       (d) => (d.toqueNoTrecho!.segments[0] = 'b'),
     ],
     ['ordene', 'steps', (d) => (d.ordene!.steps[2] = 'A')],
+    [
+      'verdadeiro_ou_falso',
+      'statements',
+      (d) => (d.verdadeiroOuFalso.statements[1].text = ' A '),
+    ],
+    [
+      'monte_a_frase',
+      'distractors that is also an answer word',
+      (d) => (d.monteAFrase!.distractors = [' B ']),
+    ],
+    [
+      'monte_a_frase',
+      'distractors',
+      (d) => (d.monteAFrase!.distractors = ['d', 'D ']),
+    ],
+    ['na_grade', 'rows', (d) => (d.naGrade!.rows.second = ' R0')],
+    ['na_grade', 'columns', (d) => (d.naGrade!.columns.second = 'C0 ')],
+    [
+      'separe_nas_cestas',
+      'baskets',
+      (d) => (d.separeNasCestas!.baskets.second = ' X'),
+    ],
   ])(
     'drops %s with the same text in two %s, keeping the others',
     (kind, _, repeat) => {
@@ -250,6 +272,15 @@ describe('exercisesOf (repeated choices)', () => {
       expect(list).toHaveLength(10);
     },
   );
+});
+
+describe('exercisesOf (monte_a_frase repeated answer word)', () => {
+  it('keeps it when the answer repeats a word and no distractor is an answer word', () => {
+    const d = full();
+    d.monteAFrase!.answer = ['o', 'gato', 'e', 'o', 'cão'];
+    d.monteAFrase!.distractors = ['rato', 'peixe'];
+    expect(exercisesOf(d).map((e) => e.kind)).toContain('monte_a_frase');
+  });
 });
 
 describe('exercisesOf (complete_a_frase tiles)', () => {

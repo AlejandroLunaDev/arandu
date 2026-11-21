@@ -163,7 +163,8 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
       pairs: up.pairs.map((p) => [p.term, p.match]),
       why: up.why,
     });
-  out.push({ kind: 'verdadeiro_ou_falso', mode: 'reconhecer', ...vf });
+  if (distinct(vf.statements.map((st) => st.text)))
+    out.push({ kind: 'verdadeiro_ou_falso', mode: 'reconhecer', ...vf });
   if (
     cf.text.split('___').length - 1 === cf.answers.length &&
     cf.answers.every((a) => count(cf.tiles, a) >= count(cf.answers, a))
@@ -177,12 +178,22 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
     separeNasCestas: sc,
   } = draft;
   const { toqueNoTrecho: tt, ordene: od, expliqueParaOArandu: ex } = draft;
-  if (mf) out.push({ kind: 'monte_a_frase', mode: 'produzir', ...mf });
+  // The answer may repeat a word; a distractor may not be one of its words, or a right tile would count as wrong.
+  if (
+    mf &&
+    distinct([
+      ...new Set(mf.answer.map((w) => w.trim().toLowerCase())),
+      ...mf.distractors,
+    ])
+  )
+    out.push({ kind: 'monte_a_frase', mode: 'produzir', ...mf });
   if (ef && inRange(ef.answer, ef.options) && distinct(ef.options))
     out.push({ kind: 'escolha_a_frase_certa', mode: 'reconhecer', ...ef });
   if (
     ng &&
     ng.items.every((i) => bit(i.row) && bit(i.column)) &&
+    distinct(pair(ng.rows)) &&
+    distinct(pair(ng.columns)) &&
     distinct(ng.items.map((i) => i.text))
   )
     out.push({
@@ -200,6 +211,7 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
   if (
     sc &&
     sc.items.every((i) => bit(i.basket)) &&
+    distinct(pair(sc.baskets)) &&
     distinct(sc.items.map((i) => i.text))
   )
     out.push({
