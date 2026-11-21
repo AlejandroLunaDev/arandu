@@ -16,6 +16,13 @@ export function EntryGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     let live = true;
     (async () => {
+      // O21's link comes back with this error when the Google account already has its own user: that account is
+      // who the person is, so they sign in to it (what this device did anonymously stays with the anonymous user).
+      const back = new URLSearchParams(`${location.search.slice(1)}&${location.hash.slice(1)}`);
+      if (back.get("error_code") === "identity_already_exists") {
+        await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}/app` } });
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       const journey = data.session ? await api<Journey>("/me/journey").catch(() => null) : null;
       if (!live) return;

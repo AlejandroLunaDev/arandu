@@ -2,7 +2,7 @@
 
 import type { Exercise, StopContent } from "@arandu/contracts";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { safeUrl } from "@/landing/book/book-data";
 import { MainButton } from "@/ui/main-button";
 import styles from "./onboarding.module.css";
@@ -24,12 +24,16 @@ const KIND: Partial<Record<Exercise["kind"], string>> = {
 // first stop mistakes spend no novelo. Every word on screen comes from the stop (GET /stops/:disciplineId/:topic).
 // shortcut: the onboarding's first stops hold only these four kinds (measured: all 125 of them); the other seven
 // come with the stops after the first.
-export function StopView({ stop, caption, onClose, onDone }: { stop: StopContent; caption: string; onClose: () => void; onDone: (mistakes: number) => void }) {
+type Props = { stop: StopContent; caption: string; busy: boolean; failed: boolean; onClose: () => void; onDone: (mistakes: number) => void };
+
+export function StopView({ stop, caption, busy, failed, onClose, onDone }: Props) {
   const [card, setCard] = useState(0);
   const [queue, setQueue] = useState(() => stop.exercises.map((_, i) => i));
   const [attempt, setAttempt] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [sheet, setSheet] = useState<{ right: boolean; title: string } | null>(null);
+  // Every exercise is right: the result is being saved, or failed to and waits for another try.
+  const [ended, setEnded] = useState(false);
 
   const inCards = card < stop.cards.length;
   const total = stop.exercises.length;
@@ -41,12 +45,18 @@ export function StopView({ stop, caption, onClose, onDone }: { stop: StopContent
     setMistakes(mistakes + more);
     setSheet({ right, title: title ?? (right ? "Isso!" : "Quase.") });
   };
+  // The API takes up to 100 mistakes a stop.
+  const save = () => onDone(Math.min(mistakes, 100));
   const next = () => {
     const rest = afterAnswer(queue, sheet!.right);
     setSheet(null);
+    if (rest.length === 0) {
+      setEnded(true);
+      save();
+      return;
+    }
     setAttempt(attempt + 1);
-    if (rest.length === 0) onDone(mistakes);
-    else setQueue(rest);
+    setQueue(rest);
   };
 
   return (
@@ -64,7 +74,7 @@ export function StopView({ stop, caption, onClose, onDone }: { stop: StopContent
       ) : (
         exercise && (
           <>
-            <div className={styles.body} inert={sheet !== null}>
+            <div className={styles.body} inert={sheet !== null || ended}>
               <div className={p.stop}>
                 <p className={p.caption}>
                   {total - left + 1} de {total} · {KIND[exercise.kind] ?? exercise.kind}
@@ -82,6 +92,18 @@ export function StopView({ stop, caption, onClose, onDone }: { stop: StopContent
                 </p>
                 <MainButton onClick={next}>Continuar</MainButton>
               </section>
+            )}
+            {ended && (
+              <footer className={`${styles.foot} ${styles.last}`}>
+                {failed && (
+                  <p className={styles.error} role="alert">
+                    Não consegui guardar a parada agora. Tenta de novo?
+                  </p>
+                )}
+                <MainButton disabled={busy} onClick={save}>
+                  {busy ? "Guardando…" : "Tentar de novo"}
+                </MainButton>
+              </footer>
             )}
           </>
         )
@@ -167,20 +189,29 @@ function Choose({ exercise, onDone }: { exercise: Of<"escolha_uma"> | Of<"escolh
 function Pairs({ exercise, onDone }: { exercise: Of<"una_os_pares">; onDone: Done }) {
   const [right] = useState(() => shuffled(exercise.pairs.map((_, i) => i)));
   const [left, setLeft] = useState<number | null>(null);
-  const [matched, setMatched] = useState<number[]>([]);
+  // Matched tiles, by pair index, per column: they can differ, since a stop may repeat a definition.
+  const [doneLeft, setDoneLeft] = useState<number[]>([]);
+  const [doneRight, setDoneRight] = useState<number[]>([]);
   const [flash, setFlash] = useState<number | null>(null);
   const [wrongs, setWrongs] = useState(0);
 
+  useEffect(() => {
+    if (flash === null) return;
+    const id = setTimeout(() => setFlash(null), 600);
+    return () => clearTimeout(id);
+  }, [flash]);
+
   const pickRight = (i: number) => {
     if (left === null) return;
-    if (i !== left) {
+    // Any tile with the right text is right.
+    if (exercise.pairs[i]![1] !== exercise.pairs[left]![1]) {
       setWrongs(wrongs + 1);
       setFlash(i);
-      setTimeout(() => setFlash(null), 600);
       return;
     }
-    const all = [...matched, i];
-    setMatched(all);
+    const all = [...doneLeft, left];
+    setDoneLeft(all);
+    setDoneRight([...doneRight, i]);
     setLeft(null);
     if (all.length === exercise.pairs.length) onDone(true, wrongs, "Pares completos!");
   };
@@ -191,14 +222,14 @@ function Pairs({ exercise, onDone }: { exercise: Of<"una_os_pares">; onDone: Don
       <div className={p.pairs}>
         <div>
           {exercise.pairs.map(([term], i) => (
-            <button key={i} type="button" className={p.tile} aria-pressed={left === i} data-state={matched.includes(i) ? "done" : undefined} disabled={matched.includes(i)} onClick={() => setLeft(i)}>
+            <button key={i} type="button" className={p.tile} aria-pressed={left === i} data-state={doneLeft.includes(i) ? "done" : undefined} disabled={doneLeft.includes(i)} onClick={() => setLeft(i)}>
               {term}
             </button>
           ))}
         </div>
         <div>
           {right.map((i) => (
-            <button key={i} type="button" className={p.tile} data-state={matched.includes(i) ? "done" : flash === i ? "no" : undefined} disabled={matched.includes(i)} onClick={() => pickRight(i)}>
+            <button key={i} type="button" className={p.tile} data-state={doneRight.includes(i) ? "done" : flash === i ? "no" : undefined} disabled={doneRight.includes(i)} onClick={() => pickRight(i)}>
               {exercise.pairs[i]![1]}
             </button>
           ))}

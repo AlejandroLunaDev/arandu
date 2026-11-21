@@ -103,6 +103,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
   if (step === "stop" && stop)
     return (
       <StopView
+        {...next}
         stop={stop}
         caption={`${course.course} · ${name} · ${stop.discipline.name}`}
         onClose={() => setStep("how")}
@@ -125,7 +126,10 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         onAge={(age) =>
           attempt(async () => {
             await save({ age });
-            setStep("google");
+            // Someone who came in with "Já tenho uma conta" is already on Google: nothing to link.
+            const { data } = await supabase.auth.getSession();
+            if (data.session?.user.is_anonymous === false) router.push("/app");
+            else setStep("google");
           })
         }
       />

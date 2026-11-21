@@ -268,7 +268,9 @@
   white-space: pre-line;
 }
 
+/* 28px, its hit area grown to 44px by an invisible ring. */
 .source {
+  position: relative;
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -279,6 +281,12 @@
   color: var(--violet-200);
   font-size: 12px;
   text-decoration: none;
+}
+
+.source::after {
+  content: "";
+  position: absolute;
+  inset: -8px -2px;
 }
 
 .prompt {
@@ -379,7 +387,9 @@
   line-height: 32px;
 }
 
+/* 28px, no border: an 8px ring makes 44. */
 .gap {
+  position: relative;
   min-width: 72px;
   height: 28px;
   margin: 0 2px;
@@ -394,6 +404,12 @@
   cursor: pointer;
 }
 
+.gap::after {
+  content: "";
+  position: absolute;
+  inset: -8px -2px;
+}
+
 .bank {
   display: flex;
   flex-wrap: wrap;
@@ -401,8 +417,16 @@
   margin-top: 16px;
 }
 
+/* 36px: from inside the 1.5px border, 36 - 3 + 2 x 6 = 45. */
 .bank .tile {
+  position: relative;
   min-height: 36px;
+}
+
+.bank .tile::after {
+  content: "";
+  position: absolute;
+  inset: -6px -2px;
 }
 
 /* The result: a sheet at the bottom, green when right, red when not. */
