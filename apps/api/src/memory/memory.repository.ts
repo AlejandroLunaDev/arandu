@@ -3,6 +3,7 @@ import type {
   AranduMemory,
   AranduProfile,
   ChatMessage,
+  Conversations,
 } from '@arandu/contracts';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { SQL, type Sql } from '../platform/database/database.module.js';
@@ -15,6 +16,9 @@ export type SessionKind = 'onboarding' | 'career';
 // Every read is bounded, so one person with a long history never loads it all into the API's memory.
 /** The sessions GET /arandu/memory lists, newest first. */
 const SESSIONS_LISTED = 50;
+/** S2 lists this many of the newest conversations, each with at most its newest CONVERSATION_MESSAGES messages. */
+const CONVERSATIONS_LISTED = 50;
+const CONVERSATION_MESSAGES = 100;
 /** The newest messages of unsummarized sessions the summary reads; older ones are folded in without being read. */
 const MESSAGES_SUMMARIZED = 200;
 
@@ -54,6 +58,61 @@ async function asPerson<T>(write: Promise<T>): Promise<T> {
 @Injectable()
 export class MemoryRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
+
+  /** S2: the sessions with messages and the card questions, as one list, newest first. */
+  async conversations(userId: string): Promise<Conversations> {
+    const sessions = await this.sql<
+      {
+        kind: SessionKind;
+        professionSlug: string | null;
+        startedAt: Date;
+        messages: Conversations['conversations'][number]['messages'];
+      }[]
+    >`
+      select s.kind, s.profession_slug as "professionSlug", s.started_at as "startedAt",
+        (select json_agg(json_build_object('role', m.role, 'text', m.content) order by m.id)
+          from (select id, role, content from public.arandu_messages where session_id = s.id
+            order by id desc limit ${CONVERSATION_MESSAGES}) m) as messages
+      from public.arandu_sessions s
+      where s.user_id = ${userId} and exists (select 1 from public.arandu_messages m where m.session_id = s.id)
+      order by s.started_at desc limit ${CONVERSATIONS_LISTED}`;
+    const questions = await this.sql<
+      {
+        disciplineId: number;
+        topic: number;
+        question: string;
+        answer: string;
+        createdAt: Date;
+      }[]
+    >`
+      select discipline_id::int as "disciplineId", topic, question, answer, created_at as "createdAt"
+      from public.stop_questions where user_id = ${userId}
+      order by created_at desc limit ${CONVERSATIONS_LISTED}`;
+    const conversations: Conversations['conversations'] = [
+      ...sessions.map((s) => ({
+        kind: s.kind,
+        startedAt: s.startedAt.toISOString(),
+        professionSlug: s.professionSlug,
+        stop: null,
+        messages: s.messages,
+      })),
+      ...questions.map((q) => ({
+        kind: 'card' as const,
+        startedAt: q.createdAt.toISOString(),
+        professionSlug: null,
+        stop: { disciplineId: q.disciplineId, topic: q.topic },
+        messages: [
+          { role: 'user' as const, text: q.question },
+          { role: 'assistant' as const, text: q.answer },
+        ],
+      })),
+    ];
+    return {
+      conversations: conversations
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+        .slice(0, CONVERSATIONS_LISTED),
+    };
+  }
 
   async read(userId: string): Promise<AranduMemory> {
     const [memory] = await this.sql<{ profile: AranduProfile | null }[]>`

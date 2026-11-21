@@ -64,6 +64,31 @@ describe('Memory', () => {
     });
   });
 
+  describe('GET /arandu/memory/conversations', () => {
+    it('returns what the repository gives, asked for the signed-in person only', async () => {
+      const listed = {
+        conversations: [
+          {
+            kind: 'career',
+            startedAt: '2026-11-02T00:00:00.000Z',
+            professionSlug: 'direito',
+            stop: null,
+            messages: [{ role: 'user', text: 'Oi' }],
+          },
+        ],
+      };
+      memory.conversations.mockResolvedValue(listed);
+
+      const res = await request(app.getHttpServer())
+        .get('/arandu/memory/conversations')
+        .expect(200);
+
+      expect(res.body).toEqual(listed);
+      expect(memory.conversations).toHaveBeenCalledOnce();
+      expect(memory.conversations).toHaveBeenCalledWith(USER_ID);
+    });
+  });
+
   describe('DELETE /arandu/memory/facts/:id', () => {
     it('answers 204 and deletes the fact of the person', async () => {
       await request(app.getHttpServer())

@@ -1,4 +1,4 @@
-import type { AranduMemory } from '@arandu/contracts';
+import type { AranduMemory, Conversations } from '@arandu/contracts';
 import { Controller, Delete, Get, HttpCode, Param } from '@nestjs/common';
 import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
@@ -12,6 +12,12 @@ export class MemoryController {
   @Get()
   read(@UserId() userId: string): Promise<AranduMemory> {
     return this.memory.read(userId);
+  }
+
+  /** S2: the conversations with Arandu as text, newest first. */
+  @Get('conversations')
+  conversations(@UserId() userId: string): Promise<Conversations> {
+    return this.memory.conversations(userId);
   }
 
   /** The person deletes one thing Arandu remembers (K5). */

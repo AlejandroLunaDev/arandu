@@ -43,6 +43,11 @@ describe('AppModule (e2e)', () => {
     });
   });
 
+  it('GET /arandu/memory/conversations without a token is 401', () =>
+    request(app.getHttpServer())
+      .get('/arandu/memory/conversations')
+      .expect(401));
+
   it('refuses a JSON body over 20 kb with 413', () =>
     request(app.getHttpServer())
       .post('/arandu/chat')
