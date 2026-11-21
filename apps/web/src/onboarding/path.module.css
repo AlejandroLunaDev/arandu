@@ -1,0 +1,524 @@
+/* O11-O21: the first semester, the rhythm, the first stop and the sign-up. Compact scale: 14px text, 8-12px radii. */
+
+.card {
+  margin: 6px 16px 0;
+  padding: 12px;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--amber-400);
+  color: var(--ink-900);
+  font: 700 13px/1 var(--font-bricolage), var(--font-display);
+}
+
+.meta {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.why {
+  margin: 8px 0 0;
+  color: var(--violet-200);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.label {
+  margin: 12px 0 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The first semester's subjects as book spines on a ledge; the first carries the paw.
+ * shortcut: CSS spines stand in for the landing's 3D books until the 3D shelf is in the app. */
+.shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 2px 0;
+  border-bottom: 3px solid var(--ink-700);
+}
+
+.book {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 104px;
+  padding: 8px 0;
+  border-radius: 4px 4px 1px 1px;
+  background: var(--violet-700);
+  color: var(--cream-50);
+  font: 600 10px/1.1 var(--font-body);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book:nth-child(3n + 2) {
+  height: 94px;
+  background: var(--amber-700);
+}
+
+.book:nth-child(3n + 3) {
+  height: 112px;
+  background: var(--ink-700);
+}
+
+.book[data-first] {
+  box-shadow: inset 0 0 0 2px var(--amber-400);
+}
+
+.paw {
+  color: var(--amber-400);
+}
+
+/* O12: the week, a paw a day; the ones the goal lights are amber. */
+.week {
+  display: flex;
+  justify-content: space-between;
+  margin: 12px 16px 0;
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.day i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink-800);
+}
+
+.day[data-on] i {
+  background: var(--amber-400);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--amber-400) 50%, transparent);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.option small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* O13: the game in three rows. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+
+.row {
+  padding: 10px 12px;
+  border: 1.5px solid var(--ink-700);
+  border-radius: 10px;
+}
+
+.row strong {
+  display: block;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.row span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+/* The stop's header: close, progress, the "primeira parada" tag. */
+.top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 0;
+}
+
+.close {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.close::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.progress {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 99px;
+  background: var(--ink-800);
+  appearance: none;
+}
+
+.progress::-webkit-progress-bar {
+  background: var(--ink-800);
+}
+
+.progress::-webkit-progress-value {
+  border-radius: 99px;
+  background: var(--amber-400);
+  transition: width 0.3s;
+}
+
+.progress::-moz-progress-bar {
+  border-radius: 99px;
+  background: var(--amber-400);
+}
+
+.first {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--amber-400) 18%, transparent);
+  color: var(--amber-300);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* The stop fills the screen, so an exercise's button sits at the bottom like every other step's. */
+.stop {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 12px 16px 20px;
+}
+
+.action {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.mode {
+  padding: 1px 6px;
+  border-radius: 99px;
+  box-shadow: inset 0 0 0 1px var(--ink-700);
+}
+
+.title {
+  margin: 0;
+  font: 700 18px/1.25 var(--font-bricolage), var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.page {
+  margin: 10px 0 0;
+  padding: 12px;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 21px;
+  white-space: pre-line;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 8px;
+  padding: 0 10px;
+  border-radius: 99px;
+  background: var(--ink-850);
+  color: var(--violet-200);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.prompt {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* An answer's state once checked: right is green, wrong red. */
+.stop [data-state="ok"] {
+  border-color: var(--success) !important;
+  background: color-mix(in srgb, var(--success) 14%, transparent) !important;
+}
+
+.stop [data-state="no"] {
+  border-color: var(--error) !important;
+  background: color-mix(in srgb, var(--error) 14%, transparent) !important;
+}
+
+.stop [data-state="done"] {
+  opacity: 0.4;
+}
+
+/* una_os_pares: two columns of tiles. */
+.pairs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pairs > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tile {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--ink-700);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+  color: var(--text);
+  font: 500 13px/1.3 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile[aria-pressed="true"] {
+  border-color: var(--violet-400);
+  background: var(--violet-900);
+}
+
+.tile:focus-visible,
+.gap:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* verdadeiro_ou_falso: one statement a card. */
+.statement {
+  padding: 12px;
+  border: 1.5px solid var(--ink-700);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.statement p {
+  margin: 0;
+}
+
+.statement small {
+  display: block;
+  margin-top: 8px;
+  color: var(--violet-200);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.tf {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* complete_a_frase: the sentence with its gaps, and the word bank under it. */
+.sentence {
+  font-size: 15px;
+  line-height: 32px;
+}
+
+.gap {
+  min-width: 72px;
+  height: 28px;
+  margin: 0 2px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid var(--amber-400);
+  border-radius: 6px 6px 0 0;
+  background: var(--ink-850);
+  color: var(--amber-200);
+  font: 600 13px/1 var(--font-body);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.bank .tile {
+  min-height: 36px;
+}
+
+/* The result: a sheet at the bottom, green when right, red when not. */
+.sheet {
+  flex: none;
+  padding: 14px 16px 20px;
+  border-top: 2px solid var(--success);
+  border-radius: 16px 16px 0 0;
+  background: color-mix(in srgb, var(--success) 12%, var(--ink-900));
+}
+
+.sheet[data-wrong] {
+  border-color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, var(--ink-900));
+}
+
+.sheet h2 {
+  margin: 0;
+  color: var(--success);
+  font: 700 17px/1.2 var(--font-bricolage), var(--font-display);
+}
+
+.sheet[data-wrong] h2 {
+  color: var(--error);
+}
+
+.sheet p {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+/* O19: the stop is done. */
+.done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 0;
+  text-align: center;
+}
+
+.done h1 {
+  margin: 8px 0 0;
+  font: 700 22px/1.2 var(--font-bricolage), var(--font-display);
+}
+
+.stats {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.stats span {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--ink-850);
+  font-size: 13px;
+}
+
+.stats strong {
+  color: var(--amber-300);
+}
+
+/* O20: the age stepper. */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.stepper output {
+  min-width: 64px;
+  font: 700 40px/1 var(--font-bricolage), var(--font-display);
+  text-align: center;
+}
+
+.stepper button {
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid var(--ink-700);
+  border-radius: 50%;
+  background: none;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.stepper button:disabled {
+  opacity: 0.35;
+}
+
+/* O21: Google's own white button. */
+.google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--cream-50);
+  color: var(--ink-950);
+  font: 600 14px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.terms {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.terms a {
+  color: var(--violet-200);
+}
