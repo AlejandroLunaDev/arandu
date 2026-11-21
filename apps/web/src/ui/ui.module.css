@@ -153,7 +153,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
   border-radius: 12px;
   color: var(--violet-200);
   font: 500 13px/1 var(--font-body);

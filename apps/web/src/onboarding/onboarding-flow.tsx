@@ -1,12 +1,12 @@
 "use client";
 
 import type { Journey, OnboardingAnswer, OnboardingReply, Recommendations } from "@arandu/contracts";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/app-shell/api";
 import { nextQuestion, toMessage, toProfileInput, withAnswer } from "./answers";
 import { HelloView } from "./hello-view";
-import { byInstitution, type Place } from "./places";
+import { PathFlow } from "./path-flow";
+import { byInstitution, type Place, type PlaceCourse } from "./places";
 import { PlacesView } from "./places-view";
 import { ProfileView } from "./profile-view";
 import { QuestionView } from "./question-view";
@@ -19,7 +19,6 @@ const MAX_PICKS = 10;
 // answers are saved to the journey (PATCH /me/journey), Arandu shows what it understood (O09), and the
 // recommended careers come by institution (O10, POST /arandu/recommendations).
 export function OnboardingFlow() {
-  const router = useRouter();
   const [turn, setTurn] = useState<OnboardingReply | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswer[]>([]);
   const [picks, setPicks] = useState<string[]>([]);
@@ -29,6 +28,7 @@ export function OnboardingFlow() {
   const [profileShown, setProfileShown] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [pick, setPick] = useState<number | null>(null);
+  const [chosen, setChosen] = useState<{ course: PlaceCourse; place: Place } | null>(null);
 
   // Each call either moves on or leaves everything as it was, so "Tenta de novo" repeats it whole.
   const attempt = async (call: () => Promise<void>) => {
@@ -48,6 +48,8 @@ export function OnboardingFlow() {
   if (!turn)
     return <HelloView busy={busy} failed={failed} onStart={() => attempt(async () => setTurn(await api<OnboardingReply>("/arandu/onboarding", { method: "POST", body: {} })))} />;
 
+  if (chosen) return <PathFlow course={chosen.course} place={chosen.place} />;
+
   if (places)
     return (
       <PlacesView
@@ -58,10 +60,10 @@ export function OnboardingFlow() {
         onPick={setPick}
         onNext={() =>
           attempt(async () => {
-            const course = places.flatMap((p) => p.courses).find((c) => c.courseId === pick)!;
+            const place = places.find((p) => p.courses.some((c) => c.courseId === pick))!;
+            const course = place.courses.find((c) => c.courseId === pick)!;
             await api<Journey>("/me/journey", { method: "PATCH", body: { professionSlug: course.profession.slug, courseId: course.courseId } });
-            // shortcut: O11 (the course's first semester) is the next step; until it is built this ends in the room.
-            router.push("/app");
+            setChosen({ course, place });
           })
         }
       />
