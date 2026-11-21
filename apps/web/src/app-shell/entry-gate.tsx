@@ -20,6 +20,8 @@ export function EntryGate({ children }: { children: ReactNode }) {
       // who the person is, so they sign in to it (what this device did anonymously stays with the anonymous user).
       const back = new URLSearchParams(`${location.search.slice(1)}&${location.hash.slice(1)}`);
       if (back.get("error_code") === "identity_already_exists") {
+        // Drop the error from history, or Back from Google's page would land here and send the person to Google again.
+        history.replaceState(null, "", "/app");
         await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}/app` } });
         return;
       }

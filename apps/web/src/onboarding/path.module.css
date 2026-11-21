@@ -387,7 +387,7 @@
   line-height: 32px;
 }
 
-/* 28px, no border: an 8px ring makes 44. */
+/* 28px with a 2px bottom border inside it: a 9px ring from the 26px box makes 44. */
 .gap {
   position: relative;
   min-width: 72px;
@@ -407,7 +407,7 @@
 .gap::after {
   content: "";
   position: absolute;
-  inset: -8px -2px;
+  inset: -9px -2px;
 }
 
 .bank {
