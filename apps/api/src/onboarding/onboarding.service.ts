@@ -9,7 +9,11 @@ import { AiService } from '@nestjs/ai';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { MemoryService } from '../memory/memory.service.js';
-import { profileSchema, TOPICS } from '../memory/profile.schema.js';
+import {
+  boundProfile,
+  profileSchema,
+  TOPICS,
+} from '../memory/profile.schema.js';
 import { onboardingInstructions } from './onboarding.prompt.js';
 import { profileReadingInstructions } from './profile-reading.prompt.js';
 
@@ -76,7 +80,7 @@ export class OnboardingService {
       maxOutputTokens: 600,
     });
     // Covered is what they answered, whatever the model says.
-    return { ...object, covered: answers.map((a) => a.topic) };
+    return boundProfile({ ...object, covered: answers.map((a) => a.topic) });
   }
 
   /** Arandu's next turn for the conversation so far; empty to start it. */
@@ -88,13 +92,14 @@ export class OnboardingService {
       ...(messages.length ? { messages } : { prompt: 'Start the onboarding.' }),
       maxOutputTokens: 700,
     });
-    const covered = [...new Set(object.profile.covered)];
+    const profile = boundProfile(object.profile);
+    const { covered } = profile;
     const answers = messages.filter((m) => m.role === 'user').length;
     const done = covered.length === TOPICS.length || answers >= MAX_ANSWERS;
     return {
       reply: object.reply,
       quickReplies: done ? [] : object.quickReplies.slice(0, 5),
-      profile: { ...object.profile, covered },
+      profile,
       progress: { answered: covered.length, total: TOPICS.length },
       done,
     };

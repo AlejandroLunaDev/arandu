@@ -1,4 +1,4 @@
-import type { OnboardingTopic } from '@arandu/contracts';
+import type { AranduProfile, OnboardingTopic } from '@arandu/contracts';
 import { z } from 'zod';
 
 /** The onboarding's topics, in the order Arandu asks them (docs/05-functional-map.md S1). */
@@ -24,9 +24,12 @@ export const profileSchema = z.object({
   covered: z.array(z.enum(TOPICS)),
 });
 
+const ITEM_MAX = 200;
+const ITEMS_MAX = 10;
+
 // Trust boundary: the profile comes back from the client, edited by the person (S3), so every field is bounded.
-const item = z.string().trim().min(1).max(200);
-const items = z.array(item).max(10);
+const item = z.string().trim().min(1).max(ITEM_MAX);
+const items = z.array(item).max(ITEMS_MAX);
 
 /** The profile as a request carries it. */
 export const profileInput = z.object({
@@ -39,6 +42,26 @@ export const profileInput = z.object({
   careerIdea: item.nullable(),
   covered: z.array(z.enum(TOPICS)).max(TOPICS.length),
 });
+
+/** The model's profile cut to profileInput's bounds, so the client can send back what the API gave it. */
+export function boundProfile(p: z.infer<typeof profileSchema>): AranduProfile {
+  const one = (s: string | null) => s?.trim().slice(0, ITEM_MAX) || null;
+  const many = (list: string[]) =>
+    list
+      .map((s) => s.trim().slice(0, ITEM_MAX))
+      .filter(Boolean)
+      .slice(0, ITEMS_MAX);
+  return {
+    situation: one(p.situation),
+    likedSubjects: many(p.likedSubjects),
+    hardSubjects: many(p.hardSubjects),
+    interests: many(p.interests),
+    workStyle: many(p.workStyle),
+    admired: many(p.admired),
+    careerIdea: one(p.careerIdea),
+    covered: [...new Set(p.covered)],
+  };
+}
 
 /** The onboarding's answers as a request carries them (O02-O08): one per topic at most. */
 export const answersInput = z

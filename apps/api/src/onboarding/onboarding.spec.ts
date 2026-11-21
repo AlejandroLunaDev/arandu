@@ -9,6 +9,7 @@ import {
   withMemory,
 } from '../../test/http-app.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
+import { profileInput } from '../memory/profile.schema.js';
 import { OnboardingModule } from './onboarding.module.js';
 
 const ALL_TOPICS = [
@@ -37,6 +38,13 @@ const turn = (over: Record<string, unknown> = {}) => ({
   quickReplies: ['a', 'b'],
   ...over,
 });
+const messyProfile = (over: Record<string, unknown> = {}) =>
+  profile({
+    situation: '   ',
+    interests: Array.from({ length: 12 }, (_, i) => `i${i}`),
+    likedSubjects: ['', 'a'.repeat(250)],
+    ...over,
+  });
 const user = (content = 'Oi') => ({ role: 'user', content });
 
 describe('POST /arandu/onboarding', () => {
@@ -174,6 +182,17 @@ describe('POST /arandu/onboarding', () => {
     expect(res.body.done).toBe(false);
   });
 
+  it('returns a profile that passes profileInput when the model goes out of bounds', async () => {
+    await start({
+      profile: messyProfile({ covered: ['situation', 'situation'] }),
+    });
+
+    const res = await answer().expect(200);
+
+    expect(profileInput.safeParse(res.body.profile).success).toBe(true);
+    expect(res.body.profile.interests).toHaveLength(10);
+  });
+
   it.each([
     ['an extra key', { sessionId: SESSION_ID, message: 'Oi', extra: 1 }],
     ['an extra key on {}', { extra: 1 }],
@@ -223,6 +242,17 @@ describe('POST /arandu/onboarding/profile', () => {
     }).expect(200);
 
     expect(res.body.covered).toEqual(['interests', 'situation']);
+  });
+
+  it('returns a profile that passes profileInput when the model goes out of bounds', async () => {
+    await start(messyProfile());
+
+    const res = await post({
+      answers: [{ topic: 'interests', picks: ['música'], text: null }],
+    }).expect(200);
+
+    expect(profileInput.safeParse(res.body).success).toBe(true);
+    expect(res.body.interests).toHaveLength(10);
   });
 
   it.each([
