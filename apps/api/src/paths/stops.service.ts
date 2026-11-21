@@ -135,9 +135,13 @@ const pair = (t: { first: string; second: string }): [string, string] => [
 
 const inRange = (i: number, list: unknown[]) => i >= 0 && i < list.length;
 const bit = (i: number): i is 0 | 1 => i === 0 || i === 1;
+// Two choices with the same text leave the person guessing which one is right.
+const distinct = (list: string[]) =>
+  new Set(list.map((s) => s.trim().toLowerCase())).size === list.length;
+const count = (list: string[], s: string) => list.filter((x) => x === s).length;
 
 /** The drafted exercises, in R01-R12 order, without any the model got inconsistent (an answer out of range, a gap
- * without its word, a cell outside the grid). */
+ * without its word or with too few tiles for it, a cell outside the grid, two choices with the same text). */
 export function exercisesOf(draft: StopDraft): Exercise[] {
   const out: Exercise[] = [];
   const {
@@ -146,19 +150,23 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
     verdadeiroOuFalso: vf,
     completeAFrase: cf,
   } = draft;
-  if (inRange(eu.answer, eu.options))
+  if (inRange(eu.answer, eu.options) && distinct(eu.options))
     out.push({ kind: 'escolha_uma', mode: 'reconhecer', ...eu });
-  out.push({
-    kind: 'una_os_pares',
-    mode: 'reconhecer',
-    prompt: up.prompt,
-    pairs: up.pairs.map((p) => [p.term, p.match]),
-    why: up.why,
-  });
+  if (
+    distinct(up.pairs.map((p) => p.term)) &&
+    distinct(up.pairs.map((p) => p.match))
+  )
+    out.push({
+      kind: 'una_os_pares',
+      mode: 'reconhecer',
+      prompt: up.prompt,
+      pairs: up.pairs.map((p) => [p.term, p.match]),
+      why: up.why,
+    });
   out.push({ kind: 'verdadeiro_ou_falso', mode: 'reconhecer', ...vf });
   if (
     cf.text.split('___').length - 1 === cf.answers.length &&
-    cf.answers.every((a) => cf.tiles.includes(a))
+    cf.answers.every((a) => count(cf.tiles, a) >= count(cf.answers, a))
   )
     out.push({ kind: 'complete_a_frase', mode: 'reconhecer', ...cf });
 
@@ -170,9 +178,13 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
   } = draft;
   const { toqueNoTrecho: tt, ordene: od, expliqueParaOArandu: ex } = draft;
   if (mf) out.push({ kind: 'monte_a_frase', mode: 'produzir', ...mf });
-  if (ef && inRange(ef.answer, ef.options))
+  if (ef && inRange(ef.answer, ef.options) && distinct(ef.options))
     out.push({ kind: 'escolha_a_frase_certa', mode: 'reconhecer', ...ef });
-  if (ng && ng.items.every((i) => bit(i.row) && bit(i.column)))
+  if (
+    ng &&
+    ng.items.every((i) => bit(i.row) && bit(i.column)) &&
+    distinct(ng.items.map((i) => i.text))
+  )
     out.push({
       kind: 'na_grade',
       mode: 'reconhecer',
@@ -185,7 +197,11 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
       })),
       why: ng.why,
     });
-  if (sc && sc.items.every((i) => bit(i.basket)))
+  if (
+    sc &&
+    sc.items.every((i) => bit(i.basket)) &&
+    distinct(sc.items.map((i) => i.text))
+  )
     out.push({
       kind: 'separe_nas_cestas',
       mode: 'reconhecer',
@@ -194,9 +210,10 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
       items: sc.items.map((i) => ({ text: i.text, basket: i.basket as 0 | 1 })),
       why: sc.why,
     });
-  if (tt && inRange(tt.answer, tt.segments))
+  if (tt && inRange(tt.answer, tt.segments) && distinct(tt.segments))
     out.push({ kind: 'toque_no_trecho', mode: 'reconhecer', ...tt });
-  if (od) out.push({ kind: 'ordene', mode: 'produzir', ...od });
+  if (od && distinct(od.steps))
+    out.push({ kind: 'ordene', mode: 'produzir', ...od });
   if (ex) out.push({ kind: 'explique_para_o_arandu', mode: 'produzir', ...ex });
   return out;
 }
@@ -249,8 +266,15 @@ export class StopsService {
     return content;
   }
 
-  /** A stop's content, made now from a web search when it is not stored yet: for the loading scripts, not for people. */
-  async make(disciplineId: number, topic: number): Promise<StopContent> {
+  /**
+   * A stop's content, made now from a web search when it is not stored yet: for the loading scripts, not for people.
+   * `remake` writes its exercises again over the stored stop, from its stored cards; the old stop stays if that fails.
+   */
+  async make(
+    disciplineId: number,
+    topic: number,
+    remake = false,
+  ): Promise<StopContent> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
     if (!discipline || topicText === undefined)
@@ -259,7 +283,7 @@ export class StopsService {
       );
 
     const stored = await this.paths.stopContent(disciplineId, topic, topicText);
-    if (stored) return stored;
+    if (stored && !remake) return stored;
 
     const key = `${disciplineId}:${topic}`;
     let generation = this.pending.get(key);
