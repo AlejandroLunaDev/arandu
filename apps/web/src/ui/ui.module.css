@@ -1,0 +1,234 @@
+/* Arandu's pieces shared by the app's screens, ported from the Telas boards (Nuevas Pantallas). Their
+   sizes are the boards' own; colors are design tokens. */
+
+/* Arandu talking: the cat at the bubble's tail. */
+.talk {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 12px 16px 4px;
+}
+
+.talk > img {
+  flex: none;
+  width: 76px;
+  height: 76px;
+  margin: 0 -4px -4px -6px;
+  object-fit: contain;
+}
+
+.bubble {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 56px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* The tail points at the cat, on the bubble's left. */
+.talk .bubble::before {
+  content: "";
+  position: absolute;
+  bottom: 16px;
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  border-bottom: 1.5px solid var(--violet-400);
+  border-left: 1.5px solid var(--violet-400);
+  background: var(--ink-900);
+  rotate: 45deg;
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--amber-300);
+  animation: blink 0.9s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    background: transparent;
+  }
+}
+
+/* What comes after Arandu speaks fades in once the words are out. */
+.after {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: fade-in 0.35s ease both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The person's own words, on the right. */
+.you {
+  align-self: flex-end;
+  max-width: 78%;
+  margin: 8px 16px 0 auto;
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--violet-900);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* The main button: ink with a violet rim and two cat ears on top. */
+.button {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ink-950);
+  color: var(--text);
+  font: 600 14px/1 var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
+  filter: drop-shadow(1px 0 0 var(--violet-400)) drop-shadow(-1px 0 0 var(--violet-400))
+    drop-shadow(0 -1px 0 var(--violet-400)) drop-shadow(0 2px 0 var(--violet-400));
+}
+
+.button::before,
+.button::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  width: 9px;
+  height: 8px;
+  background: inherit;
+}
+
+.button::before {
+  left: 14px;
+  clip-path: polygon(0 100%, 25% 0, 100% 100%);
+}
+
+.button::after {
+  left: 26px;
+  clip-path: polygon(0 100%, 75% 0, 100% 100%);
+}
+
+.button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--amber-400);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.button:focus-visible,
+.ghost:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--violet-200);
+  font: 500 13px/1 var(--font-body);
+  text-decoration: none;
+}
+
+/* The composer: one field, its button inside. */
+.compose {
+  display: flex;
+  padding: 6px 12px 16px;
+  background: var(--ink-900);
+}
+
+.field {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px 4px 4px 14px;
+  border-radius: 22px;
+  background: var(--ink-850);
+  box-shadow: inset 0 0 0 1.5px var(--ink-700);
+}
+
+.field:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--violet-400);
+}
+
+/* 16px, so iOS does not zoom in on focus. */
+.field input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: 400 16px var(--font-body);
+}
+
+.field input::placeholder {
+  color: var(--ink-500);
+}
+
+.send {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--amber-400);
+  color: var(--ink-900);
+  cursor: pointer;
+}
+
+.send svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret,
+  .after {
+    animation: none;
+  }
+}
