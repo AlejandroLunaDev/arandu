@@ -32,17 +32,25 @@ export function PlacesView({ places, pick, busy, failed, onPick, onNext }: Props
                     <div className={styles.photo}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- Wikimedia Commons file of any size: no optimizer route for it. */}
                       <img src={thumb(photo)} alt="" loading="lazy" />
-                      <span className={styles.credit}>
+                      {/* The licenses (CC BY, CC BY-SA) ask for a link to the source, as the landing's book does. */}
+                      <a className={styles.credit} href={safeUrl(institution.photo.sourceUrl) ?? undefined} target="_blank" rel="noreferrer">
                         Foto: {institution.photo.credit} · {institution.photo.license}
-                      </span>
+                      </a>
                     </div>
                   )}
                   <div className={styles.placeHead}>
-                    {logo && (
-                      <span className={styles.logo}>
+                    {logo && institution.logo && (
+                      <a
+                        className={styles.logo}
+                        href={safeUrl(institution.logo.sourceUrl) ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Logo: ${institution.logo.license}`}
+                        aria-label={`Logo de ${institution.name}: ${institution.logo.license}`}
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element -- as above */}
                         <img src={thumb(logo)} alt="" loading="lazy" />
-                      </span>
+                      </a>
                     )}
                     <span className={styles.meta}>
                       {placeName(institution)} · {city}
