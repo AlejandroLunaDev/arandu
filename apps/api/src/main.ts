@@ -21,7 +21,7 @@ async function bootstrap() {
   // Only the web app may call the API from a browser; the token travels in the Authorization header, not a cookie.
   app.enableCors({
     origin: config.get('CORS_ORIGINS', { infer: true }),
-    methods: ['GET', 'POST', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Authorization', 'Content-Type'],
     maxAge: 600,
   });
