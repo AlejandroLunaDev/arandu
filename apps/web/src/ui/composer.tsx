@@ -5,7 +5,8 @@ import styles from "./ui.module.css";
 
 // The composer: one field, and the send button appears inside it once there is text.
 // shortcut: no mic yet (voice to text comes with the talking part); it goes where the send button sits.
-// While Arandu is answering (busy) Enter does nothing, so the words stay in the field instead of being lost.
+// While Arandu is answering (busy) the field is read-only: its answer brings a new question and a new, empty composer,
+// so words typed in the meantime would be lost.
 export function Composer({ placeholder, busy, onSend }: { placeholder: string; busy: boolean; onSend: (text: string) => void }) {
   const [draft, setDraft] = useState("");
   const text = draft.trim();
@@ -27,6 +28,7 @@ export function Composer({ placeholder, busy, onSend }: { placeholder: string; b
           aria-label="Mensagem para o Arandu"
           enterKeyHint="send"
           autoComplete="off"
+          readOnly={busy}
           // The API takes up to 1000 characters of the person's own words.
           maxLength={1000}
         />

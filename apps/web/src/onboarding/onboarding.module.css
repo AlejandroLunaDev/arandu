@@ -157,7 +157,8 @@
   padding: 8px 16px 0;
 }
 
-/* 34px tall, its hit area grown to 44px by an invisible ring. */
+/* 34px tall, its hit area grown to 44px by an invisible ring. The ring starts inside the 1.5px border:
+ * 34 - 3 + 2 x 7 = 45. */
 .chip {
   position: relative;
   height: 34px;
@@ -173,7 +174,7 @@
 .chip::after {
   content: "";
   position: absolute;
-  inset: -5px -3px;
+  inset: -7px -3px;
 }
 
 /* O03 holds areas and sixteen subjects: its chips are a size smaller. */
@@ -182,7 +183,7 @@
   padding-top: 6px;
 }
 
-/* 30px tall: a deeper ring keeps the hit area at 44px. */
+/* 30px tall: a deeper ring keeps the hit area at 44px (30 - 3 + 2 x 9 = 45). */
 .small .chip {
   height: 30px;
   padding: 0 10px;
@@ -190,7 +191,7 @@
 }
 
 .small .chip::after {
-  inset: -7px -3px;
+  inset: -9px -3px;
 }
 
 .hint {
@@ -379,7 +380,8 @@
 .career::after {
   content: "";
   position: absolute;
-  inset: -5px -3px;
+  /* From inside the 1.5px border: 34 - 3 + 2 x 7 = 45. */
+  inset: -7px -3px;
 }
 
 .career[aria-pressed="true"] {
