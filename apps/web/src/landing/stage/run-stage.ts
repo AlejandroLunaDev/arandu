@@ -80,7 +80,7 @@ const GAZE = 4;
 /** How bright a lit lamp's cap glows. */
 const SHADE_GLOW = 0.8;
 /** What a tap goes to, not to the stage. */
-const CONTROLS = "a, button, input, textarea, select, label, iframe";
+const CONTROLS = "a, button, input, textarea, select, label, iframe, dialog";
 /** How tall (m) a prop must be for a tap to knock it at full strength; smaller ones get a gentler push. */
 const POKE_TALL = 0.32;
 /** What the pointer picks up and throws, and the cat fetches: his yarn and the crumpled sheets. */
