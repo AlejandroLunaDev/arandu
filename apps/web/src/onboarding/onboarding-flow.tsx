@@ -7,7 +7,7 @@ import { api } from "@/app-shell/api";
 import { nextQuestion, toMessage, toProfileInput, withAnswer } from "./answers";
 import { HelloView } from "./hello-view";
 import { byInstitution, type Place } from "./places";
-import { type Pick, PlacesView } from "./places-view";
+import { PlacesView } from "./places-view";
 import { ProfileView } from "./profile-view";
 import { QuestionView } from "./question-view";
 
@@ -28,7 +28,7 @@ export function OnboardingFlow() {
   const [failed, setFailed] = useState(false);
   const [profileShown, setProfileShown] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
-  const [pick, setPick] = useState<Pick | null>(null);
+  const [pick, setPick] = useState<number | null>(null);
 
   // Each call either moves on or leaves everything as it was, so "Tenta de novo" repeats it whole.
   const attempt = async (call: () => Promise<void>) => {
@@ -58,7 +58,8 @@ export function OnboardingFlow() {
         onPick={setPick}
         onNext={() =>
           attempt(async () => {
-            await api<Journey>("/me/journey", { method: "PATCH", body: { professionSlug: pick!.slug } });
+            const course = places.flatMap((p) => p.courses).find((c) => c.courseId === pick)!;
+            await api<Journey>("/me/journey", { method: "PATCH", body: { professionSlug: course.profession.slug, courseId: course.courseId } });
             // shortcut: O11 (the course's first semester) is the next step; until it is built this ends in the room.
             router.push("/app");
           })
