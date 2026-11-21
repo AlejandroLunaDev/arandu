@@ -215,6 +215,20 @@ export interface Recommendations {
   careers: CareerOption[];
 }
 
+/** GET /arandu/memory/conversations (S2): what the person and Arandu said, as text, newest first. */
+export interface Conversations {
+  conversations: {
+    /** The onboarding, a talk about a career, or a question on a stop's card (T1). */
+    kind: "onboarding" | "career" | "card";
+    startedAt: string;
+    professionSlug: string | null;
+    /** The stop a card question was about; null for the other kinds. */
+    stop: { disciplineId: number; topic: number } | null;
+    /** Oldest first. */
+    messages: { role: "user" | "assistant"; text: string }[];
+  }[];
+}
+
 /** GET /arandu/memory: everything Arandu remembers about the signed-in person, so they can see it (§5 transparency). */
 export interface AranduMemory {
   /** The profile they confirmed; null until they do. */

@@ -2,6 +2,7 @@ import type {
   AranduMemory,
   AranduProfile,
   ChatMessage,
+  Conversations,
 } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -39,6 +40,10 @@ export class MemoryService {
 
   read(userId: string): Promise<AranduMemory> {
     return this.memory.read(userId);
+  }
+
+  conversations(userId: string): Promise<Conversations> {
+    return this.memory.conversations(userId);
   }
 
   /** Deletes one fact; 404 when it is not this person's. */

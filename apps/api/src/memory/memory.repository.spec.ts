@@ -278,3 +278,95 @@ describe('MemoryRepository saveFacts', () => {
     expect(writes).toEqual([]);
   });
 });
+
+describe('MemoryRepository conversations', () => {
+  const session = (startedAt: string, kind = 'career') => ({
+    kind,
+    professionSlug: 'direito',
+    startedAt: new Date(startedAt),
+    messages: [{ role: 'user', text: 'Oi' }],
+  });
+  const card = (createdAt: string) => ({
+    disciplineId: 7,
+    topic: 2,
+    question: 'Por que 0/0?',
+    answer: 'Porque sim.',
+    createdAt: new Date(createdAt),
+  });
+
+  it('merges sessions and cards, newest first', async () => {
+    const { conversations } = await scripted(
+      [session('2026-11-03T00:00:00Z'), session('2026-11-01T00:00:00Z')],
+      [card('2026-11-02T00:00:00Z')],
+    ).conversations('u');
+
+    expect(conversations.map((c) => [c.kind, c.startedAt])).toEqual([
+      ['career', '2026-11-03T00:00:00.000Z'],
+      ['card', '2026-11-02T00:00:00.000Z'],
+      ['career', '2026-11-01T00:00:00.000Z'],
+    ]);
+  });
+
+  it('maps a stop question to a card with its question and answer', async () => {
+    const { conversations } = await scripted(
+      [],
+      [card('2026-11-02T00:00:00Z')],
+    ).conversations('u');
+
+    expect(conversations).toEqual([
+      {
+        kind: 'card',
+        startedAt: '2026-11-02T00:00:00.000Z',
+        professionSlug: null,
+        stop: { disciplineId: 7, topic: 2 },
+        messages: [
+          { role: 'user', text: 'Por que 0/0?' },
+          { role: 'assistant', text: 'Porque sim.' },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps a session as it is, with no stop', async () => {
+    const { conversations } = await scripted(
+      [session('2026-11-01T00:00:00Z')],
+      [],
+    ).conversations('u');
+
+    expect(conversations[0]).toMatchObject({
+      kind: 'career',
+      professionSlug: 'direito',
+      stop: null,
+      messages: [{ role: 'user', text: 'Oi' }],
+    });
+  });
+
+  it('is empty for a person with no conversations', async () => {
+    await expect(scripted([], []).conversations('u')).resolves.toEqual({
+      conversations: [],
+    });
+  });
+
+  it('caps the merged list at 50, dropping the oldest', async () => {
+    const day = (n: number) => new Date(Date.UTC(2026, 0, n)).toISOString();
+    const sessions = Array.from({ length: 40 }, (_, i) => session(day(i + 1)));
+    const cards = Array.from({ length: 40 }, (_, i) => card(day(i + 41)));
+
+    const { conversations } = await scripted(sessions, cards).conversations(
+      'u',
+    );
+
+    expect(conversations).toHaveLength(50);
+    expect(conversations[0].startedAt).toBe(day(80));
+    expect(conversations[49].startedAt).toBe(day(31));
+  });
+
+  it('asks both reads for the person', async () => {
+    const sql = vi.fn(() => Promise.resolve([]));
+    await new MemoryRepository(sql as unknown as Sql).conversations('u1');
+
+    expect(sql).toHaveBeenCalledTimes(2);
+    for (const call of sql.mock.calls as unknown[][])
+      expect(call).toContain('u1');
+  });
+});
