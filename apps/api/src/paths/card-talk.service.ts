@@ -17,7 +17,7 @@ export class CardTalkService {
     private readonly paths: PathsRepository,
   ) {}
 
-  /** The stop as it was served: talk is about the cards the person read. 404 before the stop exists. */
+  /** The stop as it was served: talk is about the cards the person read. 404 for a stop people cannot open. */
   private async content(
     disciplineId: number,
     topic: number,
@@ -25,9 +25,10 @@ export class CardTalkService {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
     const content =
-      topicText === undefined
-        ? null
-        : await this.paths.stopContent(disciplineId, topic, topicText);
+      topicText !== undefined &&
+      topic < (await this.paths.madeCount(disciplineId))
+        ? await this.paths.stopContent(disciplineId, topic, topicText)
+        : null;
     if (!content)
       throw new NotFoundException(
         `Stop ${topic} of subject ${disciplineId} is not open`,

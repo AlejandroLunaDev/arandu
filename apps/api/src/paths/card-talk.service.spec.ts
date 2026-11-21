@@ -50,6 +50,7 @@ describe('CardTalkService', () => {
   let paths: {
     discipline: ReturnType<typeof vi.fn>;
     stopContent: ReturnType<typeof vi.fn>;
+    madeCount: ReturnType<typeof vi.fn>;
     saveQuestion: ReturnType<typeof vi.fn>;
   };
   let service: CardTalkService;
@@ -64,6 +65,7 @@ describe('CardTalkService', () => {
     paths = {
       discipline: vi.fn().mockResolvedValue(discipline),
       stopContent: vi.fn().mockResolvedValue(stop()),
+      madeCount: vi.fn().mockResolvedValue(2),
       saveQuestion: vi.fn().mockResolvedValue(undefined),
     };
     service = new CardTalkService(
@@ -127,6 +129,17 @@ describe('CardTalkService', () => {
     });
   });
 
+  describe('explain outside the made run', () => {
+    it('404s for a stop past the made run even when its content is stored', async () => {
+      paths.madeCount.mockResolvedValue(1);
+
+      await expect(service.explain(7, 1, 'a')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(ai.generateObject).not.toHaveBeenCalled();
+    });
+  });
+
   describe('ask', () => {
     it('answers from the cards, saves the question and returns the sources', async () => {
       const reply = await service.ask('u', 7, 1, 'Por que?');
@@ -157,6 +170,16 @@ describe('CardTalkService', () => {
     ])('404s for %s without calling the model or saving', async (_, d, c) => {
       paths.discipline.mockResolvedValue(d);
       paths.stopContent.mockResolvedValue(c);
+
+      await expect(service.ask('u', 7, 1, 'q')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(ai.generateText).not.toHaveBeenCalled();
+      expect(paths.saveQuestion).not.toHaveBeenCalled();
+    });
+
+    it('404s for a stop past the made run and saves nothing', async () => {
+      paths.madeCount.mockResolvedValue(1);
 
       await expect(service.ask('u', 7, 1, 'q')).rejects.toBeInstanceOf(
         NotFoundException,
