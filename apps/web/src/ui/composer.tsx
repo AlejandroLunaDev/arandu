@@ -5,7 +5,8 @@ import styles from "./ui.module.css";
 
 // The composer: one field, and the send button appears inside it once there is text.
 // shortcut: no mic yet (voice to text comes with the talking part); it goes where the send button sits.
-export function Composer({ placeholder, onSend }: { placeholder: string; onSend: (text: string) => void }) {
+// While Arandu is answering (busy) Enter does nothing, so the words stay in the field instead of being lost.
+export function Composer({ placeholder, busy, onSend }: { placeholder: string; busy: boolean; onSend: (text: string) => void }) {
   const [draft, setDraft] = useState("");
   const text = draft.trim();
   return (
@@ -13,7 +14,7 @@ export function Composer({ placeholder, onSend }: { placeholder: string; onSend:
       className={styles.compose}
       onSubmit={(event) => {
         event.preventDefault();
-        if (!text) return;
+        if (!text || busy) return;
         onSend(text);
         setDraft("");
       }}

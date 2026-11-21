@@ -4,7 +4,7 @@ import type { Journey, OnboardingAnswer, OnboardingReply, Recommendations } from
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/app-shell/api";
-import { nextQuestion, toMessage, withAnswer } from "./answers";
+import { nextQuestion, toMessage, toProfileInput, withAnswer } from "./answers";
 import { HelloView } from "./hello-view";
 import { byInstitution, type Place } from "./places";
 import { type Pick, PlacesView } from "./places-view";
@@ -74,7 +74,7 @@ export function OnboardingFlow() {
         failed={failed}
         onNext={() =>
           attempt(async () => {
-            const { careers } = await api<Recommendations>("/arandu/recommendations", { method: "POST", body: { profile: turn.profile } });
+            const { careers } = await api<Recommendations>("/arandu/recommendations", { method: "POST", body: { profile: toProfileInput(turn.profile) } });
             setPlaces(byInstitution(careers));
           })
         }

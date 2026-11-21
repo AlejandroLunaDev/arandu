@@ -80,7 +80,7 @@ export function QuestionView({ question, say, step, picks, said, busy, failed, o
           Continuar
         </MainButton>
       </footer>
-      {question && <Composer placeholder={question.placeholder} onSend={onSay} />}
+      {question && <Composer placeholder={question.placeholder} busy={busy} onSend={onSay} />}
     </main>
   );
 }

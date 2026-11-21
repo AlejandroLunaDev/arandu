@@ -201,7 +201,9 @@
   color: var(--ink-500);
 }
 
+/* 36px, its hit area grown to 44px by an invisible ring. */
 .send {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
@@ -214,6 +216,12 @@
   background: var(--amber-400);
   color: var(--ink-900);
   cursor: pointer;
+}
+
+.send::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 
 .send svg {

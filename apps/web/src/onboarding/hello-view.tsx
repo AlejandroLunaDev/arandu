@@ -17,7 +17,7 @@ export function HelloView({ busy, failed, onStart }: { busy: boolean; failed: bo
       <div className={styles.glow} />
       <section className={styles.hello}>
         <div className={`${ui.bubble} ${styles.bubble}`} role="status">
-          <span className="sr-only">{HELLO}</span>
+          <span className="sr-only">{shown > 0 && HELLO}</span>
           <span aria-hidden="true">
             {HELLO.split(" ").slice(0, shown).join(" ")}
             <span className={ui.caret} />
