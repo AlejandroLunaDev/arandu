@@ -43,7 +43,7 @@ interface PathRow {
 export class PathsRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
-  /** Each course's first-semester subjects that have topics; null when no profession has that slug. */
+  /** Each course's first-semester subjects with their made stops; null when no profession has that slug. */
   async careerPaths(slug: string): Promise<CareerPaths | null> {
     const [profession] = await this.sql<{ name: string }[]>`
       select name from public.professions where slug = ${slug}`;
@@ -64,8 +64,29 @@ export class PathsRepository {
         and s.last_fetched_at is not null
       order by institution, c.city, c.id, cs.shift, d.name`;
 
+    // A subject lists only its leading stops that are already made, so opening one never waits on a live generation;
+    // a subject with none, and a path with no such subject, are left out.
+    const ids = [...new Set(rows.map((r) => r.discipline_id))];
+    const made = new Set(
+      ids.length
+        ? (
+            await this.sql<{ d: number; t: number; text: string }[]>`
+              select discipline_id::int as d, topic::int as t, topic_text as text
+              from public.stop_contents where discipline_id in ${this.sql(ids)}`
+          ).map((s) => `${s.d}:${s.t}:${s.text}`)
+        : [],
+    );
+    const ready = (row: PathRow) => {
+      const gap = row.topics.findIndex(
+        (text, t) => !made.has(`${row.discipline_id}:${t}:${text}`),
+      );
+      return gap < 0 ? row.topics : row.topics.slice(0, gap);
+    };
+
     const paths = new Map<string, CareerPath>();
     for (const row of rows) {
+      const topics = ready(row);
+      if (!topics.length) continue;
       const key = `${row.course_id} ${row.shift}`;
       let path = paths.get(key);
       if (!path) {
@@ -89,7 +110,7 @@ export class PathsRepository {
           disciplineId: row.discipline_id,
           code: row.code,
           name: row.subject,
-          topics: row.topics,
+          topics,
         });
     }
     return {
