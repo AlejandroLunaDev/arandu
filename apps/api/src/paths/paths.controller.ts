@@ -61,7 +61,7 @@ export class PathsController {
     return paths;
   }
 
-  /** O14-O18 and every later stop: its cards and exercises. The first visit takes a while: it is made then. */
+  /** O14-O18 and every later stop: its cards and exercises. Only made stops inside the subject's run; else 404. */
   @Get('stops/:disciplineId/:topic')
   stop(
     @Param('disciplineId', { schema: id }) disciplineId: number,

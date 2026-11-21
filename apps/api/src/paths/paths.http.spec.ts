@@ -19,6 +19,7 @@ describe('paths and journey routes', () => {
   const paths = {
     careerPaths: vi.fn(),
     discipline: vi.fn(),
+    madeCount: vi.fn(),
     stopContent: vi.fn(),
     saveStopContent: vi.fn(),
     finishStop: vi.fn(),
@@ -33,6 +34,7 @@ describe('paths and journey routes', () => {
       name: 'C',
       topics: ['a', 'b'],
     });
+    paths.madeCount.mockResolvedValue(2);
     progress.finishes.mockResolvedValue([]);
     progress.topicCounts.mockResolvedValue(new Map());
     progress.questionTimes.mockResolvedValue([]);

@@ -18,6 +18,7 @@ import { SQL, type Sql } from '../platform/database/database.module.js';
 import { addDays, MAX_NOVELOS, refill } from '../progress/progress.logic.js';
 import {
   asPerson,
+  madeStops,
   ProgressRepository,
   TIME_ZONE,
   toWallet,
@@ -307,7 +308,7 @@ export class GameRepository {
     return this.season(userId);
   }
 
-  /** The person's caixas, newest first. Finishing every stop of a subject earns the "demo_finished" one here. */
+  /** The person's caixas, newest first. Finishing every made stop of a subject earns the "demo_finished" one here. */
   caixas(userId: string): Promise<Caixa[]> {
     return asPerson(
       (async () => {
@@ -315,8 +316,8 @@ export class GameRepository {
           insert into public.caixas (user_id, reason)
           select ${userId}, 'demo_finished' where exists (
             select 1 from public.stop_results r join public.disciplines d on d.id = r.discipline_id
-            where r.user_id = ${userId} and cardinality(coalesce(d.topics, '{}')) > 0
-            group by d.id having count(*) >= cardinality(coalesce(d.topics, '{}')))
+            where r.user_id = ${userId} and r.topic < ${madeStops(this.sql)}
+            group by d.id having count(distinct r.topic) >= ${madeStops(this.sql)})
           on conflict do nothing`;
         const rows = await this.sql<CaixaRow[]>`
           select id::int, reason, created_at, opened_at, contents from public.caixas

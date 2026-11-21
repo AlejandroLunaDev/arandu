@@ -242,6 +242,7 @@ describe('StopsService', () => {
   let ai: { generateObject: Fn };
   let paths: {
     discipline: Fn;
+    madeCount: Fn;
     stopCards: Fn;
     saveStopCards: Fn;
     stopContent: Fn;
@@ -293,6 +294,7 @@ describe('StopsService', () => {
     };
     paths = {
       discipline: vi.fn().mockResolvedValue(discipline),
+      madeCount: vi.fn().mockResolvedValue(2),
       stopCards: vi.fn().mockResolvedValue(new Map()),
       saveStopCards: vi.fn().mockResolvedValue(undefined),
       stopContent: vi.fn().mockResolvedValue(null),
@@ -309,30 +311,59 @@ describe('StopsService', () => {
     );
   });
 
-  it.each([
-    ['an unknown subject', null, 0],
-    ['a topic out of range', discipline, 2],
-  ])('404s for %s without calling the model', async (_, found, topic) => {
-    paths.discipline.mockResolvedValue(found);
+  describe('stop', () => {
+    it.each([
+      ['an unknown subject', null, 0],
+      ['a topic out of range', discipline, 2],
+    ])('404s for %s without calling the model', async (_, found, topic) => {
+      paths.discipline.mockResolvedValue(found);
 
-    await expect(service.stop(7, topic)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-    expect(ai.generateObject).not.toHaveBeenCalled();
+      await expect(service.stop(7, topic)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(ai.generateObject).not.toHaveBeenCalled();
+    });
+
+    it('returns the stored stop inside the made run without calling the model', async () => {
+      const stored = { cards: [], exercises: [] };
+      paths.stopContent.mockResolvedValue(stored);
+
+      await expect(service.stop(7, 1)).resolves.toBe(stored);
+      expect(paths.stopContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
+      expect(ai.generateObject).not.toHaveBeenCalled();
+    });
+
+    it('404s outside the made run even when content is stored, without generating', async () => {
+      paths.madeCount.mockResolvedValue(1);
+      paths.stopContent.mockResolvedValue({ cards: [], exercises: [] });
+
+      await expect(service.stop(7, 1)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(ai.generateObject).not.toHaveBeenCalled();
+    });
+
+    it('404s when nothing is stored, without generating', async () => {
+      await expect(service.stop(7, 0)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(ai.generateObject).not.toHaveBeenCalled();
+      expect(paths.saveStopContent).not.toHaveBeenCalled();
+    });
   });
 
-  it('returns the stored stop without calling the model', async () => {
+  it('make returns the stored stop without calling the model', async () => {
     const stored = { cards: [], exercises: [] };
     paths.stopContent.mockResolvedValue(stored);
 
-    await expect(service.stop(7, 0)).resolves.toBe(stored);
+    await expect(service.make(7, 0)).resolves.toBe(stored);
     expect(ai.generateObject).not.toHaveBeenCalled();
   });
 
   it('generates in two steps, saves, and keeps only verified cards', async () => {
     vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
 
-    const stop = await service.stop(7, 1);
+    const stop = await service.make(7, 1);
 
     expect(steps.cards).toHaveBeenCalledTimes(1);
     expect(steps.cards.mock.calls[0][0]).toMatchObject({ model: 'web' });
@@ -349,7 +380,7 @@ describe('StopsService', () => {
   it('writes the exercises from the verified cards only', async () => {
     vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
 
-    await service.stop(7, 1);
+    await service.make(7, 1);
 
     const prompt = extraPromptOf();
     expect(prompt).toContain('Derivadas');
@@ -358,7 +389,7 @@ describe('StopsService', () => {
   });
 
   it('on the first topic makes only the basic exercises call', async () => {
-    const stop = await service.stop(7, 0);
+    const stop = await service.make(7, 0);
 
     expect(steps.extra).not.toHaveBeenCalled();
     expect(steps.basic).toHaveBeenCalledTimes(1);
@@ -368,7 +399,7 @@ describe('StopsService', () => {
   it('503s on a later stop when only the 4 basic exercises come back', async () => {
     steps.extra.mockResolvedValue(reply({}));
 
-    await expect(service.stop(7, 1)).rejects.toMatchObject({ status: 503 });
+    await expect(service.make(7, 1)).rejects.toMatchObject({ status: 503 });
     expect(steps.basic).toHaveBeenCalledTimes(2);
     expect(steps.extra).toHaveBeenCalledTimes(2);
     expect(paths.saveStopContent).not.toHaveBeenCalled();
@@ -387,7 +418,7 @@ describe('StopsService', () => {
   it('keeps a later stop with exactly 8 consistent exercises', async () => {
     steps.extra.mockResolvedValue(reply(extraOf(minus(8))));
 
-    const stop = await service.stop(7, 1);
+    const stop = await service.make(7, 1);
 
     expect(stop.exercises).toHaveLength(8);
   });
@@ -395,7 +426,7 @@ describe('StopsService', () => {
   it('503s on a later stop with 7 consistent exercises', async () => {
     steps.extra.mockResolvedValue(reply(extraOf(minus(7))));
 
-    await expect(service.stop(7, 1)).rejects.toMatchObject({ status: 503 });
+    await expect(service.make(7, 1)).rejects.toMatchObject({ status: 503 });
     expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
 
@@ -404,7 +435,7 @@ describe('StopsService', () => {
       .mockResolvedValueOnce(reply({}))
       .mockResolvedValueOnce(reply(extraOf(full())));
 
-    const stop = await service.stop(7, 1);
+    const stop = await service.make(7, 1);
 
     expect(steps.cards).toHaveBeenCalledTimes(1);
     expect(steps.basic).toHaveBeenCalledTimes(2);
@@ -416,7 +447,7 @@ describe('StopsService', () => {
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false);
 
-    const stop = await service.stop(7, 0);
+    const stop = await service.make(7, 0);
 
     expect(steps.cards).toHaveBeenCalledTimes(2);
     expect(stop.cards).toHaveLength(2);
@@ -425,7 +456,7 @@ describe('StopsService', () => {
   it('503s when no card is ever verified, and writes no exercises', async () => {
     vi.mocked(quoteIsOnPage).mockResolvedValue(false);
 
-    await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
     expect(steps.cards).toHaveBeenCalledTimes(2);
     expect(steps.basic).not.toHaveBeenCalled();
     expect(paths.saveStopContent).not.toHaveBeenCalled();
@@ -436,7 +467,7 @@ describe('StopsService', () => {
       .mockRejectedValueOnce(outputError())
       .mockResolvedValueOnce(reply(cardsReply()));
 
-    const stop = await service.stop(7, 0);
+    const stop = await service.make(7, 0);
 
     expect(steps.cards).toHaveBeenCalledTimes(2);
     expect(stop.cards).toHaveLength(2);
@@ -445,7 +476,7 @@ describe('StopsService', () => {
   it('503s when the cards miss the schema on every attempt', async () => {
     steps.cards.mockRejectedValue(outputError());
 
-    await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
     expect(steps.cards).toHaveBeenCalledTimes(2);
   });
 
@@ -457,7 +488,7 @@ describe('StopsService', () => {
     async (which, topic) => {
       steps[which].mockRejectedValueOnce(outputError());
 
-      const stop = await service.stop(7, topic);
+      const stop = await service.make(7, topic);
 
       expect(steps[which]).toHaveBeenCalledTimes(2);
       expect(stop.exercises).toHaveLength(topic === 0 ? 4 : 11);
@@ -468,7 +499,7 @@ describe('StopsService', () => {
   it('503s when the exercises miss the schema on every attempt', async () => {
     steps.basic.mockRejectedValue(outputError());
 
-    await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
     expect(steps.basic).toHaveBeenCalledTimes(2);
     expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
@@ -479,7 +510,7 @@ describe('StopsService', () => {
       const error = new AiModelError([]);
       steps[which].mockRejectedValue(error);
 
-      await expect(service.stop(7, 1)).rejects.toBe(error);
+      await expect(service.make(7, 1)).rejects.toBe(error);
       expect(steps[which]).toHaveBeenCalledTimes(1);
       expect(paths.saveStopContent).not.toHaveBeenCalled();
     },
@@ -490,12 +521,12 @@ describe('StopsService', () => {
     d.escolhaUma.answer = 9;
     steps.basic.mockResolvedValue(reply(d));
 
-    await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
     expect(paths.saveStopContent).not.toHaveBeenCalled();
   });
 
   it('saves the tuple shapes of the contract', async () => {
-    const stop = await service.stop(7, 1);
+    const stop = await service.make(7, 1);
 
     expect(stop.exercises.find((e) => e.kind === 'una_os_pares')).toMatchObject(
       {
@@ -513,7 +544,7 @@ describe('StopsService', () => {
   });
 
   it('shares one generation between concurrent calls for the same stop', async () => {
-    const [a, b] = await Promise.all([service.stop(7, 0), service.stop(7, 0)]);
+    const [a, b] = await Promise.all([service.make(7, 0), service.make(7, 0)]);
 
     expect(steps.cards).toHaveBeenCalledTimes(1);
     expect(steps.basic).toHaveBeenCalledTimes(1);
@@ -552,7 +583,7 @@ describe('StopsService', () => {
     it('uses the stored cards and makes no web call', async () => {
       paths.stopCards.mockResolvedValue(new Map([[1, [stored('s1')]]]));
 
-      const stop = await service.stop(7, 1);
+      const stop = await service.make(7, 1);
 
       expect(paths.stopCards).toHaveBeenCalledWith(7, topics);
       expect(steps.subject).not.toHaveBeenCalled();
@@ -566,7 +597,7 @@ describe('StopsService', () => {
         reply({ cards: [cardOf(2, 'a'), cardOf(3, 'b'), cardOf(3, 'c')] }),
       );
 
-      const stop = await service.stop(7, 1);
+      const stop = await service.make(7, 1);
 
       expect(subjectCall()).toMatchObject({
         model: 'web',
@@ -588,7 +619,7 @@ describe('StopsService', () => {
       // numbers count the listed topics: 2 is T7
       steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'a')] }));
 
-      const stop = await service.stop(7, 7);
+      const stop = await service.make(7, 7);
 
       expect(subjectCall().prompt).toBe(
         'Subject: Cálculo\nTopics:\n1. T6\n2. T7\n3. T8\n4. T9\n5. T10\n6. T11',
@@ -612,7 +643,7 @@ describe('StopsService', () => {
         }),
       );
 
-      const stop = await service.stop(7, 0);
+      const stop = await service.make(7, 0);
 
       expect(paths.saveStopCards).toHaveBeenCalledWith(7, [
         savedEntry(0, 'good'),
@@ -625,7 +656,7 @@ describe('StopsService', () => {
         reply({ cards: [1, 2, 3, 4].map((n) => cardOf(1, `c${n}`)) }),
       );
 
-      const stop = await service.stop(7, 0);
+      const stop = await service.make(7, 0);
 
       expect(titles(stop.cards)).toEqual(['c1', 'c2', 'c3']);
     });
@@ -633,7 +664,7 @@ describe('StopsService', () => {
     it("falls back to the topic's own search when it got no verified card, keeping the others saved", async () => {
       steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'other')] }));
 
-      const stop = await service.stop(7, 0);
+      const stop = await service.make(7, 0);
 
       expect(paths.saveStopCards).toHaveBeenCalledWith(7, [
         savedEntry(1, 'other'),
@@ -646,7 +677,7 @@ describe('StopsService', () => {
     it("falls back to the topic's own search after an AiOutputError", async () => {
       steps.subject.mockRejectedValue(outputError());
 
-      const stop = await service.stop(7, 0);
+      const stop = await service.make(7, 0);
 
       expect(steps.subject).toHaveBeenCalledTimes(1);
       expect(paths.saveStopCards).not.toHaveBeenCalled();
@@ -657,14 +688,14 @@ describe('StopsService', () => {
     it('the fallback still retries once, then 503s', async () => {
       steps.cards.mockRejectedValue(outputError());
 
-      await expect(service.stop(7, 0)).rejects.toMatchObject({ status: 503 });
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
       expect(steps.cards).toHaveBeenCalledTimes(2);
     });
 
     it("a provider error in the subject call falls back to the topic's own search", async () => {
       steps.subject.mockRejectedValue(new AiModelError([]));
 
-      const stop = await service.stop(7, 0);
+      const stop = await service.make(7, 0);
 
       expect(steps.subject).toHaveBeenCalledTimes(1);
       expect(paths.saveStopCards).not.toHaveBeenCalled();
@@ -677,7 +708,7 @@ describe('StopsService', () => {
       steps.subject.mockRejectedValue(new AiModelError([]));
       steps.cards.mockRejectedValue(error);
 
-      await expect(service.stop(7, 0)).rejects.toBe(error);
+      await expect(service.make(7, 0)).rejects.toBe(error);
       expect(steps.cards).toHaveBeenCalledTimes(1);
       expect(paths.saveStopContent).not.toHaveBeenCalled();
     });
@@ -685,7 +716,7 @@ describe('StopsService', () => {
     it('searches the block once: with one of its topics stored, an uncovered topic goes to its own search', async () => {
       paths.stopCards.mockResolvedValue(new Map([[3, [stored('s3')]]]));
 
-      const stop = await service.stop(7, 1);
+      const stop = await service.make(7, 1);
 
       expect(steps.subject).not.toHaveBeenCalled();
       expect(paths.saveStopCards).not.toHaveBeenCalled();
@@ -694,7 +725,7 @@ describe('StopsService', () => {
     });
 
     it('asks for 900 output tokens per block topic', async () => {
-      await service.stop(7, 7);
+      await service.make(7, 7);
 
       expect(subjectCall().maxOutputTokens).toBe(5400);
     });
@@ -720,6 +751,15 @@ describe('StopsService', () => {
       );
       expect(paths.stopContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
       expect(progress.achievements).not.toHaveBeenCalled();
+      expect(paths.finishStop).not.toHaveBeenCalled();
+    });
+
+    it('404s for a stop outside the made run and writes nothing', async () => {
+      paths.madeCount.mockResolvedValue(1);
+
+      await expect(service.finish('u', 7, 1, 0)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
       expect(paths.finishStop).not.toHaveBeenCalled();
     });
 

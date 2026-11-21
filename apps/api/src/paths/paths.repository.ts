@@ -15,7 +15,7 @@ export const STOP_SABEDORIA = 15;
 /** Peixinhos a finished stop gives (demo value). */
 export const STOP_PEIXINHOS = 10;
 
-import { TIME_ZONE } from '../progress/progress.repository.js';
+import { madeStops, TIME_ZONE } from '../progress/progress.repository.js';
 
 export interface Discipline {
   id: number;
@@ -117,6 +117,13 @@ export class PathsRepository {
       profession: { slug, name: profession.name },
       paths: [...paths.values()],
     };
+  }
+
+  /** How many leading stops of the subject are made: the run people can open and finish (0 for no subject). */
+  async madeCount(disciplineId: number): Promise<number> {
+    const [row] = await this.sql<{ n: number }[]>`
+      select ${madeStops(this.sql)} as n from public.disciplines d where d.id = ${disciplineId}`;
+    return row?.n ?? 0;
   }
 
   async discipline(id: number): Promise<Discipline | null> {
