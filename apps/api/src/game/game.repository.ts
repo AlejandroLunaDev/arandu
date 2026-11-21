@@ -74,16 +74,27 @@ export class GameRepository {
     private readonly progress: ProgressRepository,
   ) {}
 
-  /** São Paulo's today, this week's Monday, when the week ends and how much of it went by (0..1). */
+  /** São Paulo's today and the league round of game_settings: its first day, length in days, end and share gone by. */
   private async calendar(tx: Tx) {
     const [row] = await tx<
-      { today: string; monday: string; ends_at: Date; elapsed: number }[]
+      {
+        today: string;
+        start: string;
+        days: number;
+        ends_at: Date;
+        elapsed: number;
+      }[]
     >`
-      select to_char(now() at time zone ${TIME_ZONE}, 'YYYY-MM-DD') as today,
-        to_char(date_trunc('week', now() at time zone ${TIME_ZONE}), 'YYYY-MM-DD') as monday,
-        (date_trunc('week', now() at time zone ${TIME_ZONE}) + interval '7 days') at time zone ${TIME_ZONE} as ends_at,
-        (extract(epoch from (now() at time zone ${TIME_ZONE}) - date_trunc('week', now() at time zone ${TIME_ZONE}))
-          / 604800)::float8 as elapsed`;
+      select to_char(r.local, 'YYYY-MM-DD') as today, to_char(r.start, 'YYYY-MM-DD') as start, r.days,
+        (r.start + r.days * interval '1 day') at time zone ${TIME_ZONE} as ends_at,
+        (extract(epoch from r.local - r.start) / (r.days * 86400))::float8 as elapsed
+      from (
+        select now() at time zone ${TIME_ZONE} as local, s.league_period_days::int as days,
+          (s.league_anchor_on + s.league_period_days * floor(
+            ((now() at time zone ${TIME_ZONE})::date - s.league_anchor_on)::numeric / s.league_period_days)::int
+          )::timestamp as start
+        from public.game_settings s
+      ) r`;
     return row;
   }
 
@@ -91,40 +102,41 @@ export class GameRepository {
   private async lockPlayer(
     tx: Tx,
     userId: string,
-    monday: string,
+    start: string,
   ): Promise<PlayerRow> {
-    await tx`insert into public.players (user_id, league_week) values (${userId}, ${monday}) on conflict do nothing`;
+    await tx`insert into public.players (user_id, league_week) values (${userId}, ${start}) on conflict do nothing`;
     const [row] = await tx<PlayerRow[]>`
       select nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing
       from public.players where user_id = ${userId} for update`;
     return row;
   }
 
-  /** A league's room for a week: the person, the best others in that league, and demo rivals up to 12; best first. */
-  // shortcut: membership is the others' league now, not the one they had that week; fine while promotions are rare.
+  /** A league's room for a round: the person, the best others in that league, and demo rivals up to 12; best first. */
+  // shortcut: membership is the others' league now, not the one they had that round; fine while promotions are rare.
   private async room(
     tx: Tx,
     userId: string,
     player: PlayerRow,
     rank: number,
-    monday: string,
+    start: string,
+    days: number,
     elapsed: number,
   ): Promise<League['rows']> {
-    const week = (who: Tx) => who`
-      (r.completed_at at time zone ${TIME_ZONE})::date >= ${monday}::date
-      and (r.completed_at at time zone ${TIME_ZONE})::date < ${monday}::date + 7`;
+    const round = (who: Tx) => who`
+      (r.completed_at at time zone ${TIME_ZONE})::date >= ${start}::date
+      and (r.completed_at at time zone ${TIME_ZONE})::date < ${start}::date + ${days}::int`;
     const others = await tx<
       { user_id: string; nickname: string | null; sabedoria: number }[]
     >`
       select p.user_id, p.nickname, coalesce(sum(r.sabedoria), 0)::int as sabedoria
       from public.players p
-      left join public.stop_results r on r.user_id = p.user_id and ${week(tx)}
+      left join public.stop_results r on r.user_id = p.user_id and ${round(tx)}
       where p.league = ${rank} and p.user_id <> ${userId}
       group by p.user_id, p.nickname
       order by sabedoria desc limit ${LEAGUE_SIZE - 1}`;
     const [mine] = await tx<{ sabedoria: number }[]>`
       select coalesce(sum(r.sabedoria), 0)::int as sabedoria
-      from public.stop_results r where r.user_id = ${userId} and ${week(tx)}`;
+      from public.stop_results r where r.user_id = ${userId} and ${round(tx)}`;
     const rows = [
       {
         nickname: player.nickname ?? defaultNickname(userId),
@@ -138,7 +150,12 @@ export class GameRepository {
         you: false,
         demo: false,
       })),
-      ...rivals(rank, monday, LEAGUE_SIZE - 1 - others.length, elapsed).map(
+      ...rivals(
+        rank,
+        start,
+        LEAGUE_SIZE - 1 - others.length,
+        (elapsed * days) / 7,
+      ).map(
         (r) => ({ ...r, you: false, demo: true }),
       ),
     ];
@@ -149,22 +166,24 @@ export class GameRepository {
   }
 
   /**
-   * Once per week, settles the last finished week: the top 7 move up, keep the new outfit and get a caixa (L7).
-   * shortcut: only that week counts; earlier unread weeks are not replayed, fine for a demo.
+   * Once per round, settles the last finished round: the top 7 move up, keep the new outfit and get a caixa (L7).
+   * shortcut: only that round counts; earlier unread rounds are not replayed, fine for a demo.
    */
   private async settle(
     tx: Tx,
     userId: string,
     player: PlayerRow,
-    monday: string,
+    start: string,
+    days: number,
   ): Promise<PlayerRow> {
-    if (player.league_week >= monday) return player;
+    if (player.league_week >= start) return player;
     const rows = await this.room(
       tx,
       userId,
       player,
       player.league,
-      addDays(monday, -7),
+      addDays(start, -days),
+      days,
       1,
     );
     const me = rows.find((r) => r.you)!;
@@ -173,15 +192,15 @@ export class GameRepository {
       me.position <= PROMOTE_TOP &&
       player.league < LEAGUES.length;
     if (!up) {
-      await tx`update public.players set league_week = ${monday}, updated_at = now() where user_id = ${userId}`;
-      return { ...player, league_week: monday };
+      await tx`update public.players set league_week = ${start}, updated_at = now() where user_id = ${userId}`;
+      return { ...player, league_week: start };
     }
     const to = LEAGUES[player.league].id;
     await tx`insert into public.owned_items (user_id, item) values (${userId}, ${`outfit:${to}`}) on conflict do nothing`;
     await tx`insert into public.caixas (user_id, reason) values (${userId}, ${`promotion:${to}`}) on conflict do nothing`;
     const [row] = await tx<PlayerRow[]>`
       update public.players set league = ${player.league + 1}, promoted_from = ${player.league},
-        league_week = ${monday}, updated_at = now()
+        league_week = ${start}, updated_at = now()
       where user_id = ${userId}
       returning nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing`;
     return row;
@@ -194,8 +213,9 @@ export class GameRepository {
         const player = await this.settle(
           tx,
           userId,
-          await this.lockPlayer(tx, userId, cal.monday),
-          cal.monday,
+          await this.lockPlayer(tx, userId, cal.start),
+          cal.start,
+          cal.days,
         );
         const league = LEAGUES[player.league - 1];
         let promotion: League['promotion'] = null;
@@ -210,14 +230,19 @@ export class GameRepository {
         }
         return {
           league: { ...league, rank: player.league },
-          week: { monday: cal.monday, endsAt: cal.ends_at.toISOString() },
+          round: {
+            startsOn: cal.start,
+            days: cal.days,
+            endsAt: cal.ends_at.toISOString(),
+          },
           promoteTop: PROMOTE_TOP,
           rows: await this.room(
             tx,
             userId,
             player,
             player.league,
-            cal.monday,
+            cal.start,
+            cal.days,
             cal.elapsed,
           ),
           promotion,
@@ -415,11 +440,11 @@ export class GameRepository {
   wardrobe(userId: string): Promise<Wardrobe> {
     return asPerson(
       this.sql.begin(async (tx) => {
-        const { monday } = await this.calendar(tx);
+        const { start } = await this.calendar(tx);
         return this.wardrobeOf(
           tx,
           userId,
-          await this.lockPlayer(tx, userId, monday),
+          await this.lockPlayer(tx, userId, start),
         );
       }),
     );
@@ -429,8 +454,8 @@ export class GameRepository {
   updateWardrobe(userId: string, update: WardrobeUpdate): Promise<Wardrobe> {
     return asPerson(
       this.sql.begin(async (tx) => {
-        const { monday } = await this.calendar(tx);
-        let player = await this.lockPlayer(tx, userId, monday);
+        const { start } = await this.calendar(tx);
+        let player = await this.lockPlayer(tx, userId, start);
         if (update.wearing) {
           const { outfits } = await this.wardrobeOf(tx, userId, player);
           if (!outfits.find((o) => o.id === update.wearing)?.owned)

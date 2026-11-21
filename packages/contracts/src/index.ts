@@ -467,9 +467,9 @@ export type LeagueId =
 /** GET /me/league (L1): this week's league of 12 by weekly sabedoria. Others show only a nickname and sabedoria. */
 export interface League {
   league: { id: LeagueId; name: string; rank: number };
-  /** The week's Monday and when it ends (São Paulo time). */
-  week: { monday: string; endsAt: string };
-  /** How many move up at the end of the week. */
+  /** The round in progress (its length is a game setting, 1 day in the demo): first São Paulo day, days, end. */
+  round: { startsOn: string; days: number; endsAt: string };
+  /** How many move up at the end of the round. */
   promoteTop: number;
   /** Best first. `demo` rivals fill the league while there are few people. */
   rows: {

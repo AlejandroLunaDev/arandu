@@ -36,6 +36,16 @@ describe('rivals', () => {
     });
     expect(full.some((r) => r.sabedoria > 0)).toBe(true);
   });
+
+  it('gives a full 1-day round (weeks = 1/7) a seventh of a week, rounded', () => {
+    const week = rivals(3, '2026-03-09', 11, 1);
+    const day = rivals(3, '2026-03-09', 11, 1 / 7);
+
+    day.forEach((r, i) => {
+      expect(r.sabedoria).toBe(Math.round(week[i].sabedoria / 7));
+      expect(r.nickname).toBe(week[i].nickname);
+    });
+  });
 });
 
 describe('seasonOf', () => {
