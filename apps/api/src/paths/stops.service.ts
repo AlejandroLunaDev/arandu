@@ -230,7 +230,27 @@ export class StopsService {
     private readonly progress: ProgressService,
   ) {}
 
+  /**
+   * A stop people can open: stored and inside its subject's leading run of made stops (the run paths and books list),
+   * so it is never generated live and a book's run never grows under someone mid-way.
+   */
   async stop(disciplineId: number, topic: number): Promise<StopContent> {
+    const discipline = await this.paths.discipline(disciplineId);
+    const topicText = discipline?.topics[topic];
+    const content =
+      topicText !== undefined &&
+      topic < (await this.paths.madeCount(disciplineId))
+        ? await this.paths.stopContent(disciplineId, topic, topicText)
+        : null;
+    if (!content)
+      throw new NotFoundException(
+        `No stop ${topic} in subject ${disciplineId}`,
+      );
+    return content;
+  }
+
+  /** A stop's content, made now from a web search when it is not stored yet: for the loading scripts, not for people. */
+  async make(disciplineId: number, topic: number): Promise<StopContent> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
     if (!discipline || topicText === undefined)
@@ -262,16 +282,8 @@ export class StopsService {
     mistakes: number,
     relampagoMistakes: number | null = null,
   ): Promise<StopResult> {
-    const discipline = await this.paths.discipline(disciplineId);
-    const topicText = discipline?.topics[topic];
-    // Only a stop that was served can be finished: its content exists once someone opened it.
-    if (
-      topicText === undefined ||
-      !(await this.paths.stopContent(disciplineId, topic, topicText))
-    )
-      throw new NotFoundException(
-        `No stop ${topic} in subject ${disciplineId}`,
-      );
+    // Only a stop people can open can be finished, so books and their rewards count the same run.
+    await this.stop(disciplineId, topic);
     const before = new Set(
       (await this.progress.achievements(userId)).map((a) => a.code),
     );
