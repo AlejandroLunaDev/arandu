@@ -204,6 +204,103 @@ describe('exercisesOf', () => {
   });
 });
 
+describe('exercisesOf (repeated choices)', () => {
+  const kinds = (d: StopDraft) => exercisesOf(d).map((e) => e.kind);
+
+  it.each<[string, string, (d: StopDraft) => void]>([
+    ['escolha_uma', 'options', (d) => (d.escolhaUma.options[2] = 'a')],
+    [
+      'una_os_pares',
+      'matches',
+      (d) => (d.unaOsPares.pairs[2].match = d.unaOsPares.pairs[0].match),
+    ],
+    [
+      'una_os_pares',
+      'terms differing only in case and spaces',
+      (d) => {
+        d.unaOsPares.pairs[0].term = 'Termo';
+        d.unaOsPares.pairs[1].term = ' termo ';
+      },
+    ],
+    [
+      'escolha_a_frase_certa',
+      'options',
+      (d) => (d.escolhaAFraseCerta!.options[0] = 'c'),
+    ],
+    ['na_grade', 'item texts', (d) => (d.naGrade!.items[3].text = 'a')],
+    [
+      'separe_nas_cestas',
+      'item texts',
+      (d) => (d.separeNasCestas!.items[2].text = 'a'),
+    ],
+    [
+      'toque_no_trecho',
+      'segments',
+      (d) => (d.toqueNoTrecho!.segments[0] = 'b'),
+    ],
+    ['ordene', 'steps', (d) => (d.ordene!.steps[2] = 'A')],
+    [
+      'verdadeiro_ou_falso',
+      'statements',
+      (d) => (d.verdadeiroOuFalso.statements[1].text = ' A '),
+    ],
+    [
+      'monte_a_frase',
+      'distractors that is also an answer word',
+      (d) => (d.monteAFrase!.distractors = [' B ']),
+    ],
+    [
+      'monte_a_frase',
+      'distractors',
+      (d) => (d.monteAFrase!.distractors = ['d', 'D ']),
+    ],
+    ['na_grade', 'rows', (d) => (d.naGrade!.rows.second = ' R0')],
+    ['na_grade', 'columns', (d) => (d.naGrade!.columns.second = 'C0 ')],
+    [
+      'separe_nas_cestas',
+      'baskets',
+      (d) => (d.separeNasCestas!.baskets.second = ' X'),
+    ],
+  ])(
+    'drops %s with the same text in two %s, keeping the others',
+    (kind, _, repeat) => {
+      const d = full();
+      repeat(d);
+
+      const list = kinds(d);
+      expect(list).not.toContain(kind);
+      expect(list).toHaveLength(10);
+    },
+  );
+});
+
+describe('exercisesOf (monte_a_frase repeated answer word)', () => {
+  it('keeps it when the answer repeats a word and no distractor is an answer word', () => {
+    const d = full();
+    d.monteAFrase!.answer = ['o', 'gato', 'e', 'o', 'cão'];
+    d.monteAFrase!.distractors = ['rato', 'peixe'];
+    expect(exercisesOf(d).map((e) => e.kind)).toContain('monte_a_frase');
+  });
+});
+
+describe('exercisesOf (complete_a_frase tiles)', () => {
+  const kinds = (d: StopDraft) => exercisesOf(d).map((e) => e.kind);
+
+  it('drops it when an answer repeats and its tile is there only once', () => {
+    const d = draft();
+    d.completeAFrase.answers = ['quê', 'quê'];
+    d.completeAFrase.tiles = ['quê', 'y', 'z'];
+    expect(kinds(d)).not.toContain('complete_a_frase');
+  });
+
+  it('keeps it when the repeated answer has a tile for each gap', () => {
+    const d = draft();
+    d.completeAFrase.answers = ['quê', 'quê'];
+    d.completeAFrase.tiles = ['quê', 'quê', 'z'];
+    expect(kinds(d)).toContain('complete_a_frase');
+  });
+});
+
 describe('exercisesOf (objects back to contract tuples)', () => {
   const find = (kind: string) =>
     exercisesOf(full()).find((e) => e.kind === kind);
@@ -358,6 +455,16 @@ describe('StopsService', () => {
 
     await expect(service.make(7, 0)).resolves.toBe(stored);
     expect(ai.generateObject).not.toHaveBeenCalled();
+  });
+
+  it('make with remake generates again over a stored stop', async () => {
+    paths.stopContent.mockResolvedValue({ cards: [], exercises: [] });
+
+    const stop = await service.make(7, 0, true);
+
+    expect(steps.basic).toHaveBeenCalledTimes(1);
+    expect(paths.saveStopContent).toHaveBeenCalledWith(stop);
+    expect(stop.exercises).toHaveLength(4);
   });
 
   it('generates in two steps, saves, and keeps only verified cards', async () => {
