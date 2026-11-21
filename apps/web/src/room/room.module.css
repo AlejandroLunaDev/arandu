@@ -1,0 +1,100 @@
+.room {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 12px 16px 16px;
+}
+
+.top {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.top span {
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--ink-850);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.top strong {
+  color: var(--amber-300);
+}
+
+.week {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--ink-700);
+  border-radius: 12px;
+}
+
+.week > div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.week span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.week i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink-800);
+}
+
+.week [data-on] i {
+  background: var(--amber-400);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--amber-400) 50%, transparent);
+}
+
+.week p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.week p strong {
+  color: var(--text);
+}
+
+.cat {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.book {
+  padding: 12px;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 12px;
+}
+
+.book p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.book strong {
+  display: block;
+  margin-top: 2px;
+  font: 700 16px/1.25 var(--font-bricolage), var(--font-display);
+}
+
+.book span {
+  display: block;
+  margin-top: 4px;
+  color: var(--violet-200);
+  font-size: 12px;
+}

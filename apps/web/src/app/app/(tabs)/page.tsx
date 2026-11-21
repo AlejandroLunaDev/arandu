@@ -1,4 +1,6 @@
-// Quarto: built in a later step; for now the shell shows where it lives.
+import { HomeView } from "@/room/home";
+
+// Quarto (S1), the app's home.
 export default function QuartoPage() {
-  return <h1 className="sr-only">Quarto</h1>;
+  return <HomeView />;
 }
