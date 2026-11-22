@@ -21,12 +21,12 @@ type Run = Awaited<ReturnType<typeof import("./cat-scene").runCat>>;
  * pixels). three.js loads in its own chunk after the page is up; the still render holds his place meanwhile.
  */
 export function Cat({ mood, size, label = "Arandu", className }: { mood: CatMood; size: number; label?: string; className?: string }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const run = useRef<Run | null>(null);
   const [live, setLive] = useState(false);
 
   useEffect(() => {
-    const el = canvas.current;
+    const el = box.current;
     if (!el) return;
     let cancelled = false;
     import("./cat-scene")
@@ -48,9 +48,8 @@ export function Cat({ mood, size, label = "Arandu", className }: { mood: CatMood
   useEffect(() => run.current?.setMood(mood), [mood]);
 
   return (
-    <div className={`${styles.cat} ${className ?? ""}`} role="img" aria-label={label}>
+    <div ref={box} className={`${styles.cat} ${className ?? ""}`} role="img" aria-label={label} data-live={live || undefined}>
       {!live && <Image src={`/img/arandu/${STILL[mood]}.webp`} alt="" width={size} height={size} priority />}
-      <canvas ref={canvas} data-live={live || undefined} />
     </div>
   );
 }

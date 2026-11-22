@@ -6,6 +6,7 @@ import { type ReactNode, useState } from "react";
 import { AranduSays, type Pose, Said, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Cat } from "@/ui/cat";
+import { Shelf } from "@/ui/shelf";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
@@ -42,18 +43,6 @@ function Step({ say, pose, button, busy, failed, onNext, onBack, ready = true, c
   );
 }
 
-/** The shelf's spines, as on the O11 board: four book shapes in turn, amber and violet covers mixed. */
-const SPINES = [
-  ["tall", "amber"],
-  ["slim", "amber"],
-  ["thick", "violet"],
-  ["short", "amber"],
-  ["tall", "violet"],
-  ["slim", "violet"],
-  ["short", "amber"],
-  ["thick", "amber"],
-] as const;
-
 // O11: the picked course's first semester, its subjects as books; the first one is where the path starts.
 export function SemesterView({ course, place, path, ...next }: Next & { course: PlaceCourse; place: string; path: CareerPath }) {
   const first = path.subjects[0];
@@ -71,22 +60,8 @@ export function SemesterView({ course, place, path, ...next }: Next & { course: 
           1º semestre · {path.subjects.length} {path.subjects.length === 1 ? "livro" : "livros"}
         </p>
         <div className={p.shelf}>
-          <ul>
-            {path.subjects.map((subject, i) => {
-              const [shape, tone] = SPINES[i % SPINES.length];
-              return (
-                <li key={subject.disciplineId} data-shape={shape} data-tone={tone} data-first={i === 0 || undefined} aria-label={i === 0 ? `${subject.name}, sua primeira parada` : subject.name}>
-                  <Image src={`/img/props/spine-${shape}-${tone}.webp`} alt="" width={40} height={120} />
-                  <span aria-hidden="true">{subject.name}</span>
-                  {i === 0 && <Image className={p.mark} src="/img/props/paw.webp" alt="" width={20} height={20} />}
-                </li>
-              );
-            })}
-            <li className={p.kitty} aria-hidden="true">
-              <Cat mood="lie" size={92} className={p.kittyCat} />
-            </li>
-          </ul>
-          <Image className={p.plank} src="/img/props/shelf.webp" alt="" width={780} height={185} />
+          <Shelf titles={path.subjects.map((subject) => subject.name)} />
+          <Cat mood="lie" size={92} className={p.kittyCat} />
         </div>
         {first && (
           <p className={p.why}>
@@ -135,14 +110,14 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
 // O13: the game in three things, before the first stop.
 export function HowView({ course, place, ...next }: Next & { course: string; place: string }) {
   return (
-    <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Começar a primeira parada">
+    <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Começar o primeiro capítulo">
       <div className={p.rows}>
         <div className={p.row}>
           <Image src="/img/props/books.webp" alt="" width={46} height={46} />
           <div>
-            <strong>Um caminho de paradas</strong>
+            <strong>Um caminho de capítulos</strong>
             <span>
-              As matérias de verdade do 1º semestre de {course} na {place}, uma parada curta por vez.
+              As matérias de verdade do 1º semestre de {course} na {place}, um capítulo curto por vez.
             </span>
           </div>
         </div>
@@ -150,7 +125,7 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
           <Image src="/img/props/yarn.webp" alt="" width={46} height={46} />
           <div>
             <strong>Novelos</strong>
-            <span>Errou, gasta um. Eles voltam com o tempo. Na primeira parada, errar não gasta.</span>
+            <span>Errou, gasta um. Eles voltam com o tempo. No primeiro capítulo, errar não gasta.</span>
           </div>
         </div>
         <div className={p.row}>
@@ -167,14 +142,14 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
 
 // O19: the first stop is done, with what it gave.
 export function DoneView({ course, subject, place, result, ...next }: Next & { course: string; subject: string; place: string; result: StopResult }) {
-  const say = `Você fez sua primeira parada de ${course}! Pra não perder isso, vamos guardar seu progresso.`;
+  const say = `Você fez seu primeiro capítulo de ${course}! Pra não perder isso, vamos guardar seu progresso.`;
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>
       <div className={styles.body}>
         <section className={p.done}>
           <Cat mood="hop" size={190} label="Arandu comemorando" className={p.doneCat} />
-          <h1>Primeira parada feita!</h1>
+          <h1>Primeiro capítulo feito!</h1>
           <p className={p.meta}>
             {subject} · {place}
           </p>

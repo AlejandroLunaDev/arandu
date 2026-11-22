@@ -115,6 +115,8 @@ export function OnboardingFlow() {
         answer(text);
       }}
       onContinue={() => answer()}
+      // Only before the first answer: a conversation with Arandu cannot be taken back, so later questions go on.
+      onBack={answers.length === 0 ? () => setTurn(null) : undefined}
     />
   );
 }

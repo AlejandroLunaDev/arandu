@@ -28,10 +28,12 @@ const TARGET: Record<CatMood, Pick<CatPose, "sit" | "lie" | "hold" | "lids">> = 
 
 /**
  * Arandu in his own small canvas: the landing's rig (blink, ears, a look around, the eyes on the pointer), framed to
- * fit the canvas. With reduced motion he holds the pose. Returns setMood and a stop that frees the GPU.
+ * fit `host`, in a canvas of his own. With reduced motion he holds the pose. Returns setMood and a stop that frees
+ * the GPU and takes the canvas away.
  */
-export async function runCat(canvas: HTMLCanvasElement, mood: CatMood, onReady: () => void) {
+export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => void) {
   const gltf = await load();
+  const canvas = host.appendChild(document.createElement("canvas"));
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -135,6 +137,9 @@ export async function runCat(canvas: HTMLCanvasElement, mood: CatMood, onReady: 
       removeEventListener("pointermove", onMove);
       cat.dispose();
       renderer.dispose();
+      // dispose() keeps the canvas's WebGL context; the browser holds only a few at once.
+      renderer.forceContextLoss();
+      canvas.remove();
     },
   };
 }

@@ -52,7 +52,7 @@ export function HomeView({ home }: { home: Home }) {
         <section className={styles.book}>
           <p>Seu livro</p>
           <strong>{current.name}</strong>
-          <span>{current.nextTopic === null ? "Livro completo!" : `Próxima: parada ${current.nextTopic + 1} de ${current.total}`}</span>
+          <span>{current.nextTopic === null ? "Livro completo!" : `Próximo: capítulo ${current.nextTopic + 1} de ${current.total}`}</span>
         </section>
       )}
     </main>

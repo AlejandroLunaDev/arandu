@@ -6,7 +6,7 @@ import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
 
-const HELLO = "Oi! Eu sou o Arandu. Vou te ajudar a achar um caminho que tenha a sua cara, e a experimentar ele antes de escolher.";
+const HELLO = "Oi, eu sou o Arandu! Vou te ajudar a escolher o que estudar na faculdade. Antes de decidir, você prova matérias de verdade de cada curso.";
 
 // O01: Arandu says hello, the cat under its bubble, and the person starts, or signs in with Google to the account
 // they already have and comes back to /app, whose front door takes them on.

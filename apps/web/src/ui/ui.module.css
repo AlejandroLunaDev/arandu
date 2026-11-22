@@ -290,7 +290,7 @@
   transition: opacity 0.3s ease;
 }
 
-.cat canvas[data-live] {
+.cat[data-live] canvas {
   opacity: 1;
 }
 
@@ -337,4 +337,28 @@
   display: flex;
   flex: none;
   padding: 12px 12px 0;
+}
+
+/* A 3D shelf (shelf.tsx): wide and short, the still render under it until the scene draws. */
+.shelf {
+  position: relative;
+  aspect-ratio: 1.4;
+}
+
+.shelf > img,
+.shelf > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.shelf > canvas {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.shelf[data-live] > canvas {
+  opacity: 1;
 }

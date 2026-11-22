@@ -39,29 +39,12 @@ SHOTS = {  # file name: objects in the shot, direction from the shot toward the 
     "paw": (["Paw"], FRONT),
     "fish": (["Fish"], FRONT),
 }
-SPINE = Vector((0.0, -1.0, 0.06))  # straight at the spine (books face it along -Y), a touch from above
-# O11's shelf: four book shapes, each in an amber and a violet cover, seen by the spine (file: book, cover color)
-SPINES = {
-    f"spine-{shape}-{tone}": (book, color)
-    for shape, book in (("tall", "BookTall"), ("slim", "BookSlim"), ("thick", "BookThick"), ("short", "BookShort"))
-    for tone, color in (("amber", "#E0A845"), ("violet", "#6B3FA0"))
-}
 BOOK_COLORS = {  # the landing's book colors
     "BookThick": "#6B3FA0", "Book": "#B97F22", "BookShort": "#9B72CF",
     "BookSlim": "#DDD3C0", "BookTall": "#432765", "BookPaperback": "#E0A845",
 }
 LONGEST = 1200  # pixels on the longer side of each cropped render
 MARGIN = 0.02  # of the frame, around the prop
-
-
-def recolor(name, color):
-    """Give one book its own cover and spine color, on copies of the shared materials."""
-    me = bpy.data.objects[name].data
-    for i, mat in enumerate(me.materials):
-        if mat.name.split(".")[0] in ("BookCover", "BookSpine"):
-            own = mat.copy()
-            next(n for n in own.node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Base Color"].default_value = srgb(color)
-            me.materials[i] = own
 
 
 def dress_books():
@@ -166,16 +149,6 @@ def render_all():
             for o in scene.objects:
                 o.hide_render = o not in objs and o not in lights
             frame(cam, [o for o in objs if o.type == "MESH"], toward)
-            r.filepath = os.path.join(OUT, file + ".png")
-            bpy.ops.render.render(write_still=True)
-            print("Props: rendered", r.filepath)
-        BUILD["build"]()  # the books stand upright again, one by one for the spines
-        for file, (name, color) in SPINES.items():
-            recolor(name, color)
-            book = bpy.data.objects[name]
-            for o in scene.objects:
-                o.hide_render = o is not book and o not in lights
-            frame(cam, [book], SPINE)
             r.filepath = os.path.join(OUT, file + ".png")
             bpy.ops.render.render(write_still=True)
             print("Props: rendered", r.filepath)
