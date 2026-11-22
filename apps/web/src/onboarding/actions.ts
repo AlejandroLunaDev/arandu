@@ -1,6 +1,7 @@
 "use server";
 
 import type {
+  AranduChatReply,
   AranduProfile,
   CareerPaths,
   Journey,
@@ -37,6 +38,12 @@ export async function saveJourney(update: JourneyUpdate): Promise<void> {
 
 export async function recommend(profile: AranduProfile): Promise<Recommendations> {
   return api<Recommendations>("/arandu/recommendations", { method: "POST", body: { profile } });
+}
+
+/** O10: the person asks about the recommended careers before choosing; Arandu works out which one they mean. */
+export async function askAboutCareers(professionSlugs: string[], message: string, sessionId?: string): Promise<AranduChatReply> {
+  if (!Array.isArray(professionSlugs) || !professionSlugs.every((s) => typeof s === "string" && SLUG.test(s))) throw new Error("Not career slugs");
+  return api<AranduChatReply>("/arandu/chat", { method: "POST", body: { professionSlugs, message, sessionId } });
 }
 
 export async function getCareerPaths(slug: string): Promise<CareerPaths> {

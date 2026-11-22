@@ -80,17 +80,18 @@ float rimFresnel = pow(1.0 - clamp(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 
 totalEmissiveRadiance += uRimColor * (0.35 * rimFresnel);
 `;
 
-function addRim(m: THREE.MeshStandardMaterial) {
+function addRim(m: THREE.MeshStandardMaterial, rim: string) {
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uRimColor = { value: tokenColor("violet-400") };
+    shader.uniforms.uRimColor = { value: tokenColor(rim) };
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\nuniform vec3 uRimColor;")
       .replace("#include <emissivemap_fragment>", RIM);
   };
-  m.customProgramCacheKey = () => "arandu-rim";
+  m.customProgramCacheKey = () => `arandu-rim-${rim}`;
 }
 
-export function makeCat(gltf: GLTF): Cat {
+/** rim: the token his outline glows in; the landing's night room keeps the violet one. */
+export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
   const model = gltf.scene;
   const furs: THREE.SkinnedMesh[] = [];
   model.traverse((o) => {
@@ -99,7 +100,7 @@ export function makeCat(gltf: GLTF): Cat {
     const m = o.material as THREE.MeshStandardMaterial;
     if (m.name === "AranduFur" && o instanceof THREE.SkinnedMesh) {
       furs.push(o);
-      addRim(m);
+      addRim(m, rim);
     }
     if (m.name === "AranduEye") {
       m.emissive = tokenColor("amber-300");

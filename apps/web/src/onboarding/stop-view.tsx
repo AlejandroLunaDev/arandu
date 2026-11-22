@@ -1,9 +1,9 @@
 "use client";
 
 import type { Exercise, StopContent } from "@arandu/contracts";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { safeUrl } from "@/landing/book/book-data";
+import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import styles from "./onboarding.module.css";
 import p from "./path.module.css";
@@ -121,7 +121,7 @@ function Card({ card, caption, onNext }: { card: StopContent["cards"][number]; c
           <p className={p.caption}>{caption}</p>
           <div className="flex items-end justify-between gap-3">
             <h1 className={p.title}>{card.title}</h1>
-            <Image src="/img/arandu/looking-down.webp" alt="Arandu lendo" width={56} height={56} />
+            <Cat mood="read" size={120} label="Arandu lendo" className={p.readCat} />
           </div>
           <p className={p.page}>{card.text}</p>
           {url && (

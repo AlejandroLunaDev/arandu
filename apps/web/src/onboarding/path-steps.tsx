@@ -3,20 +3,27 @@
 import type { CareerPath, StopResult } from "@arandu/contracts";
 import Image from "next/image";
 import { type ReactNode, useState } from "react";
-import { AranduSays, type Pose, useReveal } from "@/ui/arandu-says";
+import { AranduSays, type Pose, Said, useReveal } from "@/ui/arandu-says";
+import { Back } from "@/ui/back";
+import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
 import p from "./path.module.css";
 import type { PlaceCourse } from "./places";
 
-type Next = { busy: boolean; failed: boolean; onNext: () => void };
+type Next = { busy: boolean; failed: boolean; onNext: () => void; onBack?: () => void };
 
 /** Arandu's bubble on top, the step's content under it once the words are out, the main button at the bottom. */
-function Step({ say, pose, button, busy, failed, onNext, ready = true, children }: Next & { say: string; pose: Pose; button: string; ready?: boolean; children?: ReactNode }) {
+function Step({ say, pose, button, busy, failed, onNext, onBack, ready = true, children }: Next & { say: string; pose: Pose; button: string; ready?: boolean; children?: ReactNode }) {
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>
+      {onBack && (
+        <div className={ui.backBar}>
+          <Back onBack={onBack} />
+        </div>
+      )}
       <div className={styles.body}>
         <AranduSays text={say} shown={shown} pose={pose} />
         {done && <div className={ui.after}>{children}</div>}
@@ -39,7 +46,7 @@ function Step({ say, pose, button, busy, failed, onNext, ready = true, children 
 export function SemesterView({ course, place, path, ...next }: Next & { course: PlaceCourse; place: string; path: CareerPath }) {
   const first = path.subjects[0];
   return (
-    <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.course} na ${place}.`} pose="paws-up" button={`Experimentar ${course.course}`}>
+    <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.course} na ${place}.`} pose="hop" button={`Experimentar ${course.course}`}>
       <div className={p.card}>
         <span className={p.pill}>{course.course}</span>
         <p className={p.meta}>
@@ -78,7 +85,7 @@ const LIT: Record<3 | 5 | 7, number[]> = { 3: [0, 2, 4], 5: [0, 1, 2, 3, 4], 7: 
 // O12: how many days a week the person wants to study.
 export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: string; goal: 3 | 5 | 7 | null; onGoal: (goal: 3 | 5 | 7) => void }) {
   return (
-    <Step {...next} say={`Combinado, ${course}! Quantos dias por semana você quer estudar comigo?`} pose="looking-down" button="Continuar" ready={goal !== null}>
+    <Step {...next} say={`Combinado, ${course}! Quantos dias por semana você quer estudar comigo?`} pose="read" button="Continuar" ready={goal !== null}>
       <div className={styles.options}>
         {GOALS.map(([value, label, sub]) => (
           <button key={value} type="button" className={`${styles.option} ${p.option}`} aria-pressed={goal === value} onClick={() => onGoal(value)}>
@@ -103,7 +110,7 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
 // O13: the game in three things, before the first stop.
 export function HowView({ course, place, ...next }: Next & { course: string; place: string }) {
   return (
-    <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sitting" button="Começar a primeira parada">
+    <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Começar a primeira parada">
       <div className={p.rows}>
         <div className={p.row}>
           <strong>Um caminho de paradas</strong>
@@ -132,7 +139,7 @@ export function DoneView({ course, subject, place, result, ...next }: Next & { c
     <main className={styles.screen}>
       <div className={styles.body}>
         <section className={p.done}>
-          <Image src="/img/arandu/paws-up.webp" alt="Arandu comemorando" width={120} height={120} priority />
+          <Cat mood="hop" size={190} label="Arandu comemorando" className={p.doneCat} />
           <h1>Primeira parada feita!</h1>
           <p className={p.meta}>
             {subject} · {place}
@@ -150,7 +157,7 @@ export function DoneView({ course, subject, place, result, ...next }: Next & { c
             )}
           </div>
         </section>
-        <AranduSays text={say} shown={shown} pose="sitting" />
+        <AranduSays text={say} shown={shown} pose="sit" />
       </div>
       {done && (
         <footer className={`${styles.foot} ${styles.last} ${ui.after}`}>
@@ -172,7 +179,7 @@ export function DoneView({ course, subject, place, result, ...next }: Next & { c
 export function AgeView({ onAge, ...next }: Omit<Next, "onNext"> & { onAge: (age: number) => void }) {
   const [age, setAge] = useState(17);
   return (
-    <Step {...next} onNext={() => onAge(age)} say="Pra eu conversar do jeito certo com você: quantos anos você tem?" pose="sitting" button="Continuar">
+    <Step {...next} onNext={() => onAge(age)} say="Pra eu conversar do jeito certo com você: quantos anos você tem?" pose="sit" button="Continuar">
       <div className={p.stepper}>
         <button type="button" aria-label="Menos um ano" disabled={age <= 10} onClick={() => setAge(age - 1)}>
           −
@@ -191,15 +198,20 @@ export function AgeView({ onAge, ...next }: Omit<Next, "onNext"> & { onAge: (age
 
 // O21: Google keeps what the guest did, unless that Google already has an account, which loads instead; "Agora não"
 // goes on as a guest.
-export function GoogleView({ busy, failed, onGoogle, onLater }: { busy: boolean; failed: boolean; onGoogle: () => void; onLater: () => void }) {
+export function GoogleView({ busy, failed, onGoogle, onLater, onBack }: { busy: boolean; failed: boolean; onGoogle: () => void; onLater: () => void; onBack: () => void }) {
   const say = "Pronto! Entra com sua conta Google pra guardar seu caminho, sua patinha e tudo que você me contou.";
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>
+      <div className={ui.backBar}>
+        <Back onBack={onBack} />
+      </div>
       <div className={styles.body}>
-        <AranduSays text={say} shown={shown} pose="sitting" />
+        <div className={`${ui.bubble} ${p.loose}`} role="status">
+          <Said text={say} shown={shown} />
+        </div>
         <div className="flex justify-center pt-6">
-          <Image src="/img/arandu/lying.webp" alt="" width={168} height={168} />
+          <Cat mood="sit" size={220} className={p.googleCat} />
         </div>
       </div>
       {done && (

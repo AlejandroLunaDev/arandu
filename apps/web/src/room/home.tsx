@@ -1,5 +1,6 @@
 import type { Home } from "@arandu/contracts";
 import Image from "next/image";
+import { Cat } from "@/ui/cat";
 import styles from "./room.module.css";
 
 const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
@@ -45,7 +46,7 @@ export function HomeView({ home }: { home: Home }) {
         </p>
       </section>
       <div className={styles.cat}>
-        <Image src="/img/arandu/sitting.webp" alt="Arandu" width={168} height={168} priority />
+        <Cat mood="sit" size={220} className={styles.catModel} />
       </div>
       {current && (
         <section className={styles.book}>

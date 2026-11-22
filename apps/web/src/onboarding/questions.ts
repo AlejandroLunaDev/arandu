@@ -8,11 +8,11 @@ const OWN_WORDS = "Ou fale do seu jeito";
 
 /** In the order the API asks them. Each answer becomes an OnboardingAnswer: the picks and the person's words. */
 export const QUESTIONS: Question[] = [
-  { topic: "situation", pose: "sitting", placeholder: OWN_WORDS },
-  { topic: "likedSubjects", pose: "paws-up", placeholder: OWN_WORDS },
-  { topic: "hardSubjects", pose: "lying", placeholder: OWN_WORDS },
-  { topic: "interests", pose: "looking-down", placeholder: OWN_WORDS },
-  { topic: "workStyle", pose: "sitting", placeholder: OWN_WORDS },
-  { topic: "admired", pose: "paws-up", placeholder: OWN_WORDS },
-  { topic: "careerIdea", pose: "standing", placeholder: OWN_WORDS },
+  { topic: "situation", pose: "sit", placeholder: OWN_WORDS },
+  { topic: "likedSubjects", pose: "stand", placeholder: OWN_WORDS },
+  { topic: "hardSubjects", pose: "lie", placeholder: OWN_WORDS },
+  { topic: "interests", pose: "read", placeholder: OWN_WORDS },
+  { topic: "workStyle", pose: "sit", placeholder: OWN_WORDS },
+  { topic: "admired", pose: "stand", placeholder: OWN_WORDS },
+  { topic: "careerIdea", pose: "sit", placeholder: OWN_WORDS },
 ];

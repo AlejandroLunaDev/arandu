@@ -9,12 +9,9 @@
   padding: 12px 16px 4px;
 }
 
-.talk > img {
-  flex: none;
-  width: 76px;
-  height: 76px;
-  margin: 0 -4px -4px -6px;
-  object-fit: contain;
+.talkCat {
+  width: 104px;
+  margin: 0 -8px -6px -10px;
 }
 
 .bubble {
@@ -24,11 +21,11 @@
   min-height: 56px;
   margin: 0;
   padding: 10px 12px;
-  border: 1.5px solid var(--violet-400);
+  border: 2px solid var(--violet-400);
   border-radius: 14px;
   background: color-mix(in srgb, var(--ink-900) 55%, transparent);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 16px;
+  line-height: 22px;
 }
 
 /* The tail points at the cat, on the bubble's left. */
@@ -39,8 +36,8 @@
   left: -6px;
   width: 10px;
   height: 10px;
-  border-bottom: 1.5px solid var(--violet-400);
-  border-left: 1.5px solid var(--violet-400);
+  border-bottom: 2px solid var(--violet-400);
+  border-left: 2px solid var(--violet-400);
   background: var(--ink-900);
   rotate: 45deg;
 }
@@ -270,4 +267,74 @@
   .after {
     animation: none;
   }
+}
+
+/* Arandu's square: the still until the 3D cat draws, then the canvas over it. Its size comes from the caller. */
+.cat {
+  position: relative;
+  flex: none;
+  aspect-ratio: 1;
+}
+
+.cat img,
+.cat canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cat canvas {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cat canvas[data-live] {
+  opacity: 1;
+}
+
+/* 32px, its hit area grown to 44px by an invisible ring. */
+.back {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-300);
+  cursor: pointer;
+}
+
+.back::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.back svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* A screen's top row when it has only the back chevron. */
+.backBar {
+  display: flex;
+  flex: none;
+  padding: 12px 12px 0;
 }

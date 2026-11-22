@@ -34,7 +34,7 @@ export function OnboardingFlow() {
   if (!turn)
     return <HelloView busy={busy} failed={failed} onStart={() => attempt(async () => setTurn(await startOnboarding()))} onGoogle={() => attempt(signInWithGoogle)} />;
 
-  if (chosen) return <PathFlow course={chosen.course} place={chosen.place} />;
+  if (chosen) return <PathFlow course={chosen.course} place={chosen.place} onBack={() => setChosen(null)} />;
 
   if (places)
     return (
@@ -44,6 +44,7 @@ export function OnboardingFlow() {
         busy={busy}
         failed={failed}
         onPick={setPick}
+        onBack={() => setPlaces(null)}
         onNext={() =>
           attempt(async () => {
             const place = places.find((p) => p.courses.some((c) => c.courseId === pick))!;

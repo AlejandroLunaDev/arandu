@@ -1,6 +1,7 @@
 "use client";
 
 import { AranduSays, useReveal } from "@/ui/arandu-says";
+import { Back } from "@/ui/back";
 import { Composer } from "@/ui/composer";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
@@ -23,14 +24,17 @@ type Props = {
   onToggle: (pick: string) => void;
   onSay: (text: string) => void;
   onContinue: () => void;
+  /** Only on the first question: back to the greeting. */
+  onBack?: () => void;
 };
 
 // One of the seven questions (O02-O08): Arandu asks, the person taps its quick replies, writes, talks, or mixes them.
-export function QuestionView({ question, say, options, step, picks, said, busy, failed, onToggle, onSay, onContinue }: Props) {
+export function QuestionView({ question, say, options, step, picks, said, busy, failed, onToggle, onSay, onContinue, onBack }: Props) {
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>
       <header className={styles.bar}>
+        {onBack && <Back onBack={onBack} />}
         <div className={styles.segments} role="progressbar" aria-label={`Pergunta ${step} de 7`} aria-valuemin={0} aria-valuemax={7} aria-valuenow={step}>
           {Array.from({ length: 7 }, (_, i) => (
             <i key={i} data-on={i < step || undefined} />
@@ -39,7 +43,7 @@ export function QuestionView({ question, say, options, step, picks, said, busy, 
       </header>
       <div className={styles.body}>
         <div className={busy ? styles.thinking : undefined}>
-          <AranduSays text={say} shown={shown} pose={question?.pose ?? "standing"} />
+          <AranduSays text={say} shown={shown} pose={question?.pose ?? "sit"} />
         </div>
         {done && question && (
           <div className={ui.after}>

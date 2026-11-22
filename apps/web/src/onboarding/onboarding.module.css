@@ -54,18 +54,8 @@
   rotate: 45deg;
 }
 
-.hello img {
-  width: 168px;
-  height: 168px;
-  object-fit: contain;
-  transform-origin: 50% 100%;
-  animation: breathe 3.2s ease-in-out infinite;
-}
-
-@keyframes breathe {
-  50% {
-    scale: 1.03 0.97;
-  }
+.heroCat {
+  width: 220px;
 }
 
 /* The question's progress: seven segments, the answered ones amber. */
@@ -371,13 +361,46 @@
   color: var(--ink-900);
 }
 
+/* The career Arandu is talking about. */
+.career[data-talk] {
+  box-shadow: 0 0 0 2px var(--violet-400);
+}
+
+/* On the picked course's card: going on with it. */
+.choose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: calc(100% - 24px);
+  min-height: 44px;
+  margin: 0 12px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--amber-400);
+  color: var(--ink-900);
+  font: 700 15px/1 var(--font-bricolage), var(--font-display);
+  cursor: pointer;
+}
+
+.choose:disabled {
+  opacity: 0.5;
+}
+
+.choose svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.choose:focus-visible,
 .career:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .hello img {
-    animation: none;
-  }
-}
+

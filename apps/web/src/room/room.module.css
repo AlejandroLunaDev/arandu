@@ -103,6 +103,10 @@
   justify-content: center;
 }
 
+.catModel {
+  width: 220px;
+}
+
 .book {
   padding: 12px;
   border: 1.5px solid var(--violet-400);
