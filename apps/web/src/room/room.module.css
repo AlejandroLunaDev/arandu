@@ -26,8 +26,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-.top img,
+/* Both sides set: with only the width, the preflight's height: auto follows the file's ratio, not the box. */
+.top img {
+  width: 26px;
+  height: 17px;
+  object-fit: contain;
+}
+
 .week img {
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
