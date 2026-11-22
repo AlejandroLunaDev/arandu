@@ -1,9 +1,11 @@
 "use client";
 
-import type { Exercise, StopContent } from "@arandu/contracts";
+import type { Exercise, StopContent, Wallet } from "@arandu/contracts";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { OutOfNovelos } from "@/caminho/out-of-novelos";
 import { safeUrl } from "@/landing/book/book-data";
+import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import styles from "./onboarding.module.css";
 import p from "./path.module.css";
@@ -13,20 +15,58 @@ type Of<K extends Exercise["kind"]> = Extract<Exercise, { kind: K }>;
 /** An exercise reports once it is over: whether it was right, and how many mistakes it took. */
 type Done = (right: boolean, mistakes: number, title?: string) => void;
 
+/** The props on each exercise's ledge, in turn, as on the O15-O18 boards. */
+const PROPS = [
+  ["yarn-big", 116, 75],
+  ["books", 116, 85],
+  ["ball-big", 64, 64],
+  ["plant-big", 86, 97],
+] as const;
+
+/** The ledge under the exercise: a prop and Arandu, sitting while the person thinks. */
+function Stage({ turn }: { turn: number }) {
+  const [file, width, height] = PROPS[turn % PROPS.length];
+  return (
+    <div className={p.stage} aria-hidden="true">
+      <div className={p.ledge} />
+      <Image className={p.prop} src={`/img/props/${file}.webp`} alt="" width={width} height={height} />
+      <Cat mood="sit" size={150} className={p.stageCat} />
+    </div>
+  );
+}
+
 const KIND: Partial<Record<Exercise["kind"], string>> = {
   escolha_uma: "escolha uma",
   una_os_pares: "una os pares",
   verdadeiro_ou_falso: "verdadeiro ou falso",
   complete_a_frase: "complete a frase",
+  ordene: "ordene",
+};
+
+/** Off the onboarding a stop is paid in novelos: a wrong answer spends one (P5), and with none left it waits (P6). */
+export type Novelos = {
+  wallet: Wallet;
+  spend: () => Promise<Wallet>;
+  /** null: the API refused (this stop already gave its novelo, or there are not enough peixinhos). */
+  reread: () => Promise<Wallet | null>;
+  refill: () => Promise<Wallet | null>;
 };
 
 // O14-O18: the stop's cards, then its exercises. A missed exercise comes back at the end until it is right; in the
 // first stop mistakes spend no novelo. Every word on screen comes from the stop (GET /stops/:disciplineId/:topic).
-// shortcut: the onboarding's first stops hold only these four kinds (measured: all 125 of them); the other seven
-// come with the stops after the first.
-type Props = { stop: StopContent; caption: string; busy: boolean; failed: boolean; onClose: () => void; onDone: (mistakes: number) => void };
+// shortcut: the onboarding's first stops hold only the first four kinds (measured: all 125 of them) and P4 adds
+// ordene; the other six are skipped as right until the R01-R12 screens are built.
+type Props = {
+  stop: StopContent;
+  caption: string;
+  busy: boolean;
+  failed: boolean;
+  novelos?: Novelos;
+  onClose: () => void;
+  onDone: (mistakes: number) => void;
+};
 
-export function StopView({ stop, caption, busy, failed, onClose, onDone }: Props) {
+export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone }: Props) {
   const [card, setCard] = useState(0);
   const [queue, setQueue] = useState(() => stop.exercises.map((_, i) => i));
   const [attempt, setAttempt] = useState(0);
@@ -34,6 +74,7 @@ export function StopView({ stop, caption, busy, failed, onClose, onDone }: Props
   const [sheet, setSheet] = useState<{ right: boolean; title: string } | null>(null);
   // Every exercise is right: the result is being saved, or failed to and waits for another try.
   const [ended, setEnded] = useState(false);
+  const [wallet, setWallet] = useState(novelos?.wallet ?? null);
 
   const inCards = card < stop.cards.length;
   const total = stop.exercises.length;
@@ -44,10 +85,16 @@ export function StopView({ stop, caption, busy, failed, onClose, onDone }: Props
   const finish: Done = (right, more, title) => {
     setMistakes(mistakes + more);
     setSheet({ right, title: title ?? (right ? "Isso!" : "Quase.") });
+    if (!right && novelos && wallet) {
+      setWallet({ ...wallet, novelos: Math.max(0, wallet.novelos - 1) });
+      // The API's count wins; if the spend fails, the person keeps learning.
+      novelos.spend().then(setWallet, () => {});
+    }
   };
   // The API takes up to 100 mistakes a stop.
   const save = () => onDone(Math.min(mistakes, 100));
-  const next = () => {
+  /** `reread`: back to the cards first, then on with the exercises. */
+  const next = (reread = false) => {
     const rest = afterAnswer(queue, sheet!.right);
     setSheet(null);
     if (rest.length === 0) {
@@ -57,19 +104,48 @@ export function StopView({ stop, caption, busy, failed, onClose, onDone }: Props
     }
     setAttempt(attempt + 1);
     setQueue(rest);
+    if (reread) setCard(0);
   };
+  const out = novelos && wallet?.novelos === 0 && !sheet && !inCards && !ended;
 
   return (
     <main className={styles.screen}>
       <header className={p.top}>
         <button type="button" className={p.close} aria-label="Fechar" onClick={onClose}>
-          ×
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
         </button>
-        <progress className={p.progress} aria-label={inCards ? "Leitura" : `Exercício ${total - left + 1} de ${total}`} value={inCards ? 0 : total - left} max={total} />
-        <span className={p.first}>primeira parada</span>
+        <progress className={p.progress} aria-label={inCards ? "Leitura" : `Exercício ${total - left + 1} de ${total}`} value={inCards ? 0.04 : Math.max(total - left, 0.04)} max={inCards ? 1 : total} />
+        {wallet ? (
+          <span className={p.lives} aria-label={`${wallet.novelos} ${wallet.novelos === 1 ? "novelo" : "novelos"}`}>
+            <Image src="/img/props/yarn.webp" alt="" width={30} height={30} data-off={wallet.novelos === 0 || undefined} />
+            <b>{wallet.novelos}</b>
+          </span>
+        ) : (
+          <span className={p.first}>primeiro capítulo</span>
+        )}
       </header>
 
-      {inCards ? (
+      {out ? (
+        <OutOfNovelos
+          wallet={wallet!}
+          onClose={onClose}
+          onReread={async () => {
+            const back = await novelos.reread();
+            if (back) {
+              setWallet(back);
+              setCard(0);
+            }
+            return back !== null;
+          }}
+          onRefill={async () => {
+            const full = await novelos.refill();
+            if (full) setWallet(full);
+            return full !== null;
+          }}
+        />
+      ) : inCards ? (
         <Card card={stop.cards[card]!} caption={caption} onNext={() => setCard(card + 1)} />
       ) : (
         exercise && (
@@ -81,23 +157,35 @@ export function StopView({ stop, caption, busy, failed, onClose, onDone }: Props
                   <span className={p.mode}>{exercise.mode}</span>
                 </p>
                 <ExerciseView key={`${current}-${attempt}`} exercise={exercise} onDone={finish} />
+                {!sheet && <Stage turn={total - left} />}
               </div>
             </div>
             {sheet && (
               <section className={p.sheet} data-wrong={!sheet.right || undefined} role="alert">
+                <Cat mood={sheet.right ? "hop" : "sad"} size={112} label={sheet.right ? "Arandu comemorando" : "Arandu, tranquilo"} className={p.peek} />
                 <h2>{sheet.title}</h2>
                 <p>
                   {exercise.why}
-                  {!sheet.right && " Tudo bem: essa volta no fim, até você acertar. Aqui errar não gasta novelo."}
+                  {!sheet.right && (wallet ? " Essa volta no fim, até você acertar." : " Tudo bem: essa volta no fim, até você acertar. Aqui errar não gasta novelo.")}
                 </p>
-                <MainButton onClick={next}>Continuar</MainButton>
+                {!sheet.right && wallet && (
+                  <p className={p.spent}>
+                    Menos 1 novelo · você tem {wallet.novelos}
+                  </p>
+                )}
+                <MainButton onClick={() => next()}>Continuar</MainButton>
+                {!sheet.right && wallet && (
+                  <button type="button" className={p.ghost} onClick={() => next(true)}>
+                    Reler os cards
+                  </button>
+                )}
               </section>
             )}
             {ended && (
               <footer className={`${styles.foot} ${styles.last}`}>
                 {failed && (
                   <p className={styles.error} role="alert">
-                    Não consegui guardar a parada agora. Tenta de novo?
+                    Não consegui guardar o capítulo agora. Tenta de novo?
                   </p>
                 )}
                 <MainButton disabled={busy} onClick={save}>
@@ -119,16 +207,19 @@ function Card({ card, caption, onNext }: { card: StopContent["cards"][number]; c
       <div className={styles.body}>
         <div className={p.stop}>
           <p className={p.caption}>{caption}</p>
-          <div className="flex items-end justify-between gap-3">
-            <h1 className={p.title}>{card.title}</h1>
-            <Image src="/img/arandu/looking-down.webp" alt="Arandu lendo" width={56} height={56} />
+          <h1 className={p.title}>{card.title}</h1>
+          <div className={p.page}>
+            <Cat mood="read" size={120} label="Arandu lendo" className={p.readCat} />
+            <p>{card.text}</p>
+            {url && (
+              <a className={p.source} href={url} target="_blank" rel="noreferrer">
+                {card.source.label}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+                </svg>
+              </a>
+            )}
           </div>
-          <p className={p.page}>{card.text}</p>
-          {url && (
-            <a className={p.source} href={url} target="_blank" rel="noreferrer">
-              {card.source.label}
-            </a>
-          )}
         </div>
       </div>
       <footer className={`${styles.foot} ${styles.last}`}>
@@ -149,6 +240,8 @@ function ExerciseView({ exercise, onDone }: { exercise: Exercise; onDone: Done }
       return <TrueFalse exercise={exercise} onDone={onDone} />;
     case "complete_a_frase":
       return <Sentence exercise={exercise} onDone={onDone} />;
+    case "ordene":
+      return <Order exercise={exercise} onDone={onDone} />;
     default:
       // A kind the first stop doesn't hold: skipped as right rather than blocking the stop.
       return <MainButton onClick={() => onDone(true, 0)}>Continuar</MainButton>;
@@ -161,8 +254,9 @@ function Choose({ exercise, onDone }: { exercise: Of<"escolha_uma"> | Of<"escolh
   const state = (i: number) => (!checked ? undefined : i === exercise.answer ? "ok" : i === pick ? "no" : undefined);
   return (
     <>
-      <p className={p.prompt}>{exercise.prompt}</p>
-      <div className={p.choices}>
+      <h1 className={p.prompt}>{exercise.prompt}</h1>
+      {/* Short options sit two by two, as on O15; sentences stack. */}
+      <div className={p.choices} data-grid={exercise.options.every((o) => o.length <= 24) || undefined}>
         {exercise.options.map((option, i) => (
           <button key={i} type="button" className={styles.option} aria-pressed={pick === i} data-state={state(i)} disabled={checked} onClick={() => setPick(i)}>
             {option}
@@ -219,7 +313,7 @@ function Pairs({ exercise, onDone }: { exercise: Of<"una_os_pares">; onDone: Don
 
   return (
     <>
-      <p className={p.prompt}>{exercise.prompt}</p>
+      <h1 className={p.prompt}>{exercise.prompt}</h1>
       <div className={p.pairs}>
         <div>
           {exercise.pairs.map(([term], i) => (
@@ -256,9 +350,9 @@ function TrueFalse({ exercise, onDone }: { exercise: Of<"verdadeiro_ou_falso">; 
 
   return (
     <>
-      <p className={p.prompt}>
+      <h1 className={p.prompt}>
         Isso é verdade? {index + 1} de {total}
-      </p>
+      </h1>
       <div className={p.statement} data-state={answered ? (ok ? "ok" : "no") : undefined}>
         <p>{statement.text}</p>
         {answered && (
@@ -333,6 +427,63 @@ function Sentence({ exercise, onDone }: { exercise: Of<"complete_a_frase">; onDo
               setChecked(true);
               const right = sentenceRight(exercise, words);
               onDone(right, right ? 0 : 1);
+            }}
+          >
+            Verificar
+          </MainButton>
+        </div>
+      )}
+    </>
+  );
+}
+
+// P4: put the steps in order. A tap on a piece fills the next slot; a tap on a filled slot takes its piece back.
+function Order({ exercise, onDone }: { exercise: Of<"ordene">; onDone: Done }) {
+  const [bank] = useState(() => shuffled(exercise.steps));
+  // The bank pieces in the slots, in slot order, by their index in the bank.
+  const [placed, setPlaced] = useState<number[]>([]);
+  const [checked, setChecked] = useState(false);
+  const words = placed.map((i) => bank[i]!);
+
+  return (
+    <>
+      <h1 className={p.prompt}>{exercise.prompt}</h1>
+      <ol className={p.slots}>
+        {exercise.steps.map((step, i) => {
+          const word = words[i];
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                className={p.slot}
+                data-full={word !== undefined || undefined}
+                data-state={checked ? (word === step ? "ok" : "no") : undefined}
+                aria-label={word ? `${i + 1}: ${word}. Toque para tirar.` : `${i + 1}, vazio`}
+                disabled={checked || word === undefined}
+                onClick={() => setPlaced(placed.filter((_, s) => s !== i))}
+              >
+                <b>{i + 1}</b>
+                {word}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <div className={p.bank}>
+        {bank.map((step, i) => (
+          <button key={i} type="button" className={p.tile} data-state={placed.includes(i) ? "done" : undefined} disabled={checked || placed.includes(i)} onClick={() => setPlaced([...placed, i])}>
+            {step}
+          </button>
+        ))}
+      </div>
+      {!checked && (
+        <div className={p.action}>
+          <MainButton
+            disabled={placed.length < bank.length}
+            onClick={() => {
+              setChecked(true);
+              const right = words.every((word, i) => word === exercise.steps[i]);
+              onDone(right, right ? 0 : 1, right ? undefined : "Quase. A ordem ainda não é essa.");
             }}
           >
             Verificar

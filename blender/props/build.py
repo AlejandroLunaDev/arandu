@@ -125,6 +125,12 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "StringSocket": (srgb("#3A3645"), 0.5, 0.0),
     "TowerStone": (srgb("#DDD3C0"), 0.7, 0.0),
     "TowerWindow": (srgb("#3A3645"), 0.4, 0.0),
+    "PawFur": (srgb("#18181B"), 0.6, 0.0),  # the cat's neutral black (blender/arandu FUR_TOP)
+    "PawPad": (srgb("#F2B53C"), 0.35, 0.0),  # the amber of the cat's eyes
+    "FishBody": (srgb("#F2B53C"), 0.3, 0.0),
+    "FishFin": (srgb("#D99A32"), 0.35, 0.0),  # amber-500
+    "FishEye": (srgb("#09090D"), 0.15, 0.0),  # ink-950
+    "FishGlint": (srgb("#FBF8F1"), 0.2, 0.0),  # cream-50
 }
 
 
@@ -677,6 +683,40 @@ def ball(coll):
     return p.build("Ball", coll)
 
 
+def blob(part, center, radii, mat, turn=Matrix()):
+    """An ellipsoid: a unit sphere scaled by radii, turned, then moved to center."""
+    add_sphere(part, (0, 0, 0), 1.0, mat, m=Matrix.Translation(center) @ turn @ Matrix.Diagonal((*radii, 1.0)))
+
+
+def paw(coll):
+    """Arandu's paw held up to the camera: a round black palm, four toes, amber beans and a lobed
+    main pad. The week's patinhas, one per day studied. Its origin is the centre of its base."""
+    p = Part()
+    blob(p, (0, 0, 0.045), (0.045, 0.022, 0.042), "PawFur")
+    for x, z, tilt in ((-0.04, 0.074, 0.6), (-0.015, 0.093, 0.2), (0.015, 0.093, -0.2), (0.04, 0.074, -0.6)):
+        blob(p, (x, 0.004, z), (0.019, 0.017, 0.02), "PawFur")
+        blob(p, (x + 0.004 * tilt, -0.012, z - 0.002), (0.013, 0.008, 0.015), "PawPad")
+    blob(p, (0, -0.017, 0.031), (0.025, 0.009, 0.017), "PawPad")
+    for x in (-0.017, 0.017):
+        blob(p, (x, -0.015, 0.02), (0.012, 0.008, 0.011), "PawPad")
+    return p.build("Paw", coll)
+
+
+def fish(coll):
+    """A peixinho, the coin of the shop: a round amber goldfish swimming toward +X, its side to the
+    camera, with a forked tail, fins and one shiny eye. Its origin is the centre of its base."""
+    p = Part()
+    turn = lambda deg: Matrix.Rotation(math.radians(deg), 4, "Y")
+    blob(p, (0, 0, 0.04), (0.05, 0.03, 0.035), "FishBody")
+    blob(p, (-0.066, 0, 0.053), (0.026, 0.006, 0.012), "FishFin", turn(35))
+    blob(p, (-0.066, 0, 0.027), (0.026, 0.006, 0.012), "FishFin", turn(-35))
+    blob(p, (-0.006, 0, 0.074), (0.024, 0.005, 0.01), "FishFin", turn(-18))
+    blob(p, (0.01, -0.028, 0.03), (0.015, 0.005, 0.007), "FishFin", turn(20))
+    blob(p, (0.03, -0.021, 0.05), (0.007, 0.007, 0.007), "FishEye")
+    blob(p, (0.032, -0.027, 0.053), (0.0022, 0.0022, 0.0022), "FishGlint")
+    return p.build("Fish", coll)
+
+
 # ---------------------------------------------------------------- the room's furniture
 #
 # The furniture shares the cat's scale too: about 1.3 times a person's, so the cat and the books never
@@ -1180,6 +1220,8 @@ LAYOUT = {  # where each prop stands in the Blender scene; the export puts every
     "BookOpen": (-3.0, 0, 0),
     "Ball": (-1.2, 0, 0),
     "YarnBall": (-0.9, 0, 0),
+    "Paw": (-1.5, 0, 0),
+    "Fish": (-1.75, 0, 0),
     "PlantPot": (-0.45, 0, 0.6),
     "LampMushroom": (0.0, 0, 0),
     "LampClassic": (0.45, 0, 0),
@@ -1238,7 +1280,7 @@ def build():
     coll = reset_collection()
     props = [book(coll, name) for name in BOOKS] + [book_open(coll)]
     props += [shelf(coll, name) for name in SHELVES]
-    props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball)]
+    props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball, paw, fish)]
     props += [f(coll) for f in (desk, notebook, chair_gamer, sofa, paper_bin, trophy, grad_cap,
                                 pencil_cup, mug, neon_sign, string_lights, farol_santander, tv, side_table)]
     props += [paper_ball(coll, name) for name in PAPER_BALLS] + [pencil(coll, name) for name in PENCILS]

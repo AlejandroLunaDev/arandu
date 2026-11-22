@@ -14,7 +14,7 @@ type Step = "semester" | "rhythm" | "how" | "stop" | "done" | "age" | "google";
 
 // O11-O21, after the person picked a course at O10: its first semester, the weekly goal, the first stop (its
 // cards and exercises), its result, the age and Google. Each choice is saved to the journey as it is made.
-export function PathFlow({ course, place }: { course: PlaceCourse; place: Place }) {
+export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place: Place; onBack: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("semester");
   const [paths, setPaths] = useState<CareerPaths | null>(null);
@@ -56,6 +56,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         course={course}
         place={name}
         path={path}
+        onBack={onBack}
         onNext={() =>
           attempt(async () => {
             await saveJourney({ disciplineId: first.disciplineId });
@@ -72,6 +73,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         course={course.course}
         goal={goal}
         onGoal={setGoal}
+        onBack={() => setStep("semester")}
         onNext={() =>
           attempt(async () => {
             await saveJourney({ weeklyGoal: goal });
@@ -87,6 +89,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         {...next}
         course={course.course}
         place={name}
+        onBack={() => setStep("rhythm")}
         onNext={() =>
           attempt(async () => {
             if (!stop) setStop(await getStop(first.disciplineId, 0));
@@ -119,6 +122,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
     return (
       <AgeView
         {...next}
+        onBack={() => setStep("done")}
         onAge={(age) =>
           attempt(async () => {
             await saveJourney({ age });
@@ -137,6 +141,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
       // loads that account instead (the API decides). It comes back to /app.
       onGoogle={() => attempt(signInWithGoogle)}
       onLater={() => router.push("/app")}
+      onBack={() => setStep("age")}
     />
   );
 }

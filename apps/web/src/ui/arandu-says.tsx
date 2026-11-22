@@ -1,11 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
+import { Cat } from "./cat";
+import type { CatMood } from "./cat-scene";
 import styles from "./ui.module.css";
 
-/** Arandu's 2D poses, renders of the 3D cat (the boards' stand-ins until the 3D cat is in the app). */
-export type Pose = "sitting" | "paws-up" | "lying" | "looking-down" | "standing";
+/** What Arandu does beside his bubble: one of the 3D cat's clips. */
+export type Pose = CatMood;
 
 const WORD_MS = 70;
 
@@ -23,17 +24,26 @@ export function useReveal(text: string) {
   return { shown, done: shown >= total };
 }
 
-/** Arandu's bubble, the cat at its tail. Screen readers get the whole text at once, with its first word. */
+/** The bubble's words: the said ones show, the rest keep their place. Screen readers get the whole text at once, with its first word. */
+export function Said({ text, shown }: { text: string; shown: number }) {
+  const words = text.split(" ");
+  return (
+    <>
+      <span className="sr-only">{shown > 0 && text}</span>
+      <span aria-hidden="true">
+        {words.slice(0, shown).join(" ")} <span className={styles.unsaid}>{words.slice(shown).join(" ")}</span>
+      </span>
+    </>
+  );
+}
+
+/** Arandu's bubble, the cat at its tail. */
 export function AranduSays({ text, shown, pose }: { text: string; shown: number; pose: Pose }) {
   return (
     <section className={styles.talk}>
-      <Image src={`/img/arandu/${pose}.webp`} alt="Arandu" width={76} height={76} priority />
+      <Cat mood={pose} size={104} className={styles.talkCat} />
       <div className={styles.bubble} role="status">
-        <span className="sr-only">{shown > 0 && text}</span>
-        <span aria-hidden="true">
-          {text.split(" ").slice(0, shown).join(" ")}
-          <span className={styles.caret} />
-        </span>
+        <Said text={text} shown={shown} />
       </div>
     </section>
   );

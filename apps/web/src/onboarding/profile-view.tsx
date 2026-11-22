@@ -29,7 +29,7 @@ export function ProfileView({ profile, busy, failed, onNext }: { profile: Arandu
   return (
     <main className={styles.screen}>
       <div className={styles.body}>
-        <AranduSays text={SAY} shown={shown} pose="paws-up" />
+        <AranduSays text={SAY} shown={shown} pose="sit" />
         {done && (
           <div className={`${styles.profile} ${ui.after}`}>
             <dl>
