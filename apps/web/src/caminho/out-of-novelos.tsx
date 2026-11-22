@@ -2,7 +2,7 @@
 
 import type { Wallet } from "@arandu/contracts";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "@/onboarding/onboarding.module.css";
 import { Cat } from "@/ui/cat";
 import { useAttempt } from "@/ui/use-attempt";
@@ -33,7 +33,12 @@ export function OutOfNovelos({
 }) {
   const { busy, failed, attempt } = useAttempt();
   const [refused, setRefused] = useState<string | null>(null);
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  // The countdown moves on its own while the screen is open.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const next = wait(wallet.nextNoveloAt, now);
 
   const run = (call: () => Promise<boolean>, no: string) =>

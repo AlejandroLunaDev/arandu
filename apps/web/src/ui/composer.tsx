@@ -59,6 +59,9 @@ export function Composer({ placeholder, busy, onSend, onNext }: { placeholder: s
         event.preventDefault();
         if (busy) return;
         if (text) {
+          // Sent: a late dictation result must not write the message back into the field.
+          if (dictation.current) dictation.current.onresult = null;
+          dictation.current?.stop();
           onSend(text);
           setDraft("");
         } else onNext?.();

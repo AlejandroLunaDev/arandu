@@ -116,7 +116,16 @@ export function OnboardingFlow() {
       }}
       onContinue={() => answer()}
       // Only before the first answer: a conversation with Arandu cannot be taken back, so later questions go on.
-      onBack={answers.length === 0 ? () => setTurn(null) : undefined}
+      // Back to the hello: the next session's quick replies can be worded differently, so nothing tapped carries over.
+      onBack={
+        answers.length === 0
+          ? () => {
+              setPicks([]);
+              setSaid(null);
+              setTurn(null);
+            }
+          : undefined
+      }
     />
   );
 }

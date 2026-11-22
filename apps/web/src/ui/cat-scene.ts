@@ -131,6 +131,7 @@ export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => vo
   };
   // A poke on his body (not the empty box around him) startles him; many in a row make him cross for a moment.
   const ray = new THREE.Raycaster();
+  let calm = 0;
   const onPoke = (e: PointerEvent) => {
     const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2), camera);
@@ -141,6 +142,11 @@ export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => vo
       crossUntil = t + CROSS;
       pokes = [];
       once = null;
+      // Holding still (reduced motion), nothing redraws him: draw him calm again once it passes.
+      if (reduce) {
+        clearTimeout(calm);
+        calm = window.setTimeout(draw, CROSS * 1000 + 50);
+      }
     } else if (!once && t > crossUntil) play("startle");
     if (reduce) draw();
   };
@@ -229,6 +235,7 @@ export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => vo
     },
     stop() {
       cancelAnimationFrame(frame);
+      clearTimeout(calm);
       observer.disconnect();
       removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerdown", onPoke);
