@@ -9,6 +9,9 @@ import { BooksRepository } from '../src/books/books.repository.js';
 process.env.DATABASE_URL = 'postgresql://user:pass@127.0.0.1:1/none';
 process.env.SUPABASE_URL = 'https://dummy.supabase.co';
 process.env.OPENROUTER_API_KEY = 'dummy';
+process.env.SUPABASE_PUBLISHABLE_KEY = 'dummy';
+process.env.JWT_SECRET = 'j'.repeat(32);
+process.env.INTERNAL_API_SECRET = 'i'.repeat(32);
 
 const book = {
   profession: { slug: 'direito', name: 'Direito' },

@@ -17,7 +17,9 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
+import { Public } from '../auth/public.decorator.js';
 import { UserId } from '../auth/user-id.decorator.js';
 import { CardTalkService } from './card-talk.service.js';
 import { PathsRepository } from './paths.repository.js';
@@ -52,6 +54,10 @@ export class PathsController {
   ) {}
 
   /** O10-O11: the career's courses and their first-semester subjects, each a book of stops. */
+  // Public (internal secret still required): the same for everyone, so the web server caches it without a token.
+  // Not rate limited: a database read, no model call, and the server's cache misses all come from its one IP.
+  @Public()
+  @SkipThrottle({ burst: true, daily: true })
   @Get('careers/:slug/paths')
   async careerPaths(
     @Param('slug', { schema: slug }) professionSlug: string,
@@ -62,6 +68,8 @@ export class PathsController {
   }
 
   /** O14-O18 and every later stop: its cards and exercises. Only made stops inside the subject's run; else 404. */
+  @Public()
+  @SkipThrottle({ burst: true, daily: true })
   @Get('stops/:disciplineId/:topic')
   stop(
     @Param('disciplineId', { schema: id }) disciplineId: number,

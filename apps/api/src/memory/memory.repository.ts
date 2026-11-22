@@ -29,7 +29,7 @@ export class PersonGoneError extends UnauthorizedException {
   }
 }
 
-// The foreign keys to auth.users: a write that breaks one is for a deleted account.
+// The foreign keys to public.users: a write that breaks one is for a deleted account.
 const USER_KEYS = new Set([
   'arandu_memories_user_id_fkey',
   'arandu_sessions_user_id_fkey',

@@ -1,9 +1,21 @@
 import { Module } from '@nestjs/common';
+import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
+import { AuthRepository } from './auth.repository.js';
+import { AuthService } from './auth.service.js';
+import { SessionsService } from './sessions.service.js';
+import { SupabaseIdentity } from './supabase-identity.js';
 
-/** Sign-in is Supabase Auth's: the web signs the person in, and this module checks their token on every request. */
+/** The API owns users and sessions; Supabase Auth only proves the Google identity at sign-in. */
 @Module({
-  providers: [AuthGuard],
+  controllers: [AuthController],
+  providers: [
+    AuthGuard,
+    AuthRepository,
+    AuthService,
+    SessionsService,
+    SupabaseIdentity,
+  ],
   exports: [AuthGuard],
 })
 export class AuthModule {}

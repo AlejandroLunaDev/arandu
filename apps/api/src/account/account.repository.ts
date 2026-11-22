@@ -31,11 +31,25 @@ export class AccountRepository {
     data.arandu_messages = await this.sql`
       select m.* from public.arandu_messages m join public.arandu_sessions s on s.id = m.session_id
       where s.user_id = ${userId} order by m.id`;
+    data.users = await this.sql`
+      select id, email, name, avatar_url, created_at, last_seen_at from public.users where id = ${userId}`;
+    data.sessions = await this.sql`
+      select id, user_agent, ip, created_at, last_seen_at, expires_at, revoked_at
+      from public.sessions where user_id = ${userId} order by created_at`;
     return data;
   }
 
-  /** Deletes the auth user; every table above cascades from it. */
+  /**
+   * Deletes the user, from which every table above and the sessions cascade, and the Supabase Auth user of its Google
+   * identity, so nothing about the person is left behind.
+   */
   async delete(userId: string): Promise<void> {
-    await this.sql`delete from auth.users where id = ${userId}`;
+    await this.sql.begin(async (tx) => {
+      await tx`
+        delete from auth.users where id in (
+          select i.user_id from auth.identities i join public.users u on u.google_sub = i.provider_id
+          where u.id = ${userId} and i.provider = 'google')`;
+      await tx`delete from public.users where id = ${userId}`;
+    });
   }
 }

@@ -24,7 +24,10 @@ import { GameModule } from './game/game.module.js';
 import { ProgressModule } from './progress/progress.module.js';
 import { AiModule } from './platform/ai/ai.module.js';
 import { DatabaseModule } from './platform/database/database.module.js';
-import { AllExceptionsFilter } from './platform/http/all-exceptions.filter.js';
+import {
+  AllExceptionsFilter,
+  validationFailed,
+} from './platform/http/all-exceptions.filter.js';
 import { RequestLoggerMiddleware } from './platform/http/request-logger.middleware.js';
 import { RateLimitModule } from './platform/rate-limit/rate-limit.module.js';
 import { RecommendationsModule } from './recommendations/recommendations.module.js';
@@ -55,7 +58,12 @@ import { RecommendationsModule } from './recommendations/recommendations.module.
     { provide: APP_GUARD, useExisting: AuthGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Validates every @Body({ schema }) and @Param(..., { schema }): Nest does not without this pipe.
-    { provide: APP_PIPE, useClass: StandardSchemaValidationPipe },
+    {
+      provide: APP_PIPE,
+      useValue: new StandardSchemaValidationPipe({
+        exceptionFactory: validationFailed,
+      }),
+    },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
-import { Public } from '../auth/public.decorator.js';
+import { OpenToBrowsers } from '../auth/public.decorator.js';
 import { BooksRepository } from './books.repository.js';
 
 const OWN_BOOKS: readonly OwnBook['book'][] = ['produto', 'solucao'];
@@ -23,7 +23,7 @@ const slug = z
 const CACHE = 'public, max-age=21600';
 
 /** The landing's shelf: public, no sign-in. */
-@Public()
+@OpenToBrowsers()
 // Not rate limited: the limits guard the paid model key and a book never calls the model. A school's visitors share
 // one IP, and 20 a minute would lock the shelf for the whole class.
 @SkipThrottle({ burst: true, daily: true })

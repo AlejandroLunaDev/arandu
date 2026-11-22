@@ -36,17 +36,28 @@ describe('AccountRepository', () => {
         'stop_questions',
         'book_reflections',
         'arandu_messages',
+        'users',
+        'sessions',
       ]),
     );
     expect(statements.every((q) => q.includes('{u}'))).toBe(true);
-    expect(statements.at(-1)).toContain('join public.arandu_sessions');
+    expect(
+      statements.some((q) => q.includes('join public.arandu_sessions')),
+    ).toBe(true);
+    expect(statements.at(-1)).toContain('from public.sessions');
   });
 
-  it('delete removes the auth user', async () => {
+  it('delete removes the Google auth user, then the user, in one transaction', async () => {
     const { sql, statements } = recording();
+    const begin = vi.fn((run: (tx: Sql) => Promise<void>) => run(sql));
+    Object.assign(sql, { begin });
 
     await new AccountRepository(sql).delete('u');
 
-    expect(statements).toEqual(['delete from auth.users where id = {u}']);
+    expect(begin).toHaveBeenCalledTimes(1);
+    expect(statements).toHaveLength(2);
+    expect(statements[0]).toContain('delete from auth.users');
+    expect(statements[0]).toContain('{u}');
+    expect(statements[1]).toBe('delete from public.users where id = {u}');
   });
 });
