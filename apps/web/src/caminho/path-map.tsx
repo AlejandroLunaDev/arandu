@@ -13,7 +13,7 @@ export function PathMap({ home, book, course, next }: { home: Home; book: BookPr
   const { wallet, week } = home;
   const total = book.stops.length;
   const done = book.stops.filter((stop) => stop.state === "done").length;
-  const href = (index: number) => `/app/capitulo/${book.discipline.id}/${index}` as const;
+  const href = (index: number) => `/app/capitulo?d=${book.discipline.id}&t=${index}` as const;
 
   return (
     <main className={c.map}>
