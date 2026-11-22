@@ -370,3 +370,19 @@ describe('MemoryRepository conversations', () => {
       expect(call).toContain('u1');
   });
 });
+
+describe('MemoryRepository saveCovered', () => {
+  it('passes the plain array, never sql.array', async () => {
+    const array = vi.fn();
+    const tag = Object.assign(vi.fn().mockResolvedValue([]), { array });
+    const covered = ['situation', 'interests'] as AranduProfile['covered'];
+
+    await new MemoryRepository(tag as unknown as Sql).saveCovered(
+      's1',
+      covered,
+    );
+
+    expect(tag.mock.calls[0]?.slice(1)).toEqual([covered, 's1']);
+    expect(array).not.toHaveBeenCalled();
+  });
+});

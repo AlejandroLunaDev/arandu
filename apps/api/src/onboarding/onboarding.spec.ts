@@ -11,6 +11,7 @@ import {
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { profileInput } from '../memory/profile.schema.js';
 import { OnboardingModule } from './onboarding.module.js';
+import { onboardingInstructions } from './onboarding.prompt.js';
 
 const ALL_TOPICS = [
   'situation',
@@ -47,6 +48,19 @@ const messyProfile = (over: Record<string, unknown> = {}) =>
   });
 const user = (content = 'Oi') => ({ role: 'user', content });
 
+describe('onboardingInstructions', () => {
+  it('has no already-covered line without topics', () => {
+    expect(onboardingInstructions()).not.toContain('Already covered');
+    expect(onboardingInstructions([])).not.toContain('Already covered');
+  });
+
+  it('lists the covered topics', () => {
+    expect(onboardingInstructions(['situation', 'interests'])).toContain(
+      'Already covered in earlier turns, so keep them in covered and never ask them again: situation, interests.',
+    );
+  });
+});
+
 describe('POST /arandu/onboarding', () => {
   let app: INestApplication;
   let model: FakeModel;
@@ -71,11 +85,12 @@ describe('POST /arandu/onboarding', () => {
 
     const res = await post({}).expect(401);
 
-    expect(res.body).toMatchObject({
-      statusCode: 401,
-      error: 'UNAUTHORIZED',
-      message: 'This account no longer exists',
-      path: '/arandu/onboarding',
+    expect(res.body).toEqual({
+      error: {
+        statusCode: 401,
+        code: 'unauthorized',
+        message: 'This account no longer exists',
+      },
     });
     expect(model.calls).toHaveLength(0);
   });
@@ -143,6 +158,69 @@ describe('POST /arandu/onboarding', () => {
     expect(res.body.done).toBe(true);
     expect(res.body.quickReplies).toEqual([]);
     expect(res.body.progress).toEqual({ answered: 7, total: 7 });
+  });
+
+  it('keeps a topic covered before when the model drops it, so progress never goes down', async () => {
+    await start({ profile: profile({ covered: ['interests'] }) });
+    memory.covered.mockResolvedValue(['situation', 'workStyle']);
+
+    const res = await answer().expect(200);
+
+    expect(res.body.profile.covered).toEqual([
+      'situation',
+      'interests',
+      'workStyle',
+    ]);
+    expect(res.body.progress.answered).toBe(3);
+  });
+
+  it('keeps TOPICS order in the union, with no duplicates', async () => {
+    await start({ profile: profile({ covered: ['admired', 'situation'] }) });
+    memory.covered.mockResolvedValue(['admired', 'likedSubjects']);
+
+    const res = await answer().expect(200);
+
+    expect(res.body.profile.covered).toEqual([
+      'situation',
+      'likedSubjects',
+      'admired',
+    ]);
+  });
+
+  it('is done when the union covers every topic, though this turn does not', async () => {
+    await start({ profile: profile({ covered: ['situation'] }) });
+    memory.covered.mockResolvedValue(ALL_TOPICS.slice(1));
+
+    const res = await answer().expect(200);
+
+    expect(res.body.done).toBe(true);
+    expect(res.body.progress).toEqual({ answered: 7, total: 7 });
+  });
+
+  it('passes the stored covered into the turn and saves the union', async () => {
+    await start({ profile: profile({ covered: ['interests'] }) });
+    memory.covered.mockResolvedValue(['situation']);
+
+    await answer('Estudo').expect(200);
+
+    expect(memory.covered).toHaveBeenCalledWith(SESSION_ID);
+    expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
+      { role: 'user', content: 'Estudo' },
+      { role: 'assistant', content: 'Próxima pergunta?' },
+    ]);
+    expect(memory.saveCovered).toHaveBeenCalledWith(SESSION_ID, [
+      'situation',
+      'interests',
+    ]);
+  });
+
+  it('tells the model which topics are already covered', async () => {
+    await start();
+    memory.covered.mockResolvedValue(['situation', 'workStyle']);
+
+    await answer().expect(200);
+
+    expect(model.lastCall?.instructions).toContain('situation, workStyle.');
   });
 
   it('is done at the 10th answer even with topics missing', async () => {

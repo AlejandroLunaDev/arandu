@@ -29,7 +29,7 @@ export class PersonGoneError extends UnauthorizedException {
   }
 }
 
-// The foreign keys to auth.users: a write that breaks one is for a deleted account.
+// The foreign keys to public.users: a write that breaks one is for a deleted account.
 const USER_KEYS = new Set([
   'arandu_memories_user_id_fkey',
   'arandu_sessions_user_id_fkey',
@@ -191,6 +191,20 @@ export class MemoryRepository {
     await this.sql`insert into public.arandu_messages ${this.sql(
       messages.map((m) => ({ session_id: sessionId, ...m })),
     )}`;
+  }
+
+  /** The onboarding topics the session has covered so far. */
+  async covered(sessionId: string): Promise<AranduProfile['covered']> {
+    const [row] = await this.sql<{ covered: AranduProfile['covered'] }[]>`
+      select covered from public.arandu_sessions where id = ${sessionId}`;
+    return row?.covered ?? [];
+  }
+
+  async saveCovered(
+    sessionId: string,
+    covered: AranduProfile['covered'],
+  ): Promise<void> {
+    await this.sql`update public.arandu_sessions set covered = ${covered} where id = ${sessionId}`;
   }
 
   async saveProfile(userId: string, profile: AranduProfile): Promise<void> {

@@ -10,7 +10,10 @@ import {
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { MemoryRepository } from '../src/memory/memory.repository.js';
-import { AllExceptionsFilter } from '../src/platform/http/all-exceptions.filter.js';
+import {
+  AllExceptionsFilter,
+  validationFailed,
+} from '../src/platform/http/all-exceptions.filter.js';
 
 export const USER_ID = '11111111-1111-4111-8111-111111111111';
 export const SESSION_ID = '22222222-2222-4222-8222-222222222222';
@@ -34,6 +37,8 @@ export const fakeMemoryRepository = () => ({
   createSession: vi.fn().mockResolvedValue(SESSION_ID),
   sessionMessages: vi.fn().mockResolvedValue([]),
   addMessages: vi.fn().mockResolvedValue(undefined),
+  covered: vi.fn().mockResolvedValue([]),
+  saveCovered: vi.fn().mockResolvedValue(undefined),
   saveProfile: vi.fn().mockResolvedValue(undefined),
   unsummarized: vi
     .fn()
@@ -59,7 +64,12 @@ export async function createHttpApp(
     ],
     providers: [
       { provide: APP_GUARD, useClass: FakeAuthGuard },
-      { provide: APP_PIPE, useClass: StandardSchemaValidationPipe },
+      {
+        provide: APP_PIPE,
+        useValue: new StandardSchemaValidationPipe({
+          exceptionFactory: validationFailed,
+        }),
+      },
       { provide: APP_FILTER, useClass: AllExceptionsFilter },
     ],
   });
