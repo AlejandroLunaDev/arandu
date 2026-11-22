@@ -42,26 +42,51 @@ function Step({ say, pose, button, busy, failed, onNext, onBack, ready = true, c
   );
 }
 
+/** The shelf's spines, as on the O11 board: four book shapes in turn, amber and violet covers mixed. */
+const SPINES = [
+  ["tall", "amber"],
+  ["slim", "amber"],
+  ["thick", "violet"],
+  ["short", "amber"],
+  ["tall", "violet"],
+  ["slim", "violet"],
+  ["short", "amber"],
+  ["thick", "amber"],
+] as const;
+
 // O11: the picked course's first semester, its subjects as books; the first one is where the path starts.
 export function SemesterView({ course, place, path, ...next }: Next & { course: PlaceCourse; place: string; path: CareerPath }) {
   const first = path.subjects[0];
   return (
     <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.course} na ${place}.`} pose="hop" button={`Experimentar ${course.course}`}>
       <div className={p.card}>
-        <span className={p.pill}>{course.course}</span>
-        <p className={p.meta}>
-          {place} · {path.city}
-        </p>
+        <div className={p.head}>
+          <span className={p.pill}>{course.course}</span>
+          <span className={p.meta}>
+            {place} · {path.city}
+          </span>
+        </div>
         <p className={p.why}>{course.reason}</p>
         <p className={p.label}>
           1º semestre · {path.subjects.length} {path.subjects.length === 1 ? "livro" : "livros"}
         </p>
         <div className={p.shelf}>
-          {path.subjects.map((subject, i) => (
-            <span key={subject.disciplineId} className={p.book} data-first={i === 0 || undefined} title={subject.name}>
-              {subject.name}
-            </span>
-          ))}
+          <ul>
+            {path.subjects.map((subject, i) => {
+              const [shape, tone] = SPINES[i % SPINES.length];
+              return (
+                <li key={subject.disciplineId} data-shape={shape} data-tone={tone} data-first={i === 0 || undefined} aria-label={i === 0 ? `${subject.name}, sua primeira parada` : subject.name}>
+                  <Image src={`/img/props/spine-${shape}-${tone}.webp`} alt="" width={40} height={120} />
+                  <span aria-hidden="true">{subject.name}</span>
+                  {i === 0 && <Image className={p.mark} src="/img/props/paw.webp" alt="" width={20} height={20} />}
+                </li>
+              );
+            })}
+            <li className={p.kitty} aria-hidden="true">
+              <Cat mood="lie" size={92} className={p.kittyCat} />
+            </li>
+          </ul>
+          <Image className={p.plank} src="/img/props/shelf.webp" alt="" width={780} height={185} />
         </div>
         {first && (
           <p className={p.why}>
@@ -97,7 +122,7 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
       <div className={p.week} aria-hidden="true">
         {["S", "T", "Q", "Q", "S", "S", "D"].map((day, i) => (
           <span key={i} className={p.day} data-on={(goal && LIT[goal].includes(i)) || undefined}>
-            <i />
+            <Image src="/img/props/paw.webp" alt="" width={34} height={34} />
             {day}
           </span>
         ))}
@@ -113,18 +138,27 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
     <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Começar a primeira parada">
       <div className={p.rows}>
         <div className={p.row}>
-          <strong>Um caminho de paradas</strong>
-          <span>
-            As matérias de verdade do 1º semestre de {course} na {place}, uma parada curta por vez.
-          </span>
+          <Image src="/img/props/books.webp" alt="" width={46} height={46} />
+          <div>
+            <strong>Um caminho de paradas</strong>
+            <span>
+              As matérias de verdade do 1º semestre de {course} na {place}, uma parada curta por vez.
+            </span>
+          </div>
         </div>
         <div className={p.row}>
-          <strong>Novelos</strong>
-          <span>Errou, gasta um. Eles voltam com o tempo. Na primeira parada, errar não gasta.</span>
+          <Image src="/img/props/yarn.webp" alt="" width={46} height={46} />
+          <div>
+            <strong>Novelos</strong>
+            <span>Errou, gasta um. Eles voltam com o tempo. Na primeira parada, errar não gasta.</span>
+          </div>
         </div>
         <div className={p.row}>
-          <strong>Patinhas</strong>
-          <span>Cada dia que você estuda vira uma patinha. Vamos fazer a primeira?</span>
+          <Image src="/img/props/paw.webp" alt="" width={46} height={46} />
+          <div>
+            <strong>Patinhas</strong>
+            <span>Cada dia que você estuda vira uma patinha. Vamos fazer a primeira?</span>
+          </div>
         </div>
       </div>
     </Step>
@@ -146,18 +180,24 @@ export function DoneView({ course, subject, place, result, ...next }: Next & { c
           </p>
           <div className={p.stats}>
             {result.sabedoria > 0 && (
-              <span>
-                <strong>+{result.sabedoria}</strong> de sabedoria
-              </span>
+              <div>
+                <Image src="/img/props/books.webp" alt="" width={40} height={40} />
+                <strong>+{result.sabedoria}</strong>
+                <small>de sabedoria</small>
+              </div>
             )}
             {result.patinha && (
-              <span>
-                <strong>1 patinha</strong>, a primeira
-              </span>
+              <div>
+                <Image src="/img/props/paw.webp" alt="" width={40} height={40} />
+                <strong>1</strong>
+                <small>patinha, a primeira</small>
+              </div>
             )}
           </div>
         </section>
-        <AranduSays text={say} shown={shown} pose="sit" />
+        <div className={`${ui.bubble} ${p.loose}`} role="status">
+          <Said text={say} shown={shown} />
+        </div>
       </div>
       {done && (
         <footer className={`${styles.foot} ${styles.last} ${ui.after}`}>

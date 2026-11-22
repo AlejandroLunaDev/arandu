@@ -1,87 +1,168 @@
 /* O11-O21: the first semester, the rhythm, the first stop and the sign-up. Compact scale: 14px text, 8-12px radii. */
 
 .card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 6px 16px 0;
-  padding: 12px;
-  border: 1.5px solid var(--violet-400);
-  border-radius: 14px;
+  padding: 16px;
+  border: 2px solid var(--violet-400);
+  border-radius: 18px;
   background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+}
+
+.card p {
+  margin: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
   background: var(--amber-400);
   color: var(--ink-900);
-  font: 700 13px/1 var(--font-bricolage), var(--font-display);
+  font: 800 20px/1 var(--font-bricolage), var(--font-display);
+  letter-spacing: -0.01em;
 }
 
 .meta {
   margin: 6px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.head .meta {
+  margin: 0;
 }
 
 .why {
   margin: 8px 0 0;
   color: var(--violet-200);
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .label {
-  margin: 12px 0 6px;
+  margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  line-height: 14px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-/* The first semester's subjects as book spines on a ledge; the first carries the paw.
- * shortcut: CSS spines stand in for the landing's 3D books until the 3D shelf is in the app. */
+/* O11's shelf: the first semester's subjects as 3D book spines (blender/props, render.py) on the shelf render, the
+ * paw over the first one and Arandu lying at the end. Titles run up the spine on two lines at most. */
 .shelf {
+  position: relative;
+}
+
+.shelf ul {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: flex-end;
-  gap: 4px;
-  overflow-x: auto;
-  padding: 4px 2px 0;
-  border-bottom: 3px solid var(--ink-700);
+  gap: 2px;
+  margin: 0;
+  padding: 22px 4px 0 12px;
+  list-style: none;
 }
 
-.book {
+.shelf li {
   position: relative;
   flex: none;
-  width: 28px;
-  height: 104px;
-  padding: 8px 0;
-  border-radius: 4px 4px 1px 1px;
-  background: var(--violet-700);
-  color: var(--cream-50);
-  font: 600 10px/1.1 var(--font-body);
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
+}
+
+.shelf li[data-shape="tall"] {
+  width: 25px;
+  height: 92px;
+}
+
+.shelf li[data-shape="slim"] {
+  width: 20px;
+  height: 100px;
+}
+
+.shelf li[data-shape="thick"] {
+  width: 36px;
+  height: 86px;
+}
+
+.shelf li[data-shape="short"] {
+  width: 23px;
+  height: 69px;
+}
+
+.shelf li > img:first-child {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.shelf li span {
+  position: absolute;
+  inset: 25% 10% 4%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink-900);
+  font: 600 8.5px/9.5px var(--font-body);
+  text-align: center;
+  writing-mode: vertical-rl;
+  rotate: 180deg;
 }
 
-.book:nth-child(3n + 2) {
-  height: 94px;
-  background: var(--amber-700);
+.shelf li[data-tone="violet"] span {
+  color: var(--cream-50);
 }
 
-.book:nth-child(3n + 3) {
-  height: 112px;
-  background: var(--ink-700);
+.shelf li[data-first] {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--amber-300) 50%, transparent));
 }
 
-.book[data-first] {
-  box-shadow: inset 0 0 0 2px var(--amber-400);
+.mark {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  object-fit: contain;
+}
+
+.kitty {
+  width: 80px;
+  height: 64px;
+  margin-left: auto;
+}
+
+.kittyCat {
+  position: absolute;
+  right: -8px;
+  bottom: -4px;
+  width: 92px;
+}
+
+.plank {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: -18px;
 }
 
 .paw {
@@ -92,7 +173,7 @@
 .week {
   display: flex;
   justify-content: space-between;
-  margin: 12px 16px 0;
+  margin: 12px 22px 0;
 }
 
 .day {
@@ -104,16 +185,17 @@
   font-size: 11px;
 }
 
-.day i {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--ink-800);
+.day img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  opacity: 0.18;
+  filter: grayscale(1);
 }
 
-.day[data-on] i {
-  background: var(--amber-400);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--amber-400) 50%, transparent);
+.day[data-on] img {
+  opacity: 1;
+  filter: none;
 }
 
 .option {
@@ -131,28 +213,39 @@
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding: 8px 16px 0;
 }
 
 .row {
-  padding: 10px 12px;
-  border: 1.5px solid var(--ink-700);
-  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid var(--ink-700);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+}
+
+.row img {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
 }
 
 .row strong {
   display: block;
-  font-size: 14px;
-  line-height: 18px;
+  font-size: 15px;
+  line-height: 19px;
 }
 
 .row span {
   display: block;
   margin-top: 2px;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 17px;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 /* The stop's header: close, progress, the "primeira parada" tag. */
@@ -475,19 +568,37 @@
 
 .stats {
   display: flex;
-  gap: 8px;
-  margin: 14px 0 4px;
+  align-self: stretch;
+  gap: 10px;
+  margin: 16px 0 4px;
 }
 
-.stats span {
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: var(--ink-850);
-  font-size: 13px;
+.stats div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 6px;
+  border: 2px solid var(--ink-700);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+}
+
+.stats img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
 
 .stats strong {
-  color: var(--amber-300);
+  font: 800 22px/1 var(--font-bricolage), var(--font-display);
+}
+
+.stats small {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
 }
 
 /* O20: the age stepper. */
