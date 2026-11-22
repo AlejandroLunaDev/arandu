@@ -13,7 +13,7 @@ import runpy
 import bpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.normpath(os.path.join(HERE, "..", "..", "public", "models", "arandu.glb"))
+OUT = os.path.normpath(os.path.join(HERE, "..", "..", "apps", "web", "public", "models", "arandu.glb"))
 
 
 def export(path=OUT):
