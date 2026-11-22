@@ -11,7 +11,7 @@ import { SQL, type Sql } from '../platform/database/database.module.js';
 /** The memory's limit: Arandu's note on past sessions never grows past this. */
 export const SUMMARY_MAX = 1500;
 
-export type SessionKind = 'onboarding' | 'career';
+export type SessionKind = 'onboarding' | 'career' | 'choosing';
 
 // Every read is bounded, so one person with a long history never loads it all into the API's memory.
 /** The sessions GET /arandu/memory lists, newest first. */
@@ -204,7 +204,8 @@ export class MemoryRepository {
     sessionId: string,
     covered: AranduProfile['covered'],
   ): Promise<void> {
-    await this.sql`update public.arandu_sessions set covered = ${covered} where id = ${sessionId}`;
+    await this
+      .sql`update public.arandu_sessions set covered = ${covered} where id = ${sessionId}`;
   }
 
   async saveProfile(userId: string, profile: AranduProfile): Promise<void> {
@@ -258,7 +259,9 @@ export class MemoryRepository {
         const about =
           lines[0].kind === 'career'
             ? `source conversation, career ${lines[0].slug}`
-            : 'source onboarding';
+            : lines[0].kind === 'choosing'
+              ? 'source conversation, choosing among the recommended careers'
+              : 'source onboarding';
         return `Session (${about}):\n${lines.map((r) => `${r.role}: ${r.content}`).join('\n')}`;
       })
       .join('\n\n');

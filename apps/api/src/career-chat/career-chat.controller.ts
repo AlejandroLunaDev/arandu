@@ -5,16 +5,28 @@ import { UserId } from '../auth/user-id.decorator.js';
 import { message } from '../memory/message.schema.js';
 import { CareerChatService } from './career-chat.service.js';
 
-const chatRequest = z
-  .object({
-    professionSlug: z
-      .string()
-      .max(100)
-      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
-    sessionId: z.uuid().optional(),
-    message,
-  })
-  .strict();
+const slug = z
+  .string()
+  .max(100)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+
+const chatRequest = z.union([
+  z
+    .object({ professionSlug: slug, sessionId: z.uuid().optional(), message })
+    .strict(),
+  // O10: the recommended careers, before the person chooses one.
+  z
+    .object({
+      professionSlugs: z
+        .array(slug)
+        .min(1)
+        .max(4)
+        .refine((s) => new Set(s).size === s.length, 'must be unique'),
+      sessionId: z.uuid().optional(),
+      message,
+    })
+    .strict(),
+]);
 
 @Controller('arandu/chat')
 export class CareerChatController {
