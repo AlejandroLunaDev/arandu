@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { supabase } from "@/app-shell/api";
 import { useReveal } from "@/ui/arandu-says";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
@@ -11,7 +10,7 @@ const HELLO = "Oi! Eu sou o Arandu. Vou te ajudar a achar um caminho que tenha a
 
 // O01: Arandu says hello, the cat under its bubble, and the person starts, or signs in with Google to the account
 // they already have and comes back to /app, whose front door takes them on.
-export function HelloView({ busy, failed, onStart }: { busy: boolean; failed: boolean; onStart: () => void }) {
+export function HelloView({ busy, failed, onStart, onGoogle }: { busy: boolean; failed: boolean; onStart: () => void; onGoogle: () => void }) {
   const { shown, done } = useReveal(HELLO);
   return (
     <main className={styles.screen}>
@@ -40,7 +39,7 @@ export function HelloView({ busy, failed, onStart }: { busy: boolean; failed: bo
             type="button"
             className={ui.ghost}
             disabled={busy}
-            onClick={() => supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}/app` } })}
+            onClick={onGoogle}
           >
             Já tenho uma conta
           </button>

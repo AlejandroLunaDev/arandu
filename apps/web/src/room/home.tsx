@@ -1,9 +1,5 @@
-"use client";
-
 import type { Home } from "@arandu/contracts";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { api } from "@/app-shell/api";
 import styles from "./room.module.css";
 
 const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
@@ -11,22 +7,7 @@ const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 // S1, the room: the wallet, this week's patinhas and the book the person is on (GET /me).
 // shortcut: the 3D room and cat, Arandu's talk and "Continuar" into the next stop come with the room step; for now it
 // shows where the person stands.
-export function HomeView() {
-  const [home, setHome] = useState<Home | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    api<Home>("/me").then(setHome, () => setFailed(true));
-  }, []);
-
-  if (failed)
-    return (
-      <p className="type-body p-4 text-center text-error" role="alert">
-        Não consegui abrir seu quarto agora. Tenta de novo mais tarde?
-      </p>
-    );
-  if (!home) return null;
-
+export function HomeView({ home }: { home: Home }) {
   const { wallet, week, current } = home;
   return (
     <main className={styles.room}>

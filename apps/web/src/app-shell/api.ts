@@ -1,43 +1,65 @@
-"use client";
+import "server-only";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { internalHeaders, readAuthConfig } from "@/auth/config";
+import { getSession } from "@/auth/session";
 
-import { createClient } from "@supabase/supabase-js";
-
-const API = process.env.NEXT_PUBLIC_API_URL!.replace(/\/$/, "");
-
-/** Supabase Auth only: the app reads and writes everything else through the API. */
-export const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
-
+/** A call the API refused: its status and the `code` of its error body. */
 export class ApiError extends Error {
-  constructor(readonly status: number, path: string) {
-    super(`${path} answered ${status}`);
+  constructor(
+    readonly status: number,
+    readonly code: string | null,
+    path: string,
+  ) {
+    super(`${path} answered ${status}${code ? ` ${code}` : ""}`);
   }
 }
 
-let signingIn: Promise<string> | null = null;
+/** `token`: the session just opened in this same action, which the request's cookies do not hold yet. */
+type Init = { method?: string; body?: unknown; token?: string };
 
-/** The session's token. On first open the person gets an anonymous user; O21 links Google to it later. */
-async function token(): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  if (data.session) return data.session.access_token;
-  // One anonymous sign-in even when several calls start at once.
-  signingIn ??= supabase.auth.signInAnonymously().then(({ data, error }) => {
-    signingIn = null;
-    if (error || !data.session) throw error ?? new Error("No session after the anonymous sign-in");
-    return data.session.access_token;
+async function call<T>(path: string, init: Init, extra: Record<string, string>): Promise<T> {
+  const config = readAuthConfig();
+  const response = await fetch(`${config.apiUrl}${path}`, {
+    method: init.method ?? "GET",
+    headers: { "x-internal-secret": config.internalSecret, ...extra, ...(init.body === undefined ? {} : { "content-type": "application/json" }) },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    cache: "no-store",
   });
-  return signingIn;
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
+    throw new ApiError(response.status, typeof body?.code === "string" ? body.code : null, path);
+  }
+  return response.status === 204 ? (undefined as T) : response.json();
 }
 
-/** A call to the API with the person's token, the anonymous user's included. */
-export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  const response = await fetch(`${API}${path}`, {
-    method: init.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${await token()}`,
-      ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
-    },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  if (!response.ok) throw new ApiError(response.status, path);
-  return response.status === 204 ? (undefined as T) : response.json();
+/**
+ * The API in the person's name, with the browser's IP and user agent. With no session, or one the API no longer
+ * honors (ended, or the person banned), the person goes back to the start of the app.
+ */
+export async function api<T>(path: string, init: Init = {}): Promise<T> {
+  const token = init.token ?? (await getSession())?.accessToken;
+  if (!token) redirect("/app/onboarding");
+  try {
+    return await call<T>(path, init, { ...internalHeaders(readAuthConfig(), await headers()), authorization: `Bearer ${token}` });
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 401 || error.code === "user_banned")) redirect("/app/onboarding");
+    throw error;
+  }
+}
+
+/**
+ * The API's sign-in routes, which answer a refusal instead of sending the person anywhere: the browser's IP counts
+ * their rate limit, and the session the caller names (or none) goes along.
+ */
+export async function authApi<T>(path: string, token: string | null, init: Init = {}): Promise<T> {
+  return call<T>(path, init, { ...internalHeaders(readAuthConfig(), await headers()), ...(token ? { authorization: `Bearer ${token}` } : {}) });
+}
+
+/**
+ * The API with no person, for reads every visitor shares (a career's paths, a stop's content): it never reads the
+ * request, so a `use cache` function can call it and the cache key holds no token.
+ */
+export function publicApi<T>(path: string): Promise<T> {
+  return call<T>(path, {}, {});
 }

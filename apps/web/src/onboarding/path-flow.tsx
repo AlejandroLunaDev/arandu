@@ -1,9 +1,11 @@
 "use client";
 
-import type { CareerPaths, Journey, JourneyUpdate, StopContent, StopResult } from "@arandu/contracts";
+import type { CareerPaths, StopContent, StopResult } from "@arandu/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, supabase } from "@/app-shell/api";
+import { signInWithGoogle } from "@/auth/actions";
+import { useAttempt } from "@/ui/use-attempt";
+import { getCareerPaths, getStop, isGuest, saveJourney, saveStopResult } from "./actions";
 import { AgeView, DoneView, GoogleView, HowView, RhythmView, SemesterView } from "./path-steps";
 import { type Place, type PlaceCourse, placeName } from "./places";
 import { StopView } from "./stop-view";
@@ -19,26 +21,12 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
   const [goal, setGoal] = useState<3 | 5 | 7 | null>(null);
   const [stop, setStop] = useState<StopContent | null>(null);
   const [result, setResult] = useState<StopResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [lost, setLost] = useState(false);
+  const { busy, failed, attempt } = useAttempt();
 
   useEffect(() => {
-    api<CareerPaths>(`/careers/${course.profession.slug}/paths`).then(setPaths, () => setFailed(true));
+    getCareerPaths(course.profession.slug).then(setPaths, () => setLost(true));
   }, [course.profession.slug]);
-
-  const attempt = async (call: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(true);
-    setFailed(false);
-    try {
-      await call();
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const save = (update: JourneyUpdate) => api<Journey>("/me/journey", { method: "PATCH", body: update });
 
   // The offerings only list courses whose path can be opened, so the picked one is there with a first subject.
   const path = paths?.paths.find((p) => p.courseId === course.courseId);
@@ -46,8 +34,16 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
   const name = placeName(place.institution);
   const next = { busy, failed };
 
+  // The first stop comes while the person picks the goal and reads how the game works (O12-O13): "Continuar" at O13
+  // opens it at once instead of waiting for it.
+  const firstId = first?.disciplineId;
+  useEffect(() => {
+    // A failed prefetch is not an error yet: "Continuar" asks again.
+    if (firstId !== undefined) getStop(firstId, 0).then(setStop, () => undefined);
+  }, [firstId]);
+
   if (!path || !first)
-    return failed ? (
+    return lost ? (
       <p className="type-body p-4 text-center text-error" role="alert">
         Não consegui abrir esse caminho agora. Tenta de novo mais tarde?
       </p>
@@ -62,7 +58,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         path={path}
         onNext={() =>
           attempt(async () => {
-            await save({ disciplineId: first.disciplineId });
+            await saveJourney({ disciplineId: first.disciplineId });
             setStep("rhythm");
           })
         }
@@ -78,7 +74,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         onGoal={setGoal}
         onNext={() =>
           attempt(async () => {
-            await save({ weeklyGoal: goal });
+            await saveJourney({ weeklyGoal: goal });
             setStep("how");
           })
         }
@@ -93,7 +89,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         place={name}
         onNext={() =>
           attempt(async () => {
-            setStop(await api<StopContent>(`/stops/${first.disciplineId}/0`));
+            if (!stop) setStop(await getStop(first.disciplineId, 0));
             setStep("stop");
           })
         }
@@ -109,7 +105,7 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         onClose={() => setStep("how")}
         onDone={(mistakes) =>
           attempt(async () => {
-            setResult(await api<StopResult>(`/stops/${first.disciplineId}/0/result`, { method: "POST", body: { mistakes } }));
+            setResult(await saveStopResult(first.disciplineId, 0, mistakes));
             setStep("done");
           })
         }
@@ -125,11 +121,10 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
         {...next}
         onAge={(age) =>
           attempt(async () => {
-            await save({ age });
+            await saveJourney({ age });
             // Someone who came in with "Já tenho uma conta" is already on Google: nothing to link.
-            const { data } = await supabase.auth.getSession();
-            if (data.session?.user.is_anonymous === false) router.push("/app");
-            else setStep("google");
+            if (await isGuest()) setStep("google");
+            else router.push("/app");
           })
         }
       />
@@ -138,13 +133,9 @@ export function PathFlow({ course, place }: { course: PlaceCourse; place: Place 
   return (
     <GoogleView
       {...next}
-      // Linking keeps the anonymous user, and so everything above, under the Google account; it comes back to /app.
-      onGoogle={() =>
-        attempt(async () => {
-          const { error } = await supabase.auth.linkIdentity({ provider: "google", options: { redirectTo: `${location.origin}/app` } });
-          if (error) throw error;
-        })
-      }
+      // A Google nobody has yet becomes this guest, so everything above stays; a Google that already has an account
+      // loads that account instead (the API decides). It comes back to /app.
+      onGoogle={() => attempt(signInWithGoogle)}
       onLater={() => router.push("/app")}
     />
   );
