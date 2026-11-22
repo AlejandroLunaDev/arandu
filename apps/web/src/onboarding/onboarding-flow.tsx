@@ -1,8 +1,10 @@
 "use client";
 
-import type { Journey, OnboardingAnswer, OnboardingReply, Recommendations } from "@arandu/contracts";
+import type { OnboardingAnswer, OnboardingReply } from "@arandu/contracts";
 import { useState } from "react";
-import { api } from "@/app-shell/api";
+import { signInWithGoogle } from "@/auth/actions";
+import { useAttempt } from "@/ui/use-attempt";
+import { answerOnboarding, recommend, saveJourney, startOnboarding } from "./actions";
 import { nextQuestion, toMessage, toProfileInput, withAnswer } from "./answers";
 import { HelloView } from "./hello-view";
 import { PathFlow } from "./path-flow";
@@ -23,30 +25,14 @@ export function OnboardingFlow() {
   const [answers, setAnswers] = useState<OnboardingAnswer[]>([]);
   const [picks, setPicks] = useState<string[]>([]);
   const [said, setSaid] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
   const [profileShown, setProfileShown] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [pick, setPick] = useState<number | null>(null);
   const [chosen, setChosen] = useState<{ course: PlaceCourse; place: Place } | null>(null);
-
-  // Each call either moves on or leaves everything as it was, so "Tenta de novo" repeats it whole.
-  const attempt = async (call: () => Promise<void>) => {
-    // Enter can be pressed again while Arandu is still answering: one call at a time.
-    if (busy) return;
-    setBusy(true);
-    setFailed(false);
-    try {
-      await call();
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { busy, failed, attempt } = useAttempt();
 
   if (!turn)
-    return <HelloView busy={busy} failed={failed} onStart={() => attempt(async () => setTurn(await api<OnboardingReply>("/arandu/onboarding", { method: "POST", body: {} })))} />;
+    return <HelloView busy={busy} failed={failed} onStart={() => attempt(async () => setTurn(await startOnboarding()))} onGoogle={() => attempt(signInWithGoogle)} />;
 
   if (chosen) return <PathFlow course={chosen.course} place={chosen.place} />;
 
@@ -62,7 +48,7 @@ export function OnboardingFlow() {
           attempt(async () => {
             const place = places.find((p) => p.courses.some((c) => c.courseId === pick))!;
             const course = place.courses.find((c) => c.courseId === pick)!;
-            await api<Journey>("/me/journey", { method: "PATCH", body: { professionSlug: course.profession.slug, courseId: course.courseId } });
+            await saveJourney({ professionSlug: course.profession.slug, courseId: course.courseId });
             setChosen({ course, place });
           })
         }
@@ -77,7 +63,7 @@ export function OnboardingFlow() {
         failed={failed}
         onNext={() =>
           attempt(async () => {
-            const { careers } = await api<Recommendations>("/arandu/recommendations", { method: "POST", body: { profile: toProfileInput(turn.profile) } });
+            const { careers } = await recommend(toProfileInput(turn.profile));
             setPlaces(byInstitution(careers));
           })
         }
@@ -100,14 +86,11 @@ export function OnboardingFlow() {
   const answer = (text = said) =>
     attempt(async () => {
       if (!question) {
-        await api<Journey>("/me/journey", { method: "PATCH", body: { answers } });
+        await saveJourney({ answers });
         return setProfileShown(true);
       }
       const all = withAnswer(answers, { topic: question.topic, picks, text });
-      const next = await api<OnboardingReply>("/arandu/onboarding", {
-        method: "POST",
-        body: { sessionId: turn.sessionId, message: toMessage(picks, text) },
-      });
+      const next = await answerOnboarding(turn.sessionId, toMessage(picks, text));
       setAnswers(all);
       setTurn(next);
       setPicks([]);

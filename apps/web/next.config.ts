@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // The session's access token is tainted (src/auth/session.ts): handing it to a Client Component fails loudly.
+  experimental: { taint: true },
   turbopack: {
     rules: {
       // CSS modules stay out: `as` would rename x.module.css to x.module.css.css, a global sheet,

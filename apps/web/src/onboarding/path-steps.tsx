@@ -189,7 +189,8 @@ export function AgeView({ onAge, ...next }: Omit<Next, "onNext"> & { onAge: (age
   );
 }
 
-// O21: Google keeps what the anonymous user did (its identity is linked to them); "Agora não" goes on anonymous.
+// O21: Google keeps what the guest did, unless that Google already has an account, which loads instead; "Agora não"
+// goes on as a guest.
 export function GoogleView({ busy, failed, onGoogle, onLater }: { busy: boolean; failed: boolean; onGoogle: () => void; onLater: () => void }) {
   const say = "Pronto! Entra com sua conta Google pra guardar seu caminho, sua patinha e tudo que você me contou.";
   const { shown, done } = useReveal(say);
