@@ -445,6 +445,8 @@ export interface Wallet {
   nextNoveloAt: string | null;
   peixinhos: number;
   marcadores: number;
+  /** Peixinhos that refill the novelos (POST /me/shop/novelos). */
+  refillPrice: number;
 }
 
 export interface Achievement {

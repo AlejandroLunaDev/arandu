@@ -18,6 +18,7 @@ const wallet = {
   nextNoveloAt: null,
   peixinhos: 0,
   marcadores: 0,
+  refillPrice: 100,
 };
 const discipline = { id: 7, name: 'Cálculo', topics: ['a', 'b', 'c'] };
 
