@@ -14,6 +14,8 @@ export interface ErrorBody {
   statusCode: number;
   error: string;
   message: string | string[];
+  /** A machine-readable reason the web acts on (auth: AuthErrorCode). */
+  code?: string;
   path: string;
   timestamp: string;
 }
@@ -35,6 +37,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status: number;
     let message: string | string[];
+    let code: string | undefined;
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();
@@ -43,6 +46,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
           ? body
           : ((body as { message?: string | string[] }).message ??
             exception.message);
+      const bodyCode =
+        typeof body === 'object' ? (body as { code?: unknown }).code : null;
+      code =
+        typeof bodyCode === 'string'
+          ? bodyCode
+          : status === HttpStatus.TOO_MANY_REQUESTS
+            ? 'too_many_requests'
+            : undefined;
     } else if (
       exception instanceof AiModelError ||
       exception instanceof AiOutputError ||
@@ -64,6 +75,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode: status,
       error: HttpStatus[status] ?? 'Error',
       message,
+      ...(code && { code }),
       path: request.originalUrl,
       timestamp: new Date().toISOString(),
     } satisfies ErrorBody);
