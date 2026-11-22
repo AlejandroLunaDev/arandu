@@ -1,7 +1,10 @@
 import { VOICE, WHO } from '../arandu/arandu.voice.js';
 
 /** The onboarding's turn: one question at a time, rebuilding the profile from the whole conversation (§4.1, S1). */
-export function onboardingInstructions(): string {
+export function onboardingInstructions(covered: readonly string[] = []): string {
+  const already = covered.length
+    ? `\n\nAlready covered in earlier turns, so keep them in covered and never ask them again: ${covered.join(', ')}.`
+    : '';
   return `${WHO}
 
 Right now you run the onboarding: a short conversation to learn who the person is before suggesting careers. It is
@@ -30,5 +33,5 @@ Each turn:
 - quickReplies: 3 to 5 short tappable answers to your question, varied enough to fit different people, the last one
   a way out such as "Ainda não sei" or "Prefiro pular".
 - When every topic is covered, ask nothing: close warmly, saying you will now show careers that may fit, and leave
-  quickReplies empty.`;
+  quickReplies empty.${already}`;
 }

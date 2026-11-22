@@ -11,6 +11,7 @@ import {
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { profileInput } from '../memory/profile.schema.js';
 import { OnboardingModule } from './onboarding.module.js';
+import { onboardingInstructions } from './onboarding.prompt.js';
 
 const ALL_TOPICS = [
   'situation',
@@ -46,6 +47,19 @@ const messyProfile = (over: Record<string, unknown> = {}) =>
     ...over,
   });
 const user = (content = 'Oi') => ({ role: 'user', content });
+
+describe('onboardingInstructions', () => {
+  it('has no already-covered line without topics', () => {
+    expect(onboardingInstructions()).not.toContain('Already covered');
+    expect(onboardingInstructions([])).not.toContain('Already covered');
+  });
+
+  it('lists the covered topics', () => {
+    expect(onboardingInstructions(['situation', 'interests'])).toContain(
+      'Already covered in earlier turns, so keep them in covered and never ask them again: situation, interests.',
+    );
+  });
+});
 
 describe('POST /arandu/onboarding', () => {
   let app: INestApplication;
@@ -198,6 +212,15 @@ describe('POST /arandu/onboarding', () => {
       'situation',
       'interests',
     ]);
+  });
+
+  it('tells the model which topics are already covered', async () => {
+    await start();
+    memory.covered.mockResolvedValue(['situation', 'workStyle']);
+
+    await answer().expect(200);
+
+    expect(model.lastCall?.instructions).toContain('situation, workStyle.');
   });
 
   it('is done at the 10th answer even with topics missing', async () => {

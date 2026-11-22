@@ -204,7 +204,7 @@ export class MemoryRepository {
     sessionId: string,
     covered: AranduProfile['covered'],
   ): Promise<void> {
-    await this.sql`update public.arandu_sessions set covered = ${this.sql.array(covered)} where id = ${sessionId}`;
+    await this.sql`update public.arandu_sessions set covered = ${covered} where id = ${sessionId}`;
   }
 
   async saveProfile(userId: string, profile: AranduProfile): Promise<void> {

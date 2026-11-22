@@ -95,7 +95,7 @@ export class OnboardingService {
     const { object } = await this.ai.generateObject({
       label: 'arandu-onboarding',
       schema: onboardingTurn,
-      instructions: onboardingInstructions(),
+      instructions: onboardingInstructions(before),
       ...(messages.length ? { messages } : { prompt: 'Start the onboarding.' }),
       maxOutputTokens: 700,
     });
