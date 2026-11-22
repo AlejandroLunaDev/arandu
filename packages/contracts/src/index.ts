@@ -586,3 +586,57 @@ export interface BookReflection {
   stuck: string | null;
   feeling: BookReflectionRequest | null;
 }
+
+// Auth: the API owns users and sessions (the v2.0 model). Only the web's Next server calls these, with
+// x-internal-secret, x-client-ip and x-client-user-agent; the browser never sees a token.
+
+/** What POST /auth/guest, /auth/session and /auth/refresh answer. Kept server-side, in a sealed httpOnly cookie. */
+export interface TokenPair {
+  /** HS256 JWT { sub: userId, sid: sessionId }, sent as `Authorization: Bearer` on every other call. */
+  accessToken: string;
+  /** Seconds until the access token expires. */
+  accessTokenExpiresIn: number;
+  /** Opaque; the API stores only its SHA-256. */
+  refreshToken: string;
+}
+
+/**
+ * POST /auth/session: Supabase only proves the Google identity. With the current session's bearer, a guest is promoted
+ * to that identity or merged into the account that already has it; without one, a plain login. Always a new session:
+ * replace the whole cookie. An invalid bearer is a 401 `unauthorized` and changes nothing.
+ */
+export interface CreateSessionRequest {
+  supabaseToken: string;
+}
+
+/** POST /auth/refresh. */
+export interface RefreshSessionRequest {
+  refreshToken: string;
+  /** Epoch ms. Past it the API answers 408 `refresh_deadline_passed` and does not rotate. */
+  deadline: number;
+}
+
+/** GET /auth/me: the account. (GET /me is the Home.) */
+export interface Me {
+  id: string;
+  /** A guest (shadow user) has no identity yet. */
+  guest: boolean;
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+/** The `code` an auth error body carries next to statusCode, error and message. */
+export type AuthErrorCode =
+  /** 401: missing, invalid or expired access token, or an ended session. */
+  | "unauthorized"
+  /** 401: Supabase rejected the token. */
+  | "invalid_identity_token"
+  /** 401: the session is over; clear the cookie. */
+  | "invalid_refresh_token"
+  /** 408 */
+  | "refresh_deadline_passed"
+  /** 403, at login and on every request. */
+  | "user_banned"
+  /** 429 */
+  | "too_many_requests";
