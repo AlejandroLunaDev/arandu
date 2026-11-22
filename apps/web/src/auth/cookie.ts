@@ -38,6 +38,9 @@ export class SessionUnavailable extends Error {
   }
 }
 
+/** Set by the proxy on a request whose refresh failed for now: its session is SessionUnavailable. */
+export const REFRESH_FAILED_HEADER = "x-session-refresh-failed";
+
 /** The access token to call the API with: null with no session; SessionUnavailable when it ran out. */
 export function usableToken(session: SessionCookie | null, now = Date.now()): string | null {
   if (!session) return null;

@@ -1,9 +1,19 @@
 import "server-only";
 import type { TokenPair } from "@arandu/contracts";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import * as React from "react";
 import { readAuthConfig } from "./config";
-import { expiredCookieOptions, openSession, sealSession, sessionCookieName, sessionCookieOptions, toSessionCookie, usableToken } from "./cookie";
+import {
+  REFRESH_FAILED_HEADER,
+  SessionUnavailable,
+  expiredCookieOptions,
+  openSession,
+  sealSession,
+  sessionCookieName,
+  sessionCookieOptions,
+  toSessionCookie,
+  usableToken,
+} from "./cookie";
 
 type Taint = (message: string, lifetime: object, value: string) => void;
 // Only in React's experimental channel, which `experimental.taint` turns on.
@@ -20,7 +30,10 @@ export const getSession = React.cache(async (): Promise<{ accessToken: string } 
   const config = readAuthConfig();
   const raw = store.get(sessionCookieName(config.secureCookie))?.value;
   if (!raw) return null;
-  const accessToken = usableToken(await openSession(raw, config.cookieSecret));
+  const session = await openSession(raw, config.cookieSecret);
+  // A token the proxy could not renew may run out before the API reads it, which would read as signed out.
+  if (session && (await headers()).has(REFRESH_FAILED_HEADER)) throw new SessionUnavailable();
+  const accessToken = usableToken(session);
   if (!accessToken) return null;
   const result = { accessToken };
   // Passing the token to a Client Component fails loudly.

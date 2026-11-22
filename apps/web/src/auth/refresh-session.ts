@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { internalHeaders, readAuthConfig } from "./config";
-import { expiredCookieOptions, openSession, sealSession, sessionCookieName, sessionCookieOptions, toSessionCookie } from "./cookie";
+import { REFRESH_FAILED_HEADER, expiredCookieOptions, openSession, sealSession, sessionCookieName, sessionCookieOptions, toSessionCookie } from "./cookie";
 import { refreshTokens } from "./refresh";
 
 /** Refresh a little before expiry, so a request never reaches the API with a dying token. */
@@ -24,8 +24,11 @@ export async function refreshSession(request: NextRequest): Promise<NextResponse
     try {
       pair = await refreshTokens(config, session.refreshToken, internalHeaders(config, request.headers));
     } catch {
-      // The API is asleep or busy: keep the cookie and let the next request try again.
-      return NextResponse.next();
+      // The API is asleep or busy: keep the cookie, let the next request try again, and tell this one that its
+      // session cannot be used just now (getSession), however long the old token still has.
+      const headers = new Headers(request.headers);
+      headers.set(REFRESH_FAILED_HEADER, "1");
+      return NextResponse.next({ request: { headers } });
     }
   }
   if (!pair) {
