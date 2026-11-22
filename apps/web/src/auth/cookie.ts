@@ -28,6 +28,23 @@ export function toSessionCookie(pair: { accessToken: string; accessTokenExpiresI
   return { accessToken: pair.accessToken, accessTokenExpiresAt: now + pair.accessTokenExpiresIn * 1000, refreshToken: pair.refreshToken };
 }
 
+/**
+ * A session the person still has, whose access token ran out because the proxy could not refresh it just now (the API
+ * asleep or busy). Nothing may treat them as signed out: that would replace their account with a new guest.
+ */
+export class SessionUnavailable extends Error {
+  constructor() {
+    super("The session could not be refreshed just now");
+  }
+}
+
+/** The access token to call the API with: null with no session; SessionUnavailable when it ran out. */
+export function usableToken(session: SessionCookie | null, now = Date.now()): string | null {
+  if (!session) return null;
+  if (session.accessTokenExpiresAt <= now) throw new SessionUnavailable();
+  return session.accessToken;
+}
+
 /** Encrypts (JWE, dir + A256GCM): whoever copies the cookie cannot read or change it. */
 export function sealSession(session: SessionCookie, key: Uint8Array): Promise<string> {
   return new EncryptJWT({ ...session }).setProtectedHeader({ alg: "dir", enc: "A256GCM" }).setIssuedAt().encrypt(key);

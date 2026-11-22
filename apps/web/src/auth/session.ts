@@ -3,7 +3,7 @@ import type { TokenPair } from "@arandu/contracts";
 import { cookies } from "next/headers";
 import * as React from "react";
 import { readAuthConfig } from "./config";
-import { expiredCookieOptions, openSession, sealSession, sessionCookieName, sessionCookieOptions, toSessionCookie } from "./cookie";
+import { expiredCookieOptions, openSession, sealSession, sessionCookieName, sessionCookieOptions, toSessionCookie, usableToken } from "./cookie";
 
 type Taint = (message: string, lifetime: object, value: string) => void;
 // Only in React's experimental channel, which `experimental.taint` turns on.
@@ -11,7 +11,8 @@ const taintUniqueValue = (React as unknown as { experimental_taintUniqueValue?: 
 
 /**
  * Entry point of the data access layer, once per request. Never refreshes (the proxy does). Null when there is no
- * usable session.
+ * session; throws SessionUnavailable when the proxy could not refresh it just now, so the error screen offers a retry
+ * instead of the onboarding.
  */
 export const getSession = React.cache(async (): Promise<{ accessToken: string } | null> => {
   // The request comes first: at build, the prerender stops here instead of reading settings it does not have.
@@ -19,11 +20,11 @@ export const getSession = React.cache(async (): Promise<{ accessToken: string } 
   const config = readAuthConfig();
   const raw = store.get(sessionCookieName(config.secureCookie))?.value;
   if (!raw) return null;
-  const session = await openSession(raw, config.cookieSecret);
-  if (!session || session.accessTokenExpiresAt <= Date.now()) return null;
-  const result = { accessToken: session.accessToken };
+  const accessToken = usableToken(await openSession(raw, config.cookieSecret));
+  if (!accessToken) return null;
+  const result = { accessToken };
   // Passing the token to a Client Component fails loudly.
-  taintUniqueValue?.("Never pass the access token to the client", result, session.accessToken);
+  taintUniqueValue?.("Never pass the access token to the client", result, accessToken);
   return result;
 });
 

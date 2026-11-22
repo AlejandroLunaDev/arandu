@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { expiredCookieOptions, openSession, sealSession, sessionCookieName, sessionCookieOptions, toSessionCookie } from "./cookie.ts";
+import { expiredCookieOptions, openSession, sealSession, SessionUnavailable, sessionCookieName, sessionCookieOptions, toSessionCookie, usableToken } from "./cookie.ts";
 
 const key = new Uint8Array(32).fill(1);
 const otherKey = new Uint8Array(32).fill(2);
@@ -29,6 +29,17 @@ describe("toSessionCookie", () => {
       accessTokenExpiresAt: 901000,
       refreshToken: "r",
     });
+  });
+});
+
+describe("usableToken", () => {
+  it("returns null with no session", () => assert.equal(usableToken(null, 1000), null));
+  it("returns the access token while it has not expired", () => {
+    assert.equal(usableToken({ ...session, accessTokenExpiresAt: 1001 }, 1000), "a");
+  });
+  it("throws SessionUnavailable when the access token expired, including at the exact expiry", () => {
+    assert.throws(() => usableToken({ ...session, accessTokenExpiresAt: 999 }, 1000), SessionUnavailable);
+    assert.throws(() => usableToken({ ...session, accessTokenExpiresAt: 1000 }, 1000), SessionUnavailable);
   });
 });
 
