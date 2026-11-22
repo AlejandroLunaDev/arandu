@@ -17,7 +17,7 @@ import { QuestionView } from "./question-view";
 const MAX_PICKS = 10;
 
 // O01-O10. Arandu (POST /arandu/onboarding) phrases each question and reacts to the last answer; the person
-// answers with the board's own options for that topic, their words, or both. Once every topic is covered the
+// answers with its quick replies, their own words, or both. Once every topic is covered the
 // answers are saved to the journey (PATCH /me/journey), Arandu shows what it understood (O09), and the
 // recommended careers come by institution (O10, POST /arandu/recommendations).
 export function OnboardingFlow() {
@@ -77,8 +77,7 @@ export function OnboardingFlow() {
   const toggle = (pick: string) => {
     if (!question) return;
     if (picks.includes(pick)) return setPicks(picks.filter((p) => p !== pick));
-    if (question.kind === "one") return setPicks([pick]);
-    if (picks.length >= (question.kind === "cards" && question.max ? question.max : MAX_PICKS)) return;
+    if (picks.length >= MAX_PICKS) return;
     setPicks([...picks, pick]);
   };
 
@@ -103,6 +102,7 @@ export function OnboardingFlow() {
       key={turn.reply}
       question={question}
       say={turn.reply}
+      options={turn.quickReplies}
       step={question ? Math.min(turn.progress.answered + 1, 7) : 7}
       picks={picks}
       said={said}

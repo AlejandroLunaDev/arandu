@@ -141,28 +141,6 @@
   outline-offset: 2px;
 }
 
-/* Cards: a title and what it means, two per row. */
-.cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 8px 16px 0;
-}
-
-.cards .option {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-height: 60px;
-}
-
-.cards small {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 14px;
-}
-
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -170,17 +148,19 @@
   padding: 8px 16px 0;
 }
 
-/* 34px tall, its hit area grown to 44px by an invisible ring. The ring starts inside the 1.5px border:
- * 34 - 3 + 2 x 7 = 45. */
+/* At least 34px tall, its hit area grown to 44px by an invisible ring (34 - 3 + 2 x 7 = 45). Arandu writes the quick
+ * replies, so a long one wraps instead of running out of the screen. */
 .chip {
   position: relative;
-  height: 34px;
-  padding: 0 12px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 7px 12px;
+  text-align: left;
   border: 1.5px solid var(--ink-700);
   border-radius: 8px;
   background: color-mix(in srgb, var(--ink-900) 55%, transparent);
   color: var(--text);
-  font: 500 13px/1 var(--font-body);
+  font: 500 13px/17px var(--font-body);
   cursor: pointer;
 }
 
@@ -188,23 +168,6 @@
   content: "";
   position: absolute;
   inset: -7px -3px;
-}
-
-/* O03 holds areas and sixteen subjects: its chips are a size smaller. */
-.small {
-  gap: 6px;
-  padding-top: 6px;
-}
-
-/* 30px tall: a deeper ring keeps the hit area at 44px (30 - 3 + 2 x 9 = 45). */
-.small .chip {
-  height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-.small .chip::after {
-  inset: -9px -3px;
 }
 
 .hint {

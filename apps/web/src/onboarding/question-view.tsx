@@ -12,6 +12,8 @@ type Props = {
   question: Question | null;
   /** What Arandu says: its reaction to the last answer and this question, in its own words. */
   say: string;
+  /** Arandu's quick replies to its own question, so what there is to tap always fits what it asked. */
+  options: string[];
   /** The question's number, of seven. */
   step: number;
   picks: string[];
@@ -23,22 +25,9 @@ type Props = {
   onContinue: () => void;
 };
 
-// One of the seven questions (O02-O08): Arandu asks, the person taps, writes, or both, then continues.
-export function QuestionView({ question, say, step, picks, said, busy, failed, onToggle, onSay, onContinue }: Props) {
+// One of the seven questions (O02-O08): Arandu asks, the person taps its quick replies, writes, talks, or mixes them.
+export function QuestionView({ question, say, options, step, picks, said, busy, failed, onToggle, onSay, onContinue }: Props) {
   const { shown, done } = useReveal(say);
-  const pressed = (pick: string) => picks.includes(pick);
-  const option = (pick: string, sub?: string) => (
-    <button key={pick} type="button" className={styles.option} aria-pressed={pressed(pick)} onClick={() => onToggle(pick)}>
-      {pick}
-      {sub && <small>{sub}</small>}
-    </button>
-  );
-  const chip = (pick: string) => (
-    <button key={pick} type="button" className={styles.chip} aria-pressed={pressed(pick)} onClick={() => onToggle(pick)}>
-      {pick}
-    </button>
-  );
-
   return (
     <main className={styles.screen}>
       <header className={styles.bar}>
@@ -54,18 +43,15 @@ export function QuestionView({ question, say, step, picks, said, busy, failed, o
         </div>
         {done && question && (
           <div className={ui.after}>
-            {question.kind === "one" && <div className={styles.options}>{question.options.map((pick) => option(pick))}</div>}
-            {question.kind === "chips" && <div className={styles.chips}>{question.options.map(chip)}</div>}
-            {question.kind === "cards" && <div className={styles.cards}>{question.options.map(([pick, sub]) => option(pick, sub))}</div>}
-            {question.kind === "areas" && (
-              <>
-                <p className={styles.hint}>Áreas</p>
-                <div className={styles.cards}>{question.areas.map(([pick, sub]) => option(pick, sub))}</div>
-                <p className={styles.hint}>Matérias</p>
-                <div className={`${styles.chips} ${styles.small}`}>{question.subjects.map(chip)}</div>
-              </>
+            {options.length > 0 && (
+              <div className={styles.chips}>
+                {options.map((pick) => (
+                  <button key={pick} type="button" className={styles.chip} aria-pressed={picks.includes(pick)} onClick={() => onToggle(pick)}>
+                    {pick}
+                  </button>
+                ))}
+              </div>
             )}
-            {question.hint && <p className={styles.hint}>{question.hint}</p>}
             {said && <p className={ui.you}>{said}</p>}
           </div>
         )}
