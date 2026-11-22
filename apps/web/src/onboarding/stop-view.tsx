@@ -162,7 +162,7 @@ export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone
             </div>
             {sheet && (
               <section className={p.sheet} data-wrong={!sheet.right || undefined} role="alert">
-                <Cat mood={sheet.right ? "hop" : "lie"} size={112} label={sheet.right ? "Arandu comemorando" : "Arandu, tranquilo"} className={p.peek} />
+                <Cat mood={sheet.right ? "hop" : "sad"} size={112} label={sheet.right ? "Arandu comemorando" : "Arandu, tranquilo"} className={p.peek} />
                 <h2>{sheet.title}</h2>
                 <p>
                   {exercise.why}

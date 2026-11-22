@@ -1,4 +1,5 @@
-"""Key Arandu's clips on the armature that build.py made: sit, walk, jump, tap and read.
+"""Key Arandu's clips on the armature that build.py made: sit, walk, jump, tap, read, lie, and his moods: startle,
+arch and stretch.
 
 Run it inside Blender after build.py, for example through the Blender MCP:
     import runpy; runpy.run_path("<repo>/blender/arandu/animate.py", run_name="__main__")
@@ -6,7 +7,8 @@ Run it inside Blender after build.py, for example through the Blender MCP:
 Every clip is one action at 30 fps, keyed on every frame with linear interpolation, so the web
 plays exactly what is keyed here. Clips key only the body bones (root, spine, legs, tail): the page
 owns the face bones (head, ears, eyes, pupils, lids) for gaze, blinks, moods and the head look-at.
-sit, walk and read loop (their last frame repeats the first); jump and tap start and end in a rest pose.
+sit, walk, read, lie and arch loop (their last frame repeats the first); jump, tap, startle and stretch start and end
+in a rest pose (stand for jump, sit for the others).
 
 Poses are written in the armature's axes: x forward, y the cat's left, z up. A negative turn about
 y lifts the nose or swings a leg forward. The tail is posed by aiming its five bones at points.
@@ -244,6 +246,36 @@ LIE = {
 # A sleeper's breath: slow and deep.
 BREATH_DEEP = {"spine": [("y", -2.4)], "chest": [("y", -3.2)]}
 
+# Startle: from sit he jerks upright and back, head up, front legs stiff, tail straight up. The page opens his
+# eyes and pricks his ears.
+STARTLE = merge(SIT, {
+    "at": (-0.03, 0, -0.07),
+    "hips": [("y", 10)], "chest": [("y", -10)], "neck": [("y", -34)],
+    "upperArmL": [("y", -14)], "upperArmR": [("y", -14)],
+    "tail": [(-0.235, 0, 0.17), (-0.245, 0, 0.24), (-0.25, 0, 0.31), (-0.245, 0, 0.37), (-0.235, 0, 0.42)],
+})
+
+# Arch: cross. Crouched on all fours, his back humped, head forward and tail up; the tail's tip lashes side to
+# side. The page flattens his ears and narrows his eyes.
+ARCH = {
+    "at": (0.0, 0, -0.05),
+    "hips": [("y", -30)], "spine": [("y", 24)], "chest": [("y", 40)], "neck": [("y", -26)],
+    "thighL": [("y", 28)], "thighR": [("y", 28)], "upperArmL": [("y", -34)], "upperArmR": [("y", -34)],
+    "plant": ["FL", "FR", "HL", "HR"],
+}
+ARCH_TAIL = [(-0.215, 0, 0.24), (-0.23, 0, 0.32), (-0.235, 0, 0.40), (-0.225, 0, 0.47), (-0.20, 0, 0.52)]
+
+# Stretch: the play bow. Front paws reach out flat on the floor, chest low, rump up, head raised.
+BOW = {
+    "at": (0.03, 0, 0.0),
+    "hips": [("y", 20)], "chest": [("y", 4)], "neck": [("y", -30)],
+    "upperArmL": [("y", -84)], "upperArmR": [("y", -84)], "foreArmL": [("y", 8)], "foreArmR": [("y", 8)],
+    "pawL": [("y", 50)], "pawR": [("y", 50)],
+    "plant": ["HL", "HR"],
+    "tail": [(-0.23, 0, 0.31), (-0.26, 0, 0.38), (-0.28, 0, 0.44), (-0.27, 0, 0.50), (-0.24, 0, 0.53)],
+}
+BOW_DEEP = {"chest": [("y", 5)], "neck": [("y", -6)]}
+
 
 # ---------------------------------------------------------------- clips
 
@@ -376,7 +408,40 @@ def lie(arm):
     ])
 
 
-CLIPS = {"sit": sit, "walk": walk, "jump": jump, "tap": tap, "read": read, "lie": lie}
+def startle(arm):
+    return keyed(arm, [
+        (0, SIT, "smooth"),
+        (4, STARTLE, "out"),
+        (18, merge(STARTLE, BREATH_IN), "smooth"),
+        (36, SIT, "smooth"),
+    ])
+
+
+def arch(arm):
+    """Held cross, looping: the tail's tip lashes side to side, a little body sway with it."""
+    frames = []
+    for f in range(41):
+        p = f / 40
+        lash = math.sin(2 * math.pi * p)
+        tail = [(x, y + 0.012 * i * i * lash, z) for i, (x, y, z) in enumerate(ARCH_TAIL)]
+        frames.append(pose(arm, merge(ARCH, {"chest": [("z", 2 * lash)], "tail": tail})))
+    return frames
+
+
+def stretch(arm):
+    return keyed(arm, [
+        (0, SIT, "smooth"),
+        (22, BOW, "smooth"),
+        (44, merge(BOW, BOW_DEEP), "smooth"),
+        (54, BOW, "smooth"),
+        (78, SIT, "smooth"),
+    ])
+
+
+CLIPS = {
+    "sit": sit, "walk": walk, "jump": jump, "tap": tap, "read": read, "lie": lie,
+    "startle": startle, "arch": arch, "stretch": stretch,
+}
 
 
 def bake(arm, name, frames):

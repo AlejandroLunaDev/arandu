@@ -3,7 +3,7 @@
 import type { Home, StopContent, StopResult, Wallet } from "@arandu/contracts";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "@/onboarding/onboarding.module.css";
 import p from "@/onboarding/path.module.css";
 import { StopView } from "@/onboarding/stop-view";
@@ -41,11 +41,18 @@ export function PathStop({ stop, wallet }: { stop: StopContent; wallet: Wallet }
 // P7: the stop is done, with what it gave and the week's patinhas.
 function StopDone({ stop, result, home, onNext }: { stop: StopContent; result: StopResult; home: Home; onNext: () => void }) {
   const sources = new Set(stop.cards.map((card) => card.source.url)).size;
+  // An achievement surprises him first; then he jumps for joy.
+  const [mood, setMood] = useState<"surprised" | "hop">(result.achievements.length > 0 ? "surprised" : "hop");
+  useEffect(() => {
+    if (mood !== "surprised") return;
+    const id = setTimeout(() => setMood("hop"), 1400);
+    return () => clearTimeout(id);
+  }, [mood]);
   return (
     <main className={styles.screen}>
       <div className={styles.body}>
         <section className={p.done}>
-          <Cat mood="hop" size={190} label="Arandu pulando de alegria" className={p.doneCat} />
+          <Cat mood={mood} size={190} label="Arandu pulando de alegria" className={p.doneCat} />
           <p className={p.label}>
             Capítulo {stop.topic.index + 1} de {stop.topic.total}
           </p>

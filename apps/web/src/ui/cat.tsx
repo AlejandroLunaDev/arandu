@@ -12,6 +12,9 @@ const STILL: Record<CatMood, string> = {
   read: "looking-down",
   hop: "paws-up",
   stand: "standing",
+  surprised: "paws-up",
+  angry: "standing",
+  sad: "lying",
 };
 
 type Run = Awaited<ReturnType<typeof import("./cat-scene").runCat>>;
