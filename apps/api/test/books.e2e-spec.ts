@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { AppModule } from './../src/app.module.js';
-import { BooksRepository } from '../src/books/books.repository.js';
+import { AppModule } from '../src/app.module.js';
+import { BooksRepository } from '../src/modules/books/books.repository.js';
 
 // The real AppModule (real AuthGuard and ThrottlerGuard) with dummy variables and a fake repository: nothing here
 // reaches a database.

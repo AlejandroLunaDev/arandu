@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { AppModule } from './../src/app.module.js';
+import { AppModule } from '../src/app.module.js';
 
 // The real AppModule, with dummy variables: the database client connects lazily and the model is only called with a
 // valid token, so nothing here reaches a database, Supabase or OpenRouter.

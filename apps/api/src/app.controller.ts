@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service.js';
-import { OpenToBrowsers } from './auth/public.decorator.js';
+import { OpenToBrowsers } from './modules/auth/public.decorator.js';
 import { SkipThrottle } from '@nestjs/throttler';
 
 /** Health check: public and never rate limited, or Render's checks and UptimeRobot would mark the API down. */
