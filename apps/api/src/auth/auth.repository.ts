@@ -86,9 +86,10 @@ export class AuthRepository {
     return row.id;
   }
 
-  /** Every table holding the person's data cascades from users. */
-  async deleteUser(id: string): Promise<void> {
-    await this.sql`delete from public.users where id = ${id}`;
+  /** Every table holding the person's data cascades from users. Only while still a guest: a parallel sign-in may have
+   * just promoted it into a real account. */
+  async deleteGuest(id: string): Promise<void> {
+    await this.sql`delete from public.users where id = ${id} and google_sub is null`;
   }
 
   /** Ended sessions are never read again; this keeps them from piling up per user. */

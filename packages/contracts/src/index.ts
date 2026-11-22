@@ -602,8 +602,9 @@ export interface TokenPair {
 
 /**
  * POST /auth/session: Supabase only proves the Google identity. With the current session's bearer, a guest is promoted
- * to that identity or merged into the account that already has it; without one, a plain login. Always a new session:
- * replace the whole cookie. An invalid bearer is a 401 `unauthorized` and changes nothing.
+ * to a Google nobody has; a Google that already has a user loads that user and the guest is deleted with its progress
+ * (never merged). Without a bearer, a plain sign-in. Always a new session: replace the whole cookie. An invalid bearer
+ * is a 401 `unauthorized` and changes nothing.
  */
 export interface CreateSessionRequest {
   supabaseToken: string;

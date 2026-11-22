@@ -46,7 +46,7 @@ export class AuthService {
         : await this.repository.saveGoogleUser(identity);
 
     if (current?.guest && current.userId !== userId)
-      await this.repository.deleteUser(current.userId);
+      await this.repository.deleteGuest(current.userId);
     else if (current) await this.sessions.revoke(current.sessionId, 'switched');
 
     return this.sessions.open(userId, client);

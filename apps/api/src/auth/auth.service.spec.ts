@@ -31,7 +31,7 @@ describe('AuthService.signIn', () => {
     findUserByGoogle: vi.fn(),
     promote: vi.fn(),
     saveGoogleUser: vi.fn(),
-    deleteUser: vi.fn(),
+    deleteGuest: vi.fn(),
   };
   const sessions = { open: vi.fn(), revoke: vi.fn() };
   const supabase = { verify: vi.fn() };
@@ -61,7 +61,7 @@ describe('AuthService.signIn', () => {
 
     expect(repository.promote).toHaveBeenCalledWith('guest-1', identity);
     expect(repository.saveGoogleUser).not.toHaveBeenCalled();
-    expect(repository.deleteUser).not.toHaveBeenCalled();
+    expect(repository.deleteGuest).not.toHaveBeenCalled();
     expect(sessions.revoke).toHaveBeenCalledWith('sess-g', 'switched');
     expect(sessions.open).toHaveBeenCalledWith('guest-1', client);
   });
@@ -73,7 +73,7 @@ describe('AuthService.signIn', () => {
 
     expect(repository.promote).not.toHaveBeenCalled();
     expect(repository.saveGoogleUser).toHaveBeenCalledWith(identity);
-    expect(repository.deleteUser).toHaveBeenCalledWith('guest-1');
+    expect(repository.deleteGuest).toHaveBeenCalledWith('guest-1');
     expect(sessions.revoke).not.toHaveBeenCalled();
     expect(sessions.open).toHaveBeenCalledWith('saved-1', client);
   });
@@ -84,7 +84,17 @@ describe('AuthService.signIn', () => {
     await service.signIn('tok', guest, client);
 
     expect(repository.saveGoogleUser).toHaveBeenCalledWith(identity);
-    expect(repository.deleteUser).toHaveBeenCalledWith('guest-1');
+    expect(repository.deleteGuest).toHaveBeenCalledWith('guest-1');
+  });
+
+  it('deletes the guest by id when a parallel sign-in already promoted it: the SQL guard keeps a promoted account safe', async () => {
+    repository.promote.mockResolvedValue(false);
+    repository.saveGoogleUser.mockResolvedValue('other-1');
+
+    await service.signIn('tok', guest, client);
+
+    expect(repository.deleteGuest).toHaveBeenCalledWith('guest-1');
+    expect(sessions.open).toHaveBeenCalledWith('other-1', client);
   });
 
   it('signs a signed-in user into another Google: saves it and revokes the current session', async () => {
@@ -92,7 +102,7 @@ describe('AuthService.signIn', () => {
 
     expect(repository.promote).not.toHaveBeenCalled();
     expect(repository.saveGoogleUser).toHaveBeenCalledWith(identity);
-    expect(repository.deleteUser).not.toHaveBeenCalled();
+    expect(repository.deleteGuest).not.toHaveBeenCalled();
     expect(sessions.revoke).toHaveBeenCalledWith('sess-m', 'switched');
     expect(sessions.open).toHaveBeenCalledWith('saved-1', client);
   });
@@ -101,7 +111,7 @@ describe('AuthService.signIn', () => {
     await service.signIn('tok', null, client);
 
     expect(repository.saveGoogleUser).toHaveBeenCalledWith(identity);
-    expect(repository.deleteUser).not.toHaveBeenCalled();
+    expect(repository.deleteGuest).not.toHaveBeenCalled();
     expect(sessions.revoke).not.toHaveBeenCalled();
     expect(sessions.open).toHaveBeenCalledWith('saved-1', client);
   });
@@ -115,7 +125,7 @@ describe('AuthService.signIn', () => {
       status: 403,
       response: { code: 'user_banned' },
     });
-    expect(repository.deleteUser).not.toHaveBeenCalled();
+    expect(repository.deleteGuest).not.toHaveBeenCalled();
     expect(sessions.revoke).not.toHaveBeenCalled();
     expect(sessions.open).not.toHaveBeenCalled();
   });
