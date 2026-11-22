@@ -48,9 +48,11 @@ export class OnboardingService {
     if (!('sessionId' in request)) {
       const sessionId = await this.memory.openSession(userId, 'onboarding');
       const turn = await this.turn([]);
-      await this.memory.record(sessionId, [
-        { role: 'assistant', content: turn.reply },
-      ]);
+      await this.memory.recordTurn(
+        sessionId,
+        [{ role: 'assistant', content: turn.reply }],
+        turn.profile.covered,
+      );
       return { sessionId, ...turn };
     }
 
@@ -62,11 +64,13 @@ export class OnboardingService {
       HISTORY_MAX,
     );
     const said: ChatMessage = { role: 'user', content: message };
-    const turn = await this.turn([...history, said]);
-    await this.memory.record(sessionId, [
-      said,
-      { role: 'assistant', content: turn.reply },
-    ]);
+    const before = await this.memory.covered(sessionId);
+    const turn = await this.turn([...history, said], before);
+    await this.memory.recordTurn(
+      sessionId,
+      [said, { role: 'assistant', content: turn.reply }],
+      turn.profile.covered,
+    );
     return { sessionId, ...turn };
   }
 
@@ -83,17 +87,24 @@ export class OnboardingService {
     return boundProfile({ ...object, covered: answers.map((a) => a.topic) });
   }
 
-  /** Arandu's next turn for the conversation so far; empty to start it. */
-  async turn(messages: ChatMessage[]): Promise<OnboardingTurn> {
+  /** Arandu's next turn for the conversation so far (empty to start it), given the topics already covered before it. */
+  async turn(
+    messages: ChatMessage[],
+    before: AranduProfile['covered'] = [],
+  ): Promise<OnboardingTurn> {
     const { object } = await this.ai.generateObject({
       label: 'arandu-onboarding',
       schema: onboardingTurn,
-      instructions: onboardingInstructions(),
+      instructions: onboardingInstructions(before),
       ...(messages.length ? { messages } : { prompt: 'Start the onboarding.' }),
       maxOutputTokens: 700,
     });
-    const profile = boundProfile(object.profile);
-    const { covered } = profile;
+    const read = boundProfile(object.profile);
+    // Covered only grows: the model rebuilds it every turn and can drop a topic already answered.
+    const covered = TOPICS.filter(
+      (t) => before.includes(t) || read.covered.includes(t),
+    );
+    const profile = { ...read, covered };
     const answers = messages.filter((m) => m.role === 'user').length;
     const done = covered.length === TOPICS.length || answers >= MAX_ANSWERS;
     return {

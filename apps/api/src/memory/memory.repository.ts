@@ -193,6 +193,20 @@ export class MemoryRepository {
     )}`;
   }
 
+  /** The onboarding topics the session has covered so far. */
+  async covered(sessionId: string): Promise<AranduProfile['covered']> {
+    const [row] = await this.sql<{ covered: AranduProfile['covered'] }[]>`
+      select covered from public.arandu_sessions where id = ${sessionId}`;
+    return row?.covered ?? [];
+  }
+
+  async saveCovered(
+    sessionId: string,
+    covered: AranduProfile['covered'],
+  ): Promise<void> {
+    await this.sql`update public.arandu_sessions set covered = ${covered} where id = ${sessionId}`;
+  }
+
   async saveProfile(userId: string, profile: AranduProfile): Promise<void> {
     await asPerson(this.sql`
       insert into public.arandu_memories (user_id, profile) values (${userId}, ${this.sql.json(profile as never)})
