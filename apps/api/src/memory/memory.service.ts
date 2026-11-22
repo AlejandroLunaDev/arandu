@@ -115,6 +115,21 @@ export class MemoryService {
     return messages;
   }
 
+  /** The onboarding topics the session has covered so far; read after `history`, which checks the session is theirs. */
+  covered(sessionId: string): Promise<AranduProfile['covered']> {
+    return this.memory.covered(sessionId);
+  }
+
+  /** Records an onboarding turn: its messages and the topics covered after it. */
+  async recordTurn(
+    sessionId: string,
+    messages: ChatMessage[],
+    covered: AranduProfile['covered'],
+  ): Promise<void> {
+    await this.memory.addMessages(sessionId, messages);
+    await this.memory.saveCovered(sessionId, covered);
+  }
+
   record(sessionId: string, messages: ChatMessage[]): Promise<void> {
     return this.memory.addMessages(sessionId, messages);
   }

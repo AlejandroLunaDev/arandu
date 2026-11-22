@@ -37,6 +37,8 @@ export const fakeMemoryRepository = () => ({
   createSession: vi.fn().mockResolvedValue(SESSION_ID),
   sessionMessages: vi.fn().mockResolvedValue([]),
   addMessages: vi.fn().mockResolvedValue(undefined),
+  covered: vi.fn().mockResolvedValue([]),
+  saveCovered: vi.fn().mockResolvedValue(undefined),
   saveProfile: vi.fn().mockResolvedValue(undefined),
   unsummarized: vi
     .fn()
