@@ -7,6 +7,8 @@ export class RequestLoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
   use(request: Request, response: Response, next: NextFunction): void {
+    // Render's health check (render.yaml healthCheckPath) would be most of the log.
+    if (request.method === 'GET' && request.originalUrl === '/') return next();
     const started = performance.now();
     response.on('finish', () => {
       const { statusCode } = response;

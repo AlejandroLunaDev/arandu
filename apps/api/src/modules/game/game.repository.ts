@@ -7,12 +7,7 @@ import type {
   Wardrobe,
   WardrobeUpdate,
 } from '@arandu/contracts';
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
 import { SQL, type Sql } from '../../core/database/database.module.js';
 import { addDays, MAX_NOVELOS, refill } from '../progress/progress.logic.js';
@@ -39,6 +34,16 @@ import {
   seasonOf,
   SHOP,
 } from './game.logic.js';
+import {
+  caixaNotFound,
+  caixaOpen,
+  levelClaimed,
+  levelNotReached,
+  marcadoresFull,
+  notEnoughPeixinhos,
+  novelosFull,
+  outfitNotOwned,
+} from './game.errors.js';
 
 type Tx = Sql | TransactionSql;
 
@@ -155,9 +160,7 @@ export class GameRepository {
         start,
         LEAGUE_SIZE - 1 - others.length,
         (elapsed * days) / 7,
-      ).map(
-        (r) => ({ ...r, you: false, demo: true }),
-      ),
+      ).map((r) => ({ ...r, you: false, demo: true })),
     ];
     // Stable sort: on a tie the person stays ahead.
     return rows
@@ -311,13 +314,11 @@ export class GameRepository {
     await asPerson(
       this.sql.begin(async (tx) => {
         const state = await this.seasonState(tx, userId);
-        if (level > Math.min(state.level, LEVELS))
-          throw new ConflictException(`Level ${level} is not reached yet`);
+        if (level > Math.min(state.level, LEVELS)) throw levelNotReached();
         const inserted = await tx`
           insert into public.season_claims (user_id, season, level) values (${userId}, ${state.season}, ${level})
           on conflict do nothing returning 1`;
-        if (!inserted.length)
-          throw new ConflictException(`Level ${level} was already claimed`);
+        if (!inserted.length) throw levelClaimed();
         const reward = FREE_TRACK[level - 1];
         if (reward.kind === 'caixa')
           await tx`insert into public.caixas (user_id, reason) values (${userId}, ${`season:${state.season}:${level}`})
@@ -359,9 +360,8 @@ export class GameRepository {
         const [caixa] = await tx<{ opened: boolean }[]>`
           select opened_at is not null as opened from public.caixas
           where id = ${id} and user_id = ${userId} for update`;
-        if (!caixa) throw new NotFoundException(`No caixa ${id}`);
-        if (caixa.opened)
-          throw new ConflictException('This caixa is already open');
+        if (!caixa) throw caixaNotFound();
+        if (caixa.opened) throw caixaOpen();
         const contents = rollCaixa();
         await this.reward(tx, userId, contents);
         if (contents.roomItem)
@@ -386,13 +386,10 @@ export class GameRepository {
           item === 'novelos' &&
           refill(row.novelos, row.novelos_at, now).novelos >= MAX_NOVELOS
         )
-          throw new ConflictException('Novelos are already full');
+          throw novelosFull();
         if (item === 'marcador' && row.marcadores >= MAX_MARCADORES)
-          throw new ConflictException(
-            'Page markers are already at the maximum',
-          );
-        if (row.peixinhos < price)
-          throw new ConflictException('Not enough peixinhos');
+          throw marcadoresFull();
+        if (row.peixinhos < price) throw notEnoughPeixinhos();
         const [updated] = await tx<
           {
             novelos: number;
@@ -459,9 +456,7 @@ export class GameRepository {
         if (update.wearing) {
           const { outfits } = await this.wardrobeOf(tx, userId, player);
           if (!outfits.find((o) => o.id === update.wearing)?.owned)
-            throw new ConflictException(
-              `The ${update.wearing} outfit is not owned yet`,
-            );
+            throw outfitNotOwned();
         }
         const values: Partial<Pick<PlayerRow, 'wearing' | 'nickname'>> = {};
         if (update.wearing !== undefined) values.wearing = update.wearing;

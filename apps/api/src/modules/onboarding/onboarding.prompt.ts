@@ -1,7 +1,9 @@
 import { VOICE, WHO } from '../arandu/arandu.voice.js';
 
 /** The onboarding's turn: one question at a time, rebuilding the profile from the whole conversation (§4.1, S1). */
-export function onboardingInstructions(covered: readonly string[] = []): string {
+export function onboardingInstructions(
+  covered: readonly string[] = [],
+): string {
   const already = covered.length
     ? `\n\nAlready covered in earlier turns, so keep them in covered and never ask them again: ${covered.join(', ')}.`
     : '';

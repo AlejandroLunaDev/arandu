@@ -1,8 +1,16 @@
 import type { Me, TokenPair } from '@arandu/contracts';
 import { Injectable } from '@nestjs/common';
-import { invalidIdentityToken, unauthorized, userBanned } from './auth.errors.js';
+import {
+  invalidIdentityToken,
+  unauthorized,
+  userBanned,
+} from './auth.errors.js';
 import { AuthRepository } from './auth.repository.js';
-import { type Caller, type Client, SessionsService } from './sessions.service.js';
+import {
+  type Caller,
+  type Client,
+  SessionsService,
+} from './sessions.service.js';
 import { SupabaseIdentity } from './supabase-identity.js';
 
 /**

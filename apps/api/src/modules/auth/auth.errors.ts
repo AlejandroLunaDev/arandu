@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   RequestTimeoutException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { AuthErrorCode } from '@arandu/contracts';
@@ -27,3 +28,11 @@ export const refreshDeadlinePassed = () =>
 
 export const userBanned = () =>
   new ForbiddenException(body('user_banned', 'This account is banned'));
+
+export const identityUnavailable = () =>
+  new ServiceUnavailableException(
+    body(
+      'identity_unavailable',
+      'Sign-in is unavailable right now, try again in a moment',
+    ),
+  );

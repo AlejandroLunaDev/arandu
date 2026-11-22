@@ -4,9 +4,10 @@ import type {
   BookReflection,
   Home,
 } from '@arandu/contracts';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { achievementsOf, addDays } from './progress.logic.js';
 import { ProgressRepository } from './progress.repository.js';
+import { subjectNotFound } from './progress.errors.js';
 
 /** The home (S1, K1), each book's path (P1, K3) and the achievements (K4), all derived from the stops finished. */
 @Injectable()
@@ -107,7 +108,7 @@ export class ProgressService {
 
   async book(userId: string, disciplineId: number): Promise<BookProgress> {
     const discipline = await this.progress.discipline(disciplineId);
-    if (!discipline) throw new NotFoundException(`No subject ${disciplineId}`);
+    if (!discipline) throw subjectNotFound();
     const done = new Set(
       (await this.progress.finishes(userId))
         .filter((f) => f.disciplineId === disciplineId)

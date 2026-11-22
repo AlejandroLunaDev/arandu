@@ -108,7 +108,11 @@ export class SessionsService {
     if (!session || session.userId !== claims.sub || !live(session))
       throw unauthorized();
     if (session.bannedAt) throw userBanned();
-    return { userId: session.userId, sessionId: session.id, guest: session.guest };
+    return {
+      userId: session.userId,
+      sessionId: session.id,
+      guest: session.guest,
+    };
   }
 
   revoke(sessionId: string, reason: RevokedReason): Promise<void> {

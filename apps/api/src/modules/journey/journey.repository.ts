@@ -1,7 +1,8 @@
 import type { Journey, JourneyUpdate } from '@arandu/contracts';
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../../core/database/database.module.js';
+import { unknownJourney } from './journey.errors.js';
 
 const EMPTY: Journey = {
   answers: null,
@@ -58,8 +59,7 @@ export class JourneyRepository {
       if (code === '23503' && constraint_name === 'journeys_user_id_fkey')
         throw new PersonGoneError();
       // Any other broken key is a career, course or subject that does not exist.
-      if (code === '23503')
-        throw new BadRequestException('No such career, course or subject');
+      if (code === '23503') throw unknownJourney();
       throw error;
     }
     return this.read(userId);

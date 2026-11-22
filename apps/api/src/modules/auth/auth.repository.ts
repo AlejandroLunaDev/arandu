@@ -36,10 +36,7 @@ export interface RefreshTokenRow {
 }
 
 export type RevokedReason =
-  | 'logout'
-  | 'logout_all'
-  | 'reuse_detected'
-  | 'switched';
+  'logout' | 'logout_all' | 'reuse_detected' | 'switched';
 
 /** Users, their sessions and the sessions' refresh tokens (the API owns them; Supabase only proves identities). */
 @Injectable()
@@ -89,7 +86,8 @@ export class AuthRepository {
   /** Every table holding the person's data cascades from users. Only while still a guest: a parallel sign-in may have
    * just promoted it into a real account. */
   async deleteGuest(id: string): Promise<void> {
-    await this.sql`delete from public.users where id = ${id} and google_sub is null`;
+    await this
+      .sql`delete from public.users where id = ${id} and google_sub is null`;
   }
 
   /** Ended sessions are never read again; this keeps them from piling up per user. */
@@ -120,8 +118,10 @@ export class AuthRepository {
 
   /** On refresh: the session and its user were seen (a guest unseen for 30 days is deleted). */
   async touch(session: SessionRow, now: Date): Promise<void> {
-    await this.sql`update public.sessions set last_seen_at = ${now} where id = ${session.id}`;
-    await this.sql`update public.users set last_seen_at = ${now} where id = ${session.userId}`;
+    await this
+      .sql`update public.sessions set last_seen_at = ${now} where id = ${session.id}`;
+    await this
+      .sql`update public.users set last_seen_at = ${now} where id = ${session.userId}`;
   }
 
   async revokeSession(

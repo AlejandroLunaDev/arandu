@@ -3,6 +3,8 @@ import { Controller, Delete, Get, HttpCode, Param } from '@nestjs/common';
 import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
 import { MemoryService } from './memory.service.js';
+import { param } from '../../core/http/params.js';
+import { factNotFound } from './memory.errors.js';
 
 @Controller('arandu/memory')
 export class MemoryController {
@@ -25,9 +27,13 @@ export class MemoryController {
   @HttpCode(204)
   deleteFact(
     @UserId() userId: string,
-    @Param('id', {
-      schema: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    })
+    @Param(
+      'id',
+      param(
+        z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+        factNotFound,
+      ),
+    )
     id: number,
   ): Promise<void> {
     return this.memory.deleteFact(userId, id);

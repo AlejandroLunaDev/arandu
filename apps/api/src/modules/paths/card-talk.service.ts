@@ -1,13 +1,14 @@
 import type { AskReply, ExplainReply, StopContent } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
-import {
-  Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { askInstructions, explainInstructions } from './card-talk.prompt.js';
 import { PathsRepository } from './paths.repository.js';
+import {
+  aranduUnavailable,
+  explainNotFound,
+  stopNotFound,
+} from './paths.errors.js';
 
 /** Talking about a stop's cards: grading "Explique para o Arandu" (R12) and answering questions on the card (T1). */
 @Injectable()
@@ -29,10 +30,7 @@ export class CardTalkService {
       topic < (await this.paths.madeCount(disciplineId))
         ? await this.paths.stopContent(disciplineId, topic, topicText)
         : null;
-    if (!content)
-      throw new NotFoundException(
-        `Stop ${topic} of subject ${disciplineId} is not open`,
-      );
+    if (!content) throw stopNotFound();
     return content;
   }
 
@@ -45,8 +43,7 @@ export class CardTalkService {
     const exercise = content.exercises.find(
       (e) => e.kind === 'explique_para_o_arandu',
     );
-    if (exercise?.kind !== 'explique_para_o_arandu')
-      throw new NotFoundException('This stop has no "Explique para o Arandu"');
+    if (exercise?.kind !== 'explique_para_o_arandu') throw explainNotFound();
     const { object } = await this.ai.generateObject({
       label: 'arandu-explain',
       schema: z.object({ got: z.array(z.boolean()), reply: z.string().min(1) }),
@@ -88,10 +85,7 @@ export class CardTalkService {
       maxOutputTokens: 400,
     });
     const reply = text.trim();
-    if (!reply)
-      throw new ServiceUnavailableException(
-        'Arandu could not answer now; try again',
-      );
+    if (!reply) throw aranduUnavailable();
     await this.paths.saveQuestion(userId, disciplineId, topic, question, reply);
     return {
       reply,

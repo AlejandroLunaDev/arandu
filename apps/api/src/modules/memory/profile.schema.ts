@@ -53,10 +53,7 @@ export function boundProfile(p: z.infer<typeof profileSchema>): AranduProfile {
       .replace(/[\uD800-\uDBFF]$/, '');
   const one = (s: string | null) => (s === null ? null : cut(s) || null);
   const many = (list: string[]) =>
-    list
-      .map(cut)
-      .filter(Boolean)
-      .slice(0, ITEMS_MAX);
+    list.map(cut).filter(Boolean).slice(0, ITEMS_MAX);
   return {
     situation: one(p.situation),
     likedSubjects: many(p.likedSubjects),

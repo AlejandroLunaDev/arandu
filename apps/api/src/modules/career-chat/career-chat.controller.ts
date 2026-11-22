@@ -4,11 +4,7 @@ import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
 import { message } from '../memory/message.schema.js';
 import { CareerChatService } from './career-chat.service.js';
-
-const slug = z
-  .string()
-  .max(100)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+import { slug } from '../../core/http/params.js';
 
 const chatRequest = z.union([
   z

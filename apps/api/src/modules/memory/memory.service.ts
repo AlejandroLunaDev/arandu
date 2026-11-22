@@ -5,7 +5,7 @@ import type {
   Conversations,
 } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { summaryInstructions } from './memory.prompt.js';
 import {
@@ -13,6 +13,7 @@ import {
   type SessionKind,
   SUMMARY_MAX,
 } from './memory.repository.js';
+import { factNotFound, sessionNotFound } from './memory.errors.js';
 
 const factList = z.object({
   facts: z
@@ -48,8 +49,7 @@ export class MemoryService {
 
   /** Deletes one fact; 404 when it is not this person's. */
   async deleteFact(userId: string, id: number): Promise<void> {
-    if (!(await this.memory.deleteFact(userId, id)))
-      throw new NotFoundException(`No fact ${id}`);
+    if (!(await this.memory.deleteFact(userId, id))) throw factNotFound();
   }
 
   forget(userId: string): Promise<void> {
@@ -111,7 +111,7 @@ export class MemoryService {
       limit,
       professionSlug,
     );
-    if (!messages) throw new NotFoundException(`No session "${sessionId}"`);
+    if (!messages) throw sessionNotFound();
     return messages;
   }
 

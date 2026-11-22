@@ -1,5 +1,5 @@
 import type { BookReflectionRequest, Wallet } from '@arandu/contracts';
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
 import { SHOP } from '../game/game.logic.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
@@ -11,6 +11,7 @@ import {
   REFILL_MS,
   refill,
 } from './progress.logic.js';
+import { noNovelosLeft, novelosLeft, rereadUsed } from './progress.errors.js';
 
 /** Days, patinhas and weeks are counted in Brazil's time. */
 export const TIME_ZONE = 'America/Sao_Paulo';
@@ -96,7 +97,7 @@ export class ProgressRepository {
           select exists (select 1 from public.stop_results where user_id = ${userId}) as finished`;
         if (!finished) return toWallet(row, now);
         const { novelos, at } = refill(row.novelos, row.novelos_at, now);
-        if (novelos === 0) throw new ConflictException('No novelos left');
+        if (novelos === 0) throw noNovelosLeft();
         // Spending from full starts the refill clock now.
         const since = novelos === MAX_NOVELOS ? now : at;
         const [updated] = await tx<WalletRow[]>`
@@ -114,13 +115,11 @@ export class ProgressRepository {
         const row = await this.lockWallet(tx, userId);
         const now = new Date();
         const { novelos, at } = refill(row.novelos, row.novelos_at, now);
-        if (novelos > 0)
-          throw new ConflictException('Re-reading gives a novelo only at 0');
+        if (novelos > 0) throw novelosLeft();
         const inserted = await tx`
           insert into public.stop_rereads (user_id, discipline_id, topic) values (${userId}, ${disciplineId}, ${topic})
           on conflict do nothing returning 1`;
-        if (!inserted.length)
-          throw new ConflictException('This stop already gave its novelo');
+        if (!inserted.length) throw rereadUsed();
         const [updated] = await tx<WalletRow[]>`
           update public.wallets set novelos = 1, novelos_at = ${at}, updated_at = now()
           where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`;

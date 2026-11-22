@@ -40,6 +40,12 @@ export function validationFailed(
   });
 }
 
+/** Postgres's unique_violation (23505), as postgres.js throws it. */
+const isUniqueViolation = (e: unknown) =>
+  typeof e === 'object' &&
+  e !== null &&
+  (e as { code?: unknown }).code === '23505';
+
 /** `NOT_FOUND` → `not_found`: the code of an error thrown without one. */
 const codeOf = (status: number) =>
   (HttpStatus[status] ?? 'error').toLowerCase();
@@ -80,7 +86,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
             ? body.code
             : codeOf(statusCode),
         message,
-        ...(typeof body === 'object' && body.details && { details: body.details }),
+        ...(typeof body === 'object' &&
+          body.details && { details: body.details }),
       };
     } else if (
       exception instanceof AiModelError ||
@@ -93,6 +100,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: 'Arandu could not answer right now, try again in a moment',
       };
       this.logger.error(`${where}: ${exception.name}: ${exception.message}`);
+    } else if (isUniqueViolation(exception)) {
+      // Two requests raced to create the same row: the caller asked for something that already exists.
+      error = {
+        statusCode: HttpStatus.CONFLICT,
+        code: 'conflict',
+        message: 'It already exists',
+      };
     } else {
       error = {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,

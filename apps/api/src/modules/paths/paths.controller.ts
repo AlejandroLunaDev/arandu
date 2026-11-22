@@ -8,15 +8,7 @@ import type {
   StopResult,
   StopResultRequest,
 } from '@arandu/contracts';
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  NotFoundException,
-  Param,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { Public } from '../auth/public.decorator.js';
@@ -24,13 +16,9 @@ import { UserId } from '../auth/user-id.decorator.js';
 import { CardTalkService } from './card-talk.service.js';
 import { PathsRepository } from './paths.repository.js';
 import { StopsService } from './stops.service.js';
+import { careerNotFound, stopNotFound } from './paths.errors.js';
+import { id, param, slug, topic } from '../../core/http/params.js';
 
-const slug = z
-  .string()
-  .max(100)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-const id = z.coerce.number().int().positive().max(2_147_483_647);
-const topic = z.coerce.number().int().min(0).max(200);
 const stopResult = z
   .object({
     mistakes: z.number().int().min(0).max(100),
@@ -60,10 +48,10 @@ export class PathsController {
   @SkipThrottle({ burst: true, daily: true })
   @Get('careers/:slug/paths')
   async careerPaths(
-    @Param('slug', { schema: slug }) professionSlug: string,
+    @Param('slug', param(slug, careerNotFound)) professionSlug: string,
   ): Promise<CareerPaths> {
     const paths = await this.paths.careerPaths(professionSlug);
-    if (!paths) throw new NotFoundException(`No career "${professionSlug}"`);
+    if (!paths) throw careerNotFound();
     return paths;
   }
 
@@ -72,8 +60,8 @@ export class PathsController {
   @SkipThrottle({ burst: true, daily: true })
   @Get('stops/:disciplineId/:topic')
   stop(
-    @Param('disciplineId', { schema: id }) disciplineId: number,
-    @Param('topic', { schema: topic }) topicIndex: number,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
   ): Promise<StopContent> {
     return this.stops.stop(disciplineId, topicIndex);
   }
@@ -83,8 +71,8 @@ export class PathsController {
   @HttpCode(200)
   finish(
     @UserId() userId: string,
-    @Param('disciplineId', { schema: id }) disciplineId: number,
-    @Param('topic', { schema: topic }) topicIndex: number,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
     @Body({ schema: stopResult }) body: StopResultRequest,
   ): Promise<StopResult> {
     return this.stops.finish(
@@ -101,8 +89,8 @@ export class PathsController {
   @Post('stops/:disciplineId/:topic/explain')
   @HttpCode(200)
   explain(
-    @Param('disciplineId', { schema: id }) disciplineId: number,
-    @Param('topic', { schema: topic }) topicIndex: number,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
     @Body({ schema: explainRequest }) body: ExplainRequest,
   ): Promise<ExplainReply> {
     return this.talk.explain(disciplineId, topicIndex, body.answer);
@@ -113,8 +101,8 @@ export class PathsController {
   @HttpCode(200)
   ask(
     @UserId() userId: string,
-    @Param('disciplineId', { schema: id }) disciplineId: number,
-    @Param('topic', { schema: topic }) topicIndex: number,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
     @Body({ schema: askRequest }) body: AskRequest,
   ): Promise<AskReply> {
     return this.talk.ask(userId, disciplineId, topicIndex, body.question);

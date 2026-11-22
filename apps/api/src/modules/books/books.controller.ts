@@ -1,22 +1,12 @@
 import type { Book, BookSummary, OwnBook } from '@arandu/contracts';
-import {
-  Controller,
-  Get,
-  Header,
-  NotFoundException,
-  Param,
-} from '@nestjs/common';
+import { Controller, Get, Header, Param } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { z } from 'zod';
 import { OpenToBrowsers } from '../auth/public.decorator.js';
 import { BooksRepository } from './books.repository.js';
+import { bookNotFound } from './books.errors.js';
+import { param, slug } from '../../core/http/params.js';
 
 const OWN_BOOKS: readonly OwnBook['book'][] = ['produto', 'solucao'];
-
-const slug = z
-  .string()
-  .max(100)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 
 // The data changes when the engine loads a batch, not per visit: a few hours of browser and proxy cache spare the
 // free instance a cold start on every turn of the shelf.
@@ -41,18 +31,17 @@ export class BooksController {
   @Get('own/:book')
   @Header('Cache-Control', CACHE)
   ownBook(@Param('book') book: string): Promise<OwnBook> {
-    if (!OWN_BOOKS.includes(book as OwnBook['book']))
-      throw new NotFoundException(`No own book "${book}"`);
+    if (!OWN_BOOKS.includes(book as OwnBook['book'])) throw bookNotFound();
     return this.books.ownBook(book as OwnBook['book']);
   }
 
   @Get(':slug')
   @Header('Cache-Control', CACHE)
   async book(
-    @Param('slug', { schema: slug }) professionSlug: string,
+    @Param('slug', param(slug, bookNotFound)) professionSlug: string,
   ): Promise<Book> {
     const book = await this.books.book(professionSlug);
-    if (!book) throw new NotFoundException(`No book for "${professionSlug}"`);
+    if (!book) throw bookNotFound();
     return book;
   }
 }

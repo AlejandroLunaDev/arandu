@@ -19,8 +19,13 @@ import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
 import { LEAGUES, LEVELS } from './game.logic.js';
 import { GameRepository } from './game.repository.js';
+import { id, param } from '../../core/http/params.js';
+import {
+  caixaNotFound,
+  levelNotFound,
+  shopItemNotFound,
+} from './game.errors.js';
 
-const id = z.coerce.number().int().positive().max(2_147_483_647);
 const level = z.coerce.number().int().min(1).max(LEVELS);
 const shopItem = z.enum(['novelos', 'marcador']);
 const wardrobeUpdate = z
@@ -68,7 +73,7 @@ export class GameController {
   @HttpCode(200)
   claim(
     @UserId() userId: string,
-    @Param('level', { schema: level }) levelNumber: number,
+    @Param('level', param(level, levelNotFound)) levelNumber: number,
   ): Promise<Season> {
     return this.game.claim(userId, levelNumber);
   }
@@ -83,7 +88,7 @@ export class GameController {
   @HttpCode(200)
   open(
     @UserId() userId: string,
-    @Param('id', { schema: id }) caixaId: number,
+    @Param('id', param(id, caixaNotFound)) caixaId: number,
   ): Promise<Caixa> {
     return this.game.open(userId, caixaId);
   }
@@ -93,7 +98,8 @@ export class GameController {
   @HttpCode(200)
   buy(
     @UserId() userId: string,
-    @Param('item', { schema: shopItem }) item: 'novelos' | 'marcador',
+    @Param('item', param(shopItem, shopItemNotFound))
+    item: 'novelos' | 'marcador',
   ): Promise<Wallet> {
     return this.game.buy(userId, item);
   }

@@ -5,12 +5,7 @@ import type {
   StopResult,
 } from '@arandu/contracts';
 import { AiOutputError, AiService } from '@nestjs/ai';
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { ProgressService } from '../progress/progress.service.js';
 import { PathsRepository } from './paths.repository.js';
@@ -20,6 +15,7 @@ import {
   exercisesInstructions,
   subjectCardsInstructions,
 } from './stop.prompt.js';
+import { stopNotFound, stopUnavailable } from './paths.errors.js';
 
 /** Topics whose cards one web search writes: the search is paid once for them, not once per stop. */
 export const TOPICS_PER_SEARCH = 6;
@@ -271,10 +267,7 @@ export class StopsService {
       topic < (await this.paths.madeCount(disciplineId))
         ? await this.paths.stopContent(disciplineId, topic, topicText)
         : null;
-    if (!content)
-      throw new NotFoundException(
-        `No stop ${topic} in subject ${disciplineId}`,
-      );
+    if (!content) throw stopNotFound();
     return content;
   }
 
@@ -289,10 +282,7 @@ export class StopsService {
   ): Promise<StopContent> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
-    if (!discipline || topicText === undefined)
-      throw new NotFoundException(
-        `No stop ${topic} in subject ${disciplineId}`,
-      );
+    if (!discipline || topicText === undefined) throw stopNotFound();
 
     const stored = await this.paths.stopContent(disciplineId, topic, topicText);
     if (stored && !remake) return stored;
@@ -366,9 +356,7 @@ export class StopsService {
       );
       if (cards.length) return cards;
     }
-    throw new ServiceUnavailableException(
-      'Arandu could not prepare this stop with checked sources; try again later',
-    );
+    throw stopUnavailable();
   }
 
   /**
@@ -501,8 +489,6 @@ export class StopsService {
       await this.paths.saveStopContent(content);
       return content;
     }
-    throw new ServiceUnavailableException(
-      'Arandu could not prepare this stop with checked sources; try again later',
-    );
+    throw stopUnavailable();
   }
 }

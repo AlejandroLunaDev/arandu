@@ -1,10 +1,14 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../core/config/env.js';
 import type { GoogleIdentity } from './auth.repository.js';
+import { identityUnavailable } from './auth.errors.js';
 
 interface SupabaseUser {
-  identities?: { provider?: unknown; identity_data?: Record<string, unknown> }[];
+  identities?: {
+    provider?: unknown;
+    identity_data?: Record<string, unknown>;
+  }[];
 }
 
 /**
@@ -30,10 +34,7 @@ export class SupabaseIdentity {
     }).catch(() => null);
     if (response && response.status >= 400 && response.status < 500)
       return null;
-    if (!response?.ok)
-      throw new ServiceUnavailableException(
-        'Sign-in is unavailable right now, try again in a moment',
-      );
+    if (!response?.ok) throw identityUnavailable();
 
     const user = (await response.json()) as SupabaseUser;
     const data = user.identities?.find(

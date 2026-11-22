@@ -5,23 +5,15 @@ import type {
   Home,
   Wallet,
 } from '@arandu/contracts';
-import {
-  Body,
-  ConflictException,
-  Controller,
-  Get,
-  HttpCode,
-  NotFoundException,
-  Param,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
 import { ProgressRepository } from './progress.repository.js';
 import { ProgressService } from './progress.service.js';
+import { stopNotFound } from '../paths/paths.errors.js';
+import { stopNotOpen, subjectNotFound } from './progress.errors.js';
+import { id, param, topic } from '../../core/http/params.js';
 
-const id = z.coerce.number().int().positive().max(2_147_483_647);
-const topic = z.coerce.number().int().min(0).max(200);
 const reflection = z
   .object({
     chips: z.array(z.string().trim().min(1).max(40)).max(5),
@@ -48,7 +40,7 @@ export class ProgressController {
   @Get('me/books/:disciplineId')
   book(
     @UserId() userId: string,
-    @Param('disciplineId', { schema: id }) disciplineId: number,
+    @Param('disciplineId', param(id, subjectNotFound)) disciplineId: number,
   ): Promise<BookProgress> {
     return this.progress.book(userId, disciplineId);
   }
@@ -57,7 +49,7 @@ export class ProgressController {
   @Get('me/books/:disciplineId/reflection')
   reflection(
     @UserId() userId: string,
-    @Param('disciplineId', { schema: id }) disciplineId: number,
+    @Param('disciplineId', param(id, subjectNotFound)) disciplineId: number,
   ): Promise<BookReflection> {
     return this.progress.reflection(userId, disciplineId);
   }
@@ -67,7 +59,7 @@ export class ProgressController {
   @HttpCode(204)
   async reflect(
     @UserId() userId: string,
-    @Param('disciplineId', { schema: id }) disciplineId: number,
+    @Param('disciplineId', param(id, subjectNotFound)) disciplineId: number,
     @Body({ schema: reflection }) body: BookReflectionRequest,
   ): Promise<void> {
     await this.progress.book(userId, disciplineId); // 404 for an unknown subject
@@ -86,19 +78,15 @@ export class ProgressController {
   @HttpCode(200)
   async reread(
     @UserId() userId: string,
-    @Param('disciplineId', { schema: id }) disciplineId: number,
-    @Param('topic', { schema: topic }) topicIndex: number,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
   ): Promise<Wallet> {
     const stop = (await this.progress.book(userId, disciplineId)).stops[
       topicIndex
     ];
-    if (!stop)
-      throw new NotFoundException(
-        `No stop ${topicIndex} in subject ${disciplineId}`,
-      );
+    if (!stop) throw stopNotFound();
     // Only the stop the person is on, or one they finished: never a novelo per stop of the catalog.
-    if (stop.state === 'locked')
-      throw new ConflictException('This stop is not open yet');
+    if (stop.state === 'locked') throw stopNotOpen();
     return this.repository.reread(userId, disciplineId, topicIndex);
   }
 }

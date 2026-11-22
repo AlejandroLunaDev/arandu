@@ -6,7 +6,7 @@ import type {
   Source,
 } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import {
   CareersRepository,
@@ -17,6 +17,10 @@ import {
   careerChatInstructions,
   choosingInstructions,
 } from './career-chat.prompt.js';
+import {
+  curriculumNotFound,
+  professionNotFound,
+} from './career-chat.errors.js';
 
 /** The person's last 6 exchanges with Arandu: history is the main token cost. */
 export const RECENT_MESSAGES = 12;
@@ -131,10 +135,9 @@ export class CareerChatService {
 
   private async career(slug: string): Promise<ProfessionFirstTerm> {
     const profession = await this.careers.firstTerm(slug);
-    if (!profession) throw new NotFoundException(`No profession "${slug}"`);
+    if (!profession) throw professionNotFound();
     // No curriculum means nothing real to ground on: Arandu does not talk about it rather than invent it.
-    if (profession.courses.length === 0)
-      throw new NotFoundException(`No curriculum yet for "${slug}"`);
+    if (profession.courses.length === 0) throw curriculumNotFound();
     return profession;
   }
 
