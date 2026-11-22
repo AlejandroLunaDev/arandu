@@ -139,18 +139,23 @@ export interface ChatMessage {
   content: string;
 }
 
-/** POST /arandu/chat: the person's next message about one profession. Without sessionId it starts a new session. */
-export interface AranduChatRequest {
-  professionSlug: string;
-  sessionId?: string;
-  message: string;
-}
+/** POST /arandu/chat: the person's next message about one profession, or about the recommended careers (O10). Without sessionId it starts a new session. */
+export type AranduChatRequest =
+  | { professionSlug: string; sessionId?: string; message: string }
+  | {
+      /** O10: the recommended careers, 1 to 4 and unique, in the order shown; Arandu works out which one they mean. */
+      professionSlugs: string[];
+      sessionId?: string;
+      message: string;
+    };
 
 export interface AranduChatReply {
   sessionId: string;
   reply: string;
-  /** The curricula Arandu was given to ground the reply. */
+  /** The curricula of the career the reply is about; empty when Arandu asked which one they mean. */
   sources: Source[];
+  /** The career the reply is about; null when Arandu asked which one they mean (only with professionSlugs). */
+  professionSlug: string | null;
 }
 
 /** The onboarding's topics, one question each (docs/05-functional-map.md S1). */
@@ -223,8 +228,8 @@ export interface Recommendations {
 /** GET /arandu/memory/conversations (S2): what the person and Arandu said, as text, newest first. */
 export interface Conversations {
   conversations: {
-    /** The onboarding, a talk about a career, or a question on a stop's card (T1). */
-    kind: "onboarding" | "career" | "card";
+    /** The onboarding, a talk about a career, one among the recommended careers (O10), or a question on a stop's card (T1). */
+    kind: "onboarding" | "career" | "choosing" | "card";
     startedAt: string;
     professionSlug: string | null;
     /** The stop a card question was about; null for the other kinds. */
@@ -244,7 +249,7 @@ export interface AranduMemory {
   facts: AranduFact[];
   /** Newest first, the last 50. */
   sessions: {
-    kind: "onboarding" | "career";
+    kind: "onboarding" | "career" | "choosing";
     professionSlug: string | null;
     startedAt: string;
   }[];

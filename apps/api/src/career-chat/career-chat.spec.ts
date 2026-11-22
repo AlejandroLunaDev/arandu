@@ -13,6 +13,10 @@ import {
   type ProfessionFirstTerm,
 } from '../careers/careers.repository.js';
 import { CareerChatModule } from './career-chat.module.js';
+import {
+  careerChatInstructions,
+  choosingInstructions,
+} from './career-chat.prompt.js';
 
 const course = (over: Record<string, unknown> = {}) => ({
   institution: 'USP',
@@ -74,6 +78,7 @@ describe('POST /arandu/chat', () => {
           retrievedAt: '2026-11-01T00:00:00.000Z',
         },
       ],
+      professionSlug: 'direito',
     });
     expect(memory.createSession).toHaveBeenCalledWith(
       USER_ID,
@@ -203,4 +208,146 @@ describe('POST /arandu/chat', () => {
       expect(model.calls).toHaveLength(0);
     },
   );
+});
+
+describe('POST /arandu/chat among the recommended careers', () => {
+  let app: INestApplication;
+  let model: FakeModel;
+  let memory: ReturnType<typeof fakeMemoryRepository>;
+  let firstTerm: ReturnType<typeof vi.fn>;
+  const slugs = ['direito', 'arquitetura'];
+  const body = { professionSlugs: slugs, message: 'E a de arquitetura?' };
+  const fauSource = {
+    label: 'FAU USP',
+    url: 'https://example.org/fau',
+    retrievedAt: '2026-11-01T00:00:00.000Z',
+  };
+
+  const start = async (object: { professionSlug: string | null }) => {
+    model = fakeModel({ object: { ...object, reply: 'Claro!' } });
+    memory = fakeMemoryRepository();
+    firstTerm = vi.fn(async (slug: string) =>
+      slug === 'arquitetura'
+        ? ({
+            name: 'Arquitetura',
+            courses: [course({ course: 'Arquitetura', source: fauSource })],
+          } as ProfessionFirstTerm)
+        : slug === 'direito'
+          ? direito()
+          : null,
+    );
+    app = await createHttpApp([CareerChatModule], model, [
+      withMemory(memory),
+      [CareersRepository, { firstTerm }],
+    ]);
+  };
+
+  beforeEach(() => start({ professionSlug: 'arquitetura' }));
+  afterEach(() => app.close());
+
+  const post = (b: unknown = body) =>
+    request(app.getHttpServer())
+      .post('/arandu/chat')
+      .send(b as object);
+
+  it('answers about the career the model picks, with only its sources, in a choosing session without slug', async () => {
+    const res = await post().expect(200);
+
+    expect(res.body).toEqual({
+      sessionId: SESSION_ID,
+      reply: 'Claro!',
+      sources: [fauSource],
+      professionSlug: 'arquitetura',
+    });
+    expect(memory.createSession).toHaveBeenCalledWith(
+      USER_ID,
+      'choosing',
+      null,
+    );
+    expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
+      { role: 'user', content: 'E a de arquitetura?' },
+      { role: 'assistant', content: 'Claro!' },
+    ]);
+  });
+
+  it('has no sources and no career when the model asks which one', async () => {
+    await app.close();
+    await start({ professionSlug: null });
+
+    const res = await post().expect(200);
+
+    expect(res.body.professionSlug).toBeNull();
+    expect(res.body.sources).toEqual([]);
+  });
+
+  it('reads the history of a choosing session', async () => {
+    memory.sessionMessages.mockResolvedValue([
+      { role: 'user', content: 'antes' },
+      { role: 'assistant', content: 'resposta' },
+    ]);
+
+    await post({ ...body, sessionId: SESSION_ID }).expect(200);
+
+    expect(memory.createSession).not.toHaveBeenCalled();
+    expect(memory.sessionMessages).toHaveBeenCalledWith(
+      USER_ID,
+      SESSION_ID,
+      'choosing',
+      11,
+      null,
+    );
+  });
+
+  it('404s for an unknown slug, opening no session and not calling the model', async () => {
+    await post({ ...body, professionSlugs: ['direito', 'nao-existe'] }).expect(
+      404,
+    );
+
+    expect(memory.createSession).not.toHaveBeenCalled();
+    expect(model.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['no slugs', { ...body, professionSlugs: [] }],
+    ['five slugs', { ...body, professionSlugs: ['a', 'b', 'c', 'd', 'e'] }],
+    ['duplicate slugs', { ...body, professionSlugs: ['direito', 'direito'] }],
+    [
+      'both professionSlug and professionSlugs',
+      { ...body, professionSlug: 'direito' },
+    ],
+  ])('400s validation_failed for %s', async (_, invalid) => {
+    const res = await post(invalid).expect(400);
+
+    expect(res.body.error.code).toBe('validation_failed');
+    expect(firstTerm).not.toHaveBeenCalled();
+    expect(memory.createSession).not.toHaveBeenCalled();
+    expect(model.calls).toHaveLength(0);
+  });
+});
+
+describe('career chat prompts', () => {
+  it('lists every career name and slug, in order, for the choosing talk', () => {
+    const prompt = choosingInstructions([
+      { slug: 'direito', profession: direito() },
+      {
+        slug: 'arquitetura',
+        profession: { name: 'Arquitetura', courses: [] } as ProfessionFirstTerm,
+      },
+    ]);
+
+    expect(prompt).toContain('1. Direito (slug: direito)');
+    expect(prompt).toContain('2. Arquitetura (slug: arquitetura)');
+    expect(prompt.indexOf('(slug: direito)')).toBeLessThan(
+      prompt.indexOf('(slug: arquitetura)'),
+    );
+  });
+
+  it('keeps the exact grounding lines in the single-career prompt', () => {
+    const prompt = careerChatInstructions(direito());
+
+    expect(prompt).toContain(
+      'The real first-term subjects of this career at São Paulo institutions are listed below, with their sources. When',
+    );
+    expect(prompt).toContain('What you know, and its limits:');
+  });
 });
