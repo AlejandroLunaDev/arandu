@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { internalHeaders, readAuthConfig } from "@/auth/config";
+import { errorCode } from "@/auth/refresh";
 import { getSession } from "@/auth/session";
 
 /** A call the API refused: its status and the `code` of its error body. */
@@ -27,8 +28,7 @@ async function call<T>(path: string, init: Init, extra: Record<string, string>):
     cache: "no-store",
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
-    throw new ApiError(response.status, typeof body?.code === "string" ? body.code : null, path);
+    throw new ApiError(response.status, await errorCode(response), path);
   }
   return response.status === 204 ? (undefined as T) : response.json();
 }

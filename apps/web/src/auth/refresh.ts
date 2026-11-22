@@ -8,6 +8,12 @@ const REFRESH_TIMEOUT_MS = 10_000;
 /** The API's answers that end the session for good: anything else is transient and must not sign the person out. */
 const SESSION_OVER = new Set(["invalid_refresh_token", "user_banned"]);
 
+/** The `code` of an API error body (`{ error: { statusCode, code, message } }`), or null when it has none. */
+export async function errorCode(response: Response): Promise<string | null> {
+  const body = (await response.json().catch(() => null)) as { error?: { code?: unknown } } | null;
+  return typeof body?.error?.code === "string" ? body.error.code : null;
+}
+
 const inFlight = new Map<string, Promise<TokenPair | null>>();
 
 /**
@@ -30,8 +36,8 @@ export function refreshTokens(config: AuthConfig, refreshToken: string, headers:
       signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
     });
     if (response.ok) return (await response.json()) as TokenPair;
-    const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
-    if (typeof body?.code === "string" && SESSION_OVER.has(body.code)) return null;
+    const code = await errorCode(response);
+    if (code && SESSION_OVER.has(code)) return null;
     throw new Error(`POST /auth/refresh failed with ${response.status}`);
   })().finally(() => inFlight.delete(refreshToken));
 

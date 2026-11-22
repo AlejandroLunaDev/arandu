@@ -1,6 +1,6 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { refreshTokens } from "./refresh.ts";
+import { errorCode, refreshTokens } from "./refresh.ts";
 
 const config = { apiUrl: "http://api.test", internalSecret: "s", cookieSecret: new Uint8Array(32), secureCookie: false };
 const pair = { accessToken: "a", accessTokenExpiresIn: 900, refreshToken: "r2" };
@@ -38,18 +38,23 @@ describe("refreshTokens", () => {
   });
 
   it("resolves null on invalid_refresh_token", async () => {
-    mockFetch(() => json({ code: "invalid_refresh_token" }, 401));
+    mockFetch(() => json({ error: { statusCode: 401, code: "invalid_refresh_token", message: "x" } }, 401));
     assert.equal(await refreshTokens(config, "tok-401", {}), null);
   });
 
   it("resolves null on user_banned", async () => {
-    mockFetch(() => json({ code: "user_banned" }, 403));
+    mockFetch(() => json({ error: { statusCode: 403, code: "user_banned", message: "x" } }, 403));
     assert.equal(await refreshTokens(config, "tok-403", {}), null);
   });
 
   it("rejects on an unknown error code", async () => {
-    mockFetch(() => json({ code: "whatever" }, 500));
+    mockFetch(() => json({ error: { statusCode: 500, code: "whatever", message: "x" } }, 500));
     await assert.rejects(refreshTokens(config, "tok-500", {}));
+  });
+
+  it("rejects on the old flat error shape, which no longer ends the session", async () => {
+    mockFetch(() => json({ code: "invalid_refresh_token" }, 401));
+    await assert.rejects(refreshTokens(config, "tok-flat", {}));
   });
 
   it("rejects on a non-JSON 503", async () => {
@@ -65,5 +70,19 @@ describe("refreshTokens", () => {
     assert.deepEqual(b, pair);
     await refreshTokens(config, "tok-sf", {});
     assert.equal(calls.length, 2);
+  });
+});
+
+describe("errorCode", () => {
+  it("reads the code of a wrapped error body", async () => {
+    assert.equal(await errorCode(json({ error: { statusCode: 401, code: "invalid_refresh_token", message: "x" } }, 401)), "invalid_refresh_token");
+  });
+
+  it("is null when the envelope has no code", async () => {
+    assert.equal(await errorCode(json({ error: {} }, 400)), null);
+  });
+
+  it("is null on a non-JSON body", async () => {
+    assert.equal(await errorCode(new Response("<html>down</html>", { status: 503 })), null);
   });
 });
