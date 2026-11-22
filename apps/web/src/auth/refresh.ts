@@ -1,4 +1,4 @@
-import type { TokenPair } from "@arandu/contracts";
+import type { ErrorResponse, TokenPair } from "@arandu/contracts";
 import type { AuthConfig } from "./config";
 
 /** After this long the API refuses to rotate: nobody would be waiting for the new token. */
@@ -8,9 +8,9 @@ const REFRESH_TIMEOUT_MS = 10_000;
 /** The API's answers that end the session for good: anything else is transient and must not sign the person out. */
 const SESSION_OVER = new Set(["invalid_refresh_token", "user_banned"]);
 
-/** The `code` of an API error body (`{ error: { statusCode, code, message } }`), or null when it has none. */
+/** The `code` of an API error body (ErrorResponse), or null when the body is not one. */
 export async function errorCode(response: Response): Promise<string | null> {
-  const body = (await response.json().catch(() => null)) as { error?: { code?: unknown } } | null;
+  const body = (await response.json().catch(() => null)) as Partial<ErrorResponse> | null;
   return typeof body?.error?.code === "string" ? body.error.code : null;
 }
 

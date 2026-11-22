@@ -587,6 +587,20 @@ export interface BookReflection {
   feeling: BookReflectionRequest | null;
 }
 
+/** Every error response is `{ error: ApiError }`. Branch on `code`; `message` is for people and never parsed. */
+export interface ApiError {
+  statusCode: number;
+  /** Stable snake_case, e.g. `not_found`, `validation_failed`, an AuthErrorCode. */
+  code: string;
+  message: string;
+  /** Only on `validation_failed`: what is wrong with each field (`""` is the whole body). */
+  details?: { field: string; messages: string[] }[];
+}
+
+export interface ErrorResponse {
+  error: ApiError;
+}
+
 // Auth: the API owns users and sessions (the v2.0 model). Only the web's Next server calls these, with
 // x-internal-secret, x-client-ip and x-client-user-agent; the browser never sees a token.
 
@@ -627,7 +641,7 @@ export interface Me {
   avatarUrl: string | null;
 }
 
-/** The `code` an auth error body carries next to statusCode, error and message. */
+/** The `error.code` of an auth error. */
 export type AuthErrorCode =
   /** 401: missing, invalid or expired access token, or an ended session. */
   | "unauthorized"
