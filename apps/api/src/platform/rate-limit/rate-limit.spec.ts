@@ -63,6 +63,7 @@ describe('Rate limit', () => {
       statusCode: 429,
       error: 'TOO_MANY_REQUESTS',
       message: 'Too many messages, take a short break and try again',
+      code: 'too_many_requests',
       path: '/ping',
       timestamp: expect.any(String),
     });

@@ -1,76 +1,38 @@
-import type { ConfigService } from '@nestjs/config';
 import type { ExecutionContext } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import {
-  exportJWK,
-  generateKeyPair,
-  type JWK,
-  type CryptoKey,
-  SignJWT,
-} from 'jose';
 import type { Env } from '../config/env.js';
 import { AuthGuard, type AuthedRequest } from './auth.guard.js';
-import { Public } from './public.decorator.js';
+import { OpenToBrowsers, Public } from './public.decorator.js';
+import type { Caller, SessionsService } from './sessions.service.js';
 
-const SUPABASE_URL = 'https://project.supabase.co';
-const ISSUER = `${SUPABASE_URL}/auth/v1`;
-const JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
-const KID = 'test-key';
+const SECRET = 's'.repeat(32);
 
 class Private {}
 @Public()
-class OpenRoutes {
-  open() {}
-}
+class SignInRoutes {}
+@OpenToBrowsers()
+class BrowserRoutes {}
 
 describe('AuthGuard', () => {
-  let privateKey: CryptoKey;
-  let jwks: { keys: JWK[] };
+  const caller: Caller = { userId: 'user-1', sessionId: 's-1', guest: false };
+  const sessions = { authenticate: vi.fn() };
   let guard: AuthGuard;
 
-  beforeAll(async () => {
-    const pair = await generateKeyPair('ES256');
-    privateKey = pair.privateKey;
-    jwks = {
-      keys: [{ ...(await exportJWK(pair.publicKey)), kid: KID, alg: 'ES256' }],
-    };
-  });
-
   beforeEach(() => {
-    // The real verification runs; only the JWKS download is local.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: URL | string) => {
-        if (url.toString() !== JWKS_URL) throw new Error('Unexpected fetch');
-        return Response.json(jwks);
-      }),
-    );
+    sessions.authenticate.mockReset().mockResolvedValue(caller);
     guard = new AuthGuard(
-      { get: () => SUPABASE_URL } as unknown as ConfigService<Env, true>,
+      { get: () => SECRET } as unknown as ConfigService<Env, true>,
       new Reflector(),
+      sessions as unknown as SessionsService,
     );
   });
-
-  afterEach(() => vi.unstubAllGlobals());
-
-  const sign = (
-    claims: Record<string, unknown> = {},
-    { key = privateKey, expires = '1h' as string | number } = {},
-  ) =>
-    new SignJWT({ ...claims })
-      .setProtectedHeader({ alg: 'ES256', kid: KID })
-      .setSubject('user-1')
-      .setIssuer(ISSUER)
-      .setAudience('authenticated')
-      .setIssuedAt()
-      .setExpirationTime(expires)
-      .sign(key);
 
   const run = (
-    authorization?: string,
-    target: typeof Private | typeof OpenRoutes = Private,
+    headers: AuthedRequest['headers'],
+    target: new () => object = Private,
   ) => {
-    const request: AuthedRequest = { headers: { authorization } };
+    const request: AuthedRequest = { headers };
     const context = {
       getHandler: () => () => {},
       getClass: () => target,
@@ -79,75 +41,72 @@ describe('AuthGuard', () => {
     return { request, result: guard.canActivate(context) };
   };
 
-  it('401s without an authorization header', async () => {
-    await expect(run().result).rejects.toMatchObject({ status: 401 });
-  });
-
-  it('401s for a scheme other than Bearer', async () => {
-    await expect(run(`Basic ${await sign()}`).result).rejects.toMatchObject({
+  it.each([
+    ['no secret', {}],
+    ['a wrong secret', { 'x-internal-secret': 'x'.repeat(32) }],
+    ['a secret of another length', { 'x-internal-secret': 'short' }],
+  ])('401s with %s, even with a bearer', async (_, headers) => {
+    await expect(
+      run({ ...headers, authorization: 'Bearer t' }).result,
+    ).rejects.toMatchObject({
       status: 401,
+      response: { code: 'unauthorized' },
     });
+    expect(sessions.authenticate).not.toHaveBeenCalled();
   });
 
-  it('401s for a malformed token', async () => {
-    await expect(run('Bearer not-a-jwt').result).rejects.toMatchObject({
-      status: 401,
-    });
-  });
-
-  it('401s for a token signed by another key', async () => {
-    const other = await generateKeyPair('ES256');
-
-    await expect(
-      run(`Bearer ${await sign({}, { key: other.privateKey })}`).result,
-    ).rejects.toMatchObject({ status: 401 });
-  });
-
-  it('401s for an expired token', async () => {
-    await expect(
-      run(`Bearer ${await sign({}, { expires: '-1m' })}`).result,
-    ).rejects.toMatchObject({ status: 401 });
-  });
-
-  it('accepts a token that expired 3 s ago (clock drift)', async () => {
-    const expires = Math.floor(Date.now() / 1000) - 3;
-
-    await expect(
-      run(`Bearer ${await sign({}, { expires })}`).result,
-    ).resolves.toBe(true);
-  });
-
-  it('401s for a token that expired 30 s ago', async () => {
-    const expires = Math.floor(Date.now() / 1000) - 30;
-
-    await expect(
-      run(`Bearer ${await sign({}, { expires })}`).result,
-    ).rejects.toMatchObject({ status: 401 });
-  });
-
-  it('admits an anonymous token and sets the userId', async () => {
-    const { request, result } = run(
-      `Bearer ${await sign({ is_anonymous: true })}`,
-    );
-
-    await expect(result).resolves.toBe(true);
-    expect(request.userId).toBe('user-1');
-  });
-
-  it('lets a valid token in and sets the userId', async () => {
-    const { request, result } = run(
-      `Bearer ${await sign({ is_anonymous: false })}`,
-    );
-
-    await expect(result).resolves.toBe(true);
-    expect(request.userId).toBe('user-1');
-  });
-
-  it('lets a @Public route in without a token', async () => {
-    const { request, result } = run(undefined, OpenRoutes);
+  it('lets an @OpenToBrowsers route in without the secret', async () => {
+    const { request, result } = run({}, BrowserRoutes);
 
     await expect(result).resolves.toBe(true);
     expect(request.userId).toBeUndefined();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(sessions.authenticate).not.toHaveBeenCalled();
+  });
+
+  it('401s a @Public route without the secret', async () => {
+    await expect(run({}, SignInRoutes).result).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+
+  it('lets a @Public route in with the secret, with no session, and sets the client', async () => {
+    const { request, result } = run(
+      {
+        'x-internal-secret': SECRET,
+        'x-client-ip': '1.2.3.4',
+        'x-client-user-agent': 'UA',
+      },
+      SignInRoutes,
+    );
+
+    await expect(result).resolves.toBe(true);
+    expect(request.clientIp).toBe('1.2.3.4');
+    expect(request.clientUserAgent).toBe('UA');
+    expect(request.userId).toBeUndefined();
+    expect(sessions.authenticate).not.toHaveBeenCalled();
+  });
+
+  it('authenticates a protected route and sets the caller and userId', async () => {
+    const { request, result } = run({
+      'x-internal-secret': SECRET,
+      'x-client-ip': '1.2.3.4',
+      authorization: 'Bearer abc',
+    });
+
+    await expect(result).resolves.toBe(true);
+    expect(sessions.authenticate).toHaveBeenCalledWith('Bearer abc');
+    expect(request.userId).toBe('user-1');
+    expect(request.caller).toBe(caller);
+    expect(request.clientIp).toBe('1.2.3.4');
+  });
+
+  it('passes the session failure of a protected route through', async () => {
+    sessions.authenticate.mockRejectedValue(
+      Object.assign(new Error('no'), { status: 401 }),
+    );
+
+    await expect(
+      run({ 'x-internal-secret': SECRET }).result,
+    ).rejects.toMatchObject({ status: 401 });
   });
 });

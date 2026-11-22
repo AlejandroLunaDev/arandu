@@ -2,7 +2,9 @@ import { AiBudgetExceededError, AiModelError, AiOutputError } from '@nestjs/ai';
 import {
   type ArgumentsHost,
   BadRequestException,
+  HttpException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AllExceptionsFilter } from './all-exceptions.filter.js';
 
@@ -31,6 +33,29 @@ describe('AllExceptionsFilter', () => {
       path: '/arandu/chat',
       timestamp: expect.any(String),
     });
+  });
+
+  it('passes through the code of an HttpException body', () => {
+    const { body } = catchWith(
+      new UnauthorizedException({
+        code: 'unauthorized',
+        message: 'Sign in again',
+      }),
+    );
+
+    expect(body).toMatchObject({
+      code: 'unauthorized',
+      message: 'Sign in again',
+    });
+  });
+
+  it('gives a 429 the code too_many_requests, and other errors no code', () => {
+    expect(catchWith(new HttpException('slow down', 429)).body.code).toBe(
+      'too_many_requests',
+    );
+    expect(catchWith(new NotFoundException('x')).body).not.toHaveProperty(
+      'code',
+    );
   });
 
   it('keeps a list of messages', () => {
