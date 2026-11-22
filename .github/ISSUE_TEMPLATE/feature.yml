@@ -1,0 +1,45 @@
+name: "Feature"
+description: "Propose a new feature"
+title: "[Feature]: "
+labels: ["type:feature"]
+body:
+  - type: dropdown
+    id: apps
+    attributes:
+      label: Affected apps
+      multiple: true
+      options:
+        - api
+        - web
+        - packages (contracts / db-types)
+        - supabase (migrations)
+        - monorepo (root / tooling)
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What need this solves, and for whom.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How it would work.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: One checkable statement per line.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+    validations:
+      required: false

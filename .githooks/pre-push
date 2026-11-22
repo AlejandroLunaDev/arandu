@@ -1,0 +1,4 @@
+#!/bin/sh
+# Typecheck and lint of what this push affects; tests are not part of it.
+# There is no hosted CI: this is the check. Do not skip it with --no-verify.
+TURBO_SCM_BASE=origin/dev npm run verify

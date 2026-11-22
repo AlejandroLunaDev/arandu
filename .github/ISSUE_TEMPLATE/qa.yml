@@ -1,0 +1,58 @@
+name: "QA"
+description: "Test plan for one end-to-end flow on dev"
+title: "[QA]: "
+labels: ["type:qa"]
+body:
+  - type: dropdown
+    id: apps
+    attributes:
+      label: Affected apps
+      multiple: true
+      options:
+        - api
+        - web
+        - packages (contracts / db-types)
+        - supabase (migrations)
+        - monorepo (root / tooling)
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Where the test runs. Never production.
+      options:
+        - dev (Vercel dev + Render dev)
+        - local
+    validations:
+      required: true
+  - type: textarea
+    id: preconditions
+    attributes:
+      label: Preconditions and data
+      description: Accounts and data each step needs. No passwords or tokens.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and expected result
+      placeholder: |
+        1. Go to '...' -> expect '...'
+        2. Tap '...' -> expect '...'
+    validations:
+      required: true
+  - type: textarea
+    id: negatives
+    attributes:
+      label: Negative cases
+      description: Limits, duplicates, expired or reused, no permission.
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Run result
+      description: Date, who ran it, and a [Bug] issue linked per failure.
+    validations:
+      required: false

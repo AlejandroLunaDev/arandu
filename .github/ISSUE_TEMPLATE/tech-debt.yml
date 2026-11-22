@@ -1,0 +1,54 @@
+name: "Tech debt"
+description: "Report technical debt or propose a refactor"
+title: "[Tech debt]: "
+labels: ["type:tech-debt"]
+body:
+  - type: dropdown
+    id: apps
+    attributes:
+      label: Affected apps
+      multiple: true
+      options:
+        - api
+        - web
+        - packages (contracts / db-types)
+        - supabase (migrations)
+        - monorepo (root / tooling)
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current problem
+      description: What is wrong today, with file paths and lines.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk of leaving it
+    validations:
+      required: false
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Risk of the change and dependencies
+      description: What it could break, and what must be done first.
+    validations:
+      required: false
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      options:
+        - "S (under a day)"
+        - "M (a few days)"
+        - "L (a week or more: split it)"
+    validations:
+      required: true
