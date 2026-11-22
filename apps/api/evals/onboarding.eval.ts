@@ -21,7 +21,7 @@ const arandu = (content: string): ChatMessage => ({
   content,
 });
 const welcome = arandu(
-  'Oi, eu sou o Arandu, um gato que ajuda a encontrar um caminho profissional. Para começar: o que você faz hoje?',
+  'Pra começar, o que você faz hoje?',
 );
 
 // The four people Alejandro named (2026-11-18): none of them has chosen a career yet.
@@ -49,7 +49,7 @@ const turnCases: TurnCase[] = [
     id: 'start',
     messages: [],
     judge: [
-      'Introduces itself as Arandu in one sentence and asks what the person does now, assuming no age or school.',
+      'Goes straight to asking what the person does now, with a short lead-in and no introduction of itself, assuming no age or school.',
       'The quick replies fit different kinds of people: students, workers, retired people.',
     ],
   },
@@ -346,6 +346,11 @@ describe('Onboarding evals', () => {
         const ms = Date.now() - started;
 
         if (/miau/i.test(out.reply)) failures.push('says miau');
+        if (c.messages.length === 0) {
+          if (/eu sou o arandu|gato/i.test(out.reply))
+            failures.push('introduces itself again');
+          if (/sem prova/i.test(out.reply)) failures.push('says sem provas');
+        }
         if (questionMarks(out.reply) > (c.done ? 0 : 1))
           failures.push(`${questionMarks(out.reply)} question marks`);
         if (
