@@ -285,7 +285,7 @@ function play(name) {
 }
 
 const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
-new GLTFLoader().setDRACOLoader(draco).load('/public/models/arandu.glb', (gltf) => {
+new GLTFLoader().setDRACOLoader(draco).load('/apps/web/public/models/arandu.glb', (gltf) => {
   const model = gltf.scene;
   scene.add(model);
   model.traverse((o) => {

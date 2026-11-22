@@ -14,7 +14,7 @@ import runpy
 import bpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.normpath(os.path.join(HERE, "..", "..", "public", "models", "props.glb"))
+OUT = os.path.normpath(os.path.join(HERE, "..", "..", "apps", "web", "public", "models", "props.glb"))
 
 
 def export(path=OUT):
