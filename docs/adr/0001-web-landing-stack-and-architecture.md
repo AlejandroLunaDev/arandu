@@ -1,6 +1,7 @@
 # ADR-0001: Web landing stack and architecture
 
-- Status: accepted
+- Status: accepted; its "Agent workflow rules" are superseded by the root `AGENTS.md` (2026-11-22), and its monorepo
+  exclusion by ADR-0003
 - Date: 2026-11-13
 - Decided by: Alejandro (owner), with the web squad ingeniero
 
