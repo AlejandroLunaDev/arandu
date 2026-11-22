@@ -15,6 +15,7 @@ describe('progress routes', () => {
     nextNoveloAt: '2026-03-10T12:30:00.000Z',
     peixinhos: 0,
     marcadores: 0,
+    refillPrice: 100,
   };
   const repo = {
     wallet: vi.fn(),

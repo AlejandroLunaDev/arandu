@@ -1,6 +1,7 @@
 import type { BookReflectionRequest, Wallet } from '@arandu/contracts';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
+import { SHOP } from '../game/game.logic.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../platform/database/database.module.js';
 import {
@@ -46,6 +47,7 @@ export function toWallet(row: WalletRow, now: Date): Wallet {
         : null,
     peixinhos: row.peixinhos,
     marcadores: row.marcadores,
+    refillPrice: SHOP.novelos,
   };
 }
 
