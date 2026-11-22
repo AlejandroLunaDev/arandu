@@ -8,9 +8,6 @@ import { Cat } from "@/ui/cat";
 import { useAttempt } from "@/ui/use-attempt";
 import c from "./caminho.module.css";
 
-/** What a refill costs, in peixinhos (the API's SHOP.novelos). */
-const REFILL = 100;
-
 /** "47 min", "1 h 05 min": how long until the next novelo comes back. */
 function wait(at: string | null, now: number): string | null {
   if (!at) return null;
@@ -67,14 +64,14 @@ export function OutOfNovelos({
           <button
             type="button"
             className={c.way}
-            disabled={busy || wallet.peixinhos < REFILL}
+            disabled={busy || wallet.peixinhos < wallet.refillPrice}
             onClick={() => run(onRefill, "Faltam peixinhos para encher os novelos.")}
           >
             <Image src="/img/props/fish.webp" alt="" width={40} height={40} />
             <span>
               <b>Encher os novelos</b>
               <small>
-                {REFILL} peixinhos · você tem {wallet.peixinhos}
+                {wallet.refillPrice} peixinhos · você tem {wallet.peixinhos}
               </small>
             </span>
           </button>
