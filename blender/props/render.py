@@ -36,6 +36,8 @@ SHOTS = {  # file name: objects in the shot, direction from the shot toward the 
     "lamp-pendant": (["LampPendant", "LampPendantCord"], BELOW),
     "yarn": (["YarnBall"], FRONT),
     "ball": (["Ball"], FRONT),
+    "paw": (["Paw"], FRONT),
+    "fish": (["Fish"], FRONT),
 }
 BOOK_COLORS = {  # the landing's book colors
     "BookThick": "#6B3FA0", "Book": "#B97F22", "BookShort": "#9B72CF",
