@@ -9,7 +9,7 @@
 const LINT_CONFIG = /eslint\.config\.|\.oxlintrc\.json/;
 // Setting it to anything but .githooks, or unsetting it; reading it (`git config core.hooksPath`) is fine.
 const HOOKS_PATH_OVERRIDE =
-  /--unset(-all)?\s+core\.hookspath|core\.hookspath[\s=]+["']?(?!\.githooks["']?(\s|$|[;&|)]))[^\s;&|)]/i;
+  /--unset(-all)?\s+core\.hookspath|core\.hookspath[\s=]+["']?(?!\.githooks(?![\w./-]))[^\s;&|)`]/i;
 
 const askForLintConfig = (target) => ({
   permissionDecision: 'ask',
