@@ -1,6 +1,7 @@
 # Animated reward box: hops, spins once, lands, bursts open with a warm glow inside.
 # Only BOXA_ objects in the AranduPaw scene. Renders frames 101-140 to out/boxanim/ and one
 # extra still (box open, Arandu sitting inside) to out/boxanim/cat.png. Restores the window scene.
+# Run box.py first: this reuses its BOX_kraft, BOX_tape and BOX_paw materials.
 import bpy, bmesh, math, os
 from mathutils import Vector, Matrix
 

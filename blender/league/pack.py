@@ -5,10 +5,12 @@
 # out/box-anim-cat.webp (Arandu in the open box) and out/box-anim-closed.webp.
 # WebP is capped at 16383 px wide, which is why the cells are 320 px.
 import os
+import sys
 from PIL import Image, ImageChops
-from glow import glow
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)  # `python -I` leaves the script's folder off the path, and glow.py lives here
+from glow import glow
 D = os.path.join(HERE, "out", "boxanim")
 O = os.path.join(HERE, "out")
 FRAMES = range(100, 151)
