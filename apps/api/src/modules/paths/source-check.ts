@@ -58,7 +58,9 @@ export const publicLookup: LookupFunction = (hostname, options, callback) => {
         null,
         list,
       );
-    callback(null, list[0].address, list[0].family);
+    // Not empty: checked above.
+    const [first] = list as [LookupAddress];
+    callback(null, first.address, first.family);
   });
 };
 

@@ -45,7 +45,7 @@ export function Composer({ placeholder, busy, onSend, onNext }: { placeholder: s
     d.lang = "pt-BR";
     d.interimResults = true;
     d.continuous = false;
-    d.onresult = (event) => setDraft(Array.from(event.results, (result) => result[0].transcript).join(""));
+    d.onresult = (event) => setDraft(Array.from(event.results, (result) => result[0]?.transcript ?? "").join(""));
     d.onend = () => setListening(false);
     dictation.current = d;
     setListening(true);

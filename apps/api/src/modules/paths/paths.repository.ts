@@ -16,6 +16,7 @@ export const STOP_SABEDORIA = 15;
 export const STOP_PEIXINHOS = 10;
 
 import { madeStops, TIME_ZONE } from '../progress/progress.repository.js';
+import { one } from '../../core/database/one.js';
 
 export interface Discipline {
   id: number;
@@ -226,10 +227,12 @@ export class PathsRepository {
         await tx`
           update public.wallets set peixinhos = peixinhos + ${STOP_PEIXINHOS}, updated_at = now()
           where user_id = ${userId}`;
-        const [{ today }] = await tx<{ today: number }[]>`
+        const { today } = one(
+          await tx<{ today: number }[]>`
           select count(*)::int as today from public.stop_results
           where user_id = ${userId}
-            and (completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`;
+            and (completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`,
+        );
         return {
           sabedoria: STOP_SABEDORIA,
           peixinhos: STOP_PEIXINHOS,

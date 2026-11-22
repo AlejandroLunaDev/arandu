@@ -22,6 +22,7 @@ import {
   FREE_TRACK,
   LEAGUE_SIZE,
   LEAGUES,
+  leagueAt,
   LEVELS,
   levelOf,
   MAX_MARCADORES,
@@ -29,6 +30,7 @@ import {
   PLUS_TRACK,
   PROMOTE_TOP,
   defaultNickname,
+  rewardAt,
   rivals,
   rollCaixa,
   seasonOf,
@@ -44,6 +46,7 @@ import {
   novelosFull,
   outfitNotOwned,
 } from './game.errors.js';
+import { one } from '../../core/database/one.js';
 
 type Tx = Sql | TransactionSql;
 
@@ -81,15 +84,16 @@ export class GameRepository {
 
   /** São Paulo's today and the league round of game_settings: its first day, length in days, end and share gone by. */
   private async calendar(tx: Tx) {
-    const [row] = await tx<
-      {
-        today: string;
-        start: string;
-        days: number;
-        ends_at: Date;
-        elapsed: number;
-      }[]
-    >`
+    const row = one(
+      await tx<
+        {
+          today: string;
+          start: string;
+          days: number;
+          ends_at: Date;
+          elapsed: number;
+        }[]
+      >`
       select to_char(r.local, 'YYYY-MM-DD') as today, to_char(r.start, 'YYYY-MM-DD') as start, r.days,
         (r.start + r.days * interval '1 day') at time zone ${TIME_ZONE} as ends_at,
         (extract(epoch from r.local - r.start) / (r.days * 86400))::float8 as elapsed
@@ -99,7 +103,8 @@ export class GameRepository {
             ((now() at time zone ${TIME_ZONE})::date - s.league_anchor_on)::numeric / s.league_period_days)::int
           )::timestamp as start
         from public.game_settings s
-      ) r`;
+      ) r`,
+    );
     return row;
   }
 
@@ -110,9 +115,11 @@ export class GameRepository {
     start: string,
   ): Promise<PlayerRow> {
     await tx`insert into public.players (user_id, league_week) values (${userId}, ${start}) on conflict do nothing`;
-    const [row] = await tx<PlayerRow[]>`
+    const row = one(
+      await tx<PlayerRow[]>`
       select nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing
-      from public.players where user_id = ${userId} for update`;
+      from public.players where user_id = ${userId} for update`,
+    );
     return row;
   }
 
@@ -139,9 +146,11 @@ export class GameRepository {
       where p.league = ${rank} and p.user_id <> ${userId}
       group by p.user_id, p.nickname
       order by sabedoria desc limit ${LEAGUE_SIZE - 1}`;
-    const [mine] = await tx<{ sabedoria: number }[]>`
+    const mine = one(
+      await tx<{ sabedoria: number }[]>`
       select coalesce(sum(r.sabedoria), 0)::int as sabedoria
-      from public.stop_results r where r.user_id = ${userId} and ${round(tx)}`;
+      from public.stop_results r where r.user_id = ${userId} and ${round(tx)}`,
+    );
     const rows = [
       {
         nickname: player.nickname ?? defaultNickname(userId),
@@ -198,14 +207,16 @@ export class GameRepository {
       await tx`update public.players set league_week = ${start}, updated_at = now() where user_id = ${userId}`;
       return { ...player, league_week: start };
     }
-    const to = LEAGUES[player.league].id;
+    const to = leagueAt(player.league + 1).id;
     await tx`insert into public.owned_items (user_id, item) values (${userId}, ${`outfit:${to}`}) on conflict do nothing`;
     await tx`insert into public.caixas (user_id, reason) values (${userId}, ${`promotion:${to}`}) on conflict do nothing`;
-    const [row] = await tx<PlayerRow[]>`
+    const row = one(
+      await tx<PlayerRow[]>`
       update public.players set league = ${player.league + 1}, promoted_from = ${player.league},
         league_week = ${start}, updated_at = now()
       where user_id = ${userId}
-      returning nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing`;
+      returning nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing`,
+    );
     return row;
   }
 
@@ -220,13 +231,15 @@ export class GameRepository {
           cal.start,
           cal.days,
         );
-        const league = LEAGUES[player.league - 1];
+        const league = leagueAt(player.league);
         let promotion: League['promotion'] = null;
         if (player.promoted_from) {
-          const [caixa] = await tx<{ id: number }[]>`
-            select id::int from public.caixas where user_id = ${userId} and reason = ${`promotion:${league.id}`}`;
+          const caixa = one(
+            await tx<{ id: number }[]>`
+            select id::int from public.caixas where user_id = ${userId} and reason = ${`promotion:${league.id}`}`,
+          );
           promotion = {
-            from: LEAGUES[player.promoted_from - 1].id,
+            from: leagueAt(player.promoted_from).id,
             to: league.id,
             caixaId: caixa.id,
           };
@@ -281,10 +294,12 @@ export class GameRepository {
   private async seasonState(tx: Tx, userId: string) {
     const { today } = await this.calendar(tx);
     const season = seasonOf(today);
-    const [{ sabedoria }] = await tx<{ sabedoria: number }[]>`
+    const { sabedoria } = one(
+      await tx<{ sabedoria: number }[]>`
       select coalesce(sum(sabedoria), 0)::int as sabedoria from public.stop_results
       where user_id = ${userId}
-        and (completed_at at time zone ${TIME_ZONE})::date between ${season.start}::date and ${season.endsOn}::date`;
+        and (completed_at at time zone ${TIME_ZONE})::date between ${season.start}::date and ${season.endsOn}::date`,
+    );
     return { ...season, sabedoria, level: levelOf(sabedoria) };
   }
 
@@ -319,7 +334,7 @@ export class GameRepository {
           insert into public.season_claims (user_id, season, level) values (${userId}, ${state.season}, ${level})
           on conflict do nothing returning 1`;
         if (!inserted.length) throw levelClaimed();
-        const reward = FREE_TRACK[level - 1];
+        const reward = rewardAt(level);
         if (reward.kind === 'caixa')
           await tx`insert into public.caixas (user_id, reason) values (${userId}, ${`season:${state.season}:${level}`})
             on conflict do nothing`;
@@ -367,9 +382,11 @@ export class GameRepository {
         if (contents.roomItem)
           await tx`insert into public.owned_items (user_id, item) values (${userId}, ${`room:${contents.roomItem}`})
             on conflict do nothing`;
-        const [row] = await tx<CaixaRow[]>`
+        const row = one(
+          await tx<CaixaRow[]>`
           update public.caixas set opened_at = now(), contents = ${tx.json(contents)}
-          where id = ${id} returning id::int, reason, created_at, opened_at, contents`;
+          where id = ${id} returning id::int, reason, created_at, opened_at, contents`,
+        );
         return toCaixa(row);
       }),
     );
@@ -390,20 +407,22 @@ export class GameRepository {
         if (item === 'marcador' && row.marcadores >= MAX_MARCADORES)
           throw marcadoresFull();
         if (row.peixinhos < price) throw notEnoughPeixinhos();
-        const [updated] = await tx<
-          {
-            novelos: number;
-            novelos_at: Date;
-            peixinhos: number;
-            marcadores: number;
-          }[]
-        >`
+        const updated = one(
+          await tx<
+            {
+              novelos: number;
+              novelos_at: Date;
+              peixinhos: number;
+              marcadores: number;
+            }[]
+          >`
           update public.wallets set peixinhos = peixinhos - ${price},
             novelos = case when ${item === 'novelos'} then ${MAX_NOVELOS} else novelos end,
             novelos_at = case when ${item === 'novelos'} then ${now} else novelos_at end,
             marcadores = marcadores + ${item === 'marcador' ? 1 : 0},
             updated_at = now()
-          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`;
+          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`,
+        );
         return toWallet(updated, now);
       }),
     );
@@ -462,9 +481,11 @@ export class GameRepository {
         if (update.wearing !== undefined) values.wearing = update.wearing;
         if (update.nickname !== undefined) values.nickname = update.nickname;
         if (Object.keys(values).length) {
-          [player] = await tx<PlayerRow[]>`
+          player = one(
+            await tx<PlayerRow[]>`
             update public.players set ${tx(values)}, updated_at = now() where user_id = ${userId}
-            returning nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing`;
+            returning nickname, league, to_char(league_week, 'YYYY-MM-DD') as league_week, promoted_from, wearing`,
+          );
         }
         return this.wardrobeOf(tx, userId, player);
       }),

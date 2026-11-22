@@ -23,8 +23,9 @@ export function refill(
 
 /** "YYYY-MM-DD" plus `days`. */
 export function addDays(day: string, days: number): string {
-  const [y, m, d] = day.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 /** A finished stop, with its São Paulo day. */
@@ -49,11 +50,9 @@ export function achievementsOf(
 ): Achievement[] {
   const earned: Achievement[] = [];
   const at = (date: Date) => date.toISOString();
-  if (finishes.length)
-    earned.push({
-      code: 'primeira_parada',
-      earnedAt: at(finishes[0].completedAt),
-    });
+  const [first] = finishes;
+  if (first)
+    earned.push({ code: 'primeira_parada', earnedAt: at(first.completedAt) });
 
   const clean = finishes.find((f) => f.mistakes === 0);
   if (clean)
@@ -95,11 +94,8 @@ export function achievementsOf(
     earned.push({ code: 'relampago', earnedAt: at(lightning.completedAt) });
 
   // Ten questions to Arandu about the cards: earned with the tenth.
-  if (questionTimes.length >= CURIOSITY_QUESTIONS)
-    earned.push({
-      code: 'curiosidade_de_gato',
-      earnedAt: at(questionTimes[CURIOSITY_QUESTIONS - 1]),
-    });
+  const tenth = questionTimes[CURIOSITY_QUESTIONS - 1];
+  if (tenth) earned.push({ code: 'curiosidade_de_gato', earnedAt: at(tenth) });
 
   return earned.sort((a, b) => a.earnedAt.localeCompare(b.earnedAt));
 }

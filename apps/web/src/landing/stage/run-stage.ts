@@ -304,7 +304,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const progress = () => {
     let p = 0;
     for (let i = 1; i < ranges.length; i++) {
-      const [s, e] = ranges[i];
+      const [s, e] = ranges[i]!;
       const f = clamp((scrollY - s) / (e - s), 0, 1);
       p += f;
       if (f < 1) break;
@@ -380,7 +380,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       true,
     )) {
       for (let i = 0; i < rooms.length; i++) {
-        const prop = worlds[i].owner(hit.object);
+        const prop = worlds[i]!.owner(hit.object);
         if (prop) return { i, prop, point: hit.point };
       }
     }
@@ -483,30 +483,30 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       switchLamp(hit.prop);
       return;
     }
-    if (TOYS.has(name) && toRoom(rooms[hit.i], e.clientX, e.clientY, at) && worlds[hit.i].grab(hit.prop, at)) {
+    if (TOYS.has(name) && toRoom(rooms[hit.i]!, e.clientX, e.clientY, at) && worlds[hit.i]!.grab(hit.prop, at)) {
       // No text selection while it is held.
       e.preventDefault();
       holding = { i: hit.i, prop: hit.prop };
       document.body.style.cursor = "grabbing";
       return;
     }
-    const local = rooms[hit.i].content.worldToLocal(at.copy(hit.point));
+    const local = rooms[hit.i]!.content.worldToLocal(at.copy(hit.point));
     // A small thing (a pencil cup, a trophy) tips over at a tap; it does not fly off like a book.
-    const tall = Math.min(1, pokeBox.setFromObject(hit.prop).getSize(pokeSize).y / rooms[hit.i].k / POKE_TALL);
+    const tall = Math.min(1, pokeBox.setFromObject(hit.prop).getSize(pokeSize).y / rooms[hit.i]!.k / POKE_TALL);
     push.set(local.x < hit.prop.position.x ? 1.3 : -1.3, 0.9, -0.2).multiplyScalar(tall);
     if (name.startsWith("Book")) {
       const { i, prop } = hit;
       const n = taps?.prop === prop ? taps.n + 1 : 1;
       clearTimeout(taps?.timer);
       if (n >= TAPS) {
-        worlds[i].poke(prop, local, push);
+        worlds[i]!.poke(prop, local, push);
         taps = { prop, n, timer: window.setTimeout(() => (taps = null), TAP_GAP) };
       } else {
         taps = { prop, n, timer: window.setTimeout(() => ((taps = null), openBook(i, prop)), TAP_GAP) };
       }
       return;
     }
-    worlds[hit.i].poke(hit.prop, local, push);
+    worlds[hit.i]!.poke(hit.prop, local, push);
   };
 
   // A tap on a book brings it off its shelf: it flies to the middle of the screen, turns its front
@@ -539,7 +539,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     (["left", "right", "front", "back"] as const).forEach((side, k) => {
       const face = faces.get(side);
       if (!face) return;
-      const map = prints[pages[k]] ?? null;
+      const map = prints[pages[k]!] ?? null;
       if (face.print.map !== map) face.print.needsUpdate = true;
       face.print.map = map;
       face.mesh.material = map ? face.print : face.paper;
@@ -574,7 +574,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     dress(...dressed);
   };
   const openBook = (i: number, prop: THREE.Object3D) => {
-    if (book || !worlds[i].take(prop)) return;
+    if (book || !worlds[i]!.take(prop)) return;
     const open = kit.open(prop);
     const box = new THREE.Box3().setFromObject(prop);
     const from = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
@@ -636,7 +636,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
           scene.remove(open);
           shown = null;
           prop.visible = true;
-          worlds[i].restore(prop);
+          worlds[i]!.restore(prop);
           book = null;
           unpaper();
           delete document.documentElement.dataset.book;
@@ -746,7 +746,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const onDrag = (e: PointerEvent) => {
     // Let go outside the window: no pointerup came, but no button is down any more.
     if (holding && e.pointerType === "mouse" && e.buttons === 0) return onUp(e);
-    if (holding && toRoom(rooms[holding.i], e.clientX, e.clientY, at)) worlds[holding.i].drag(at);
+    if (holding && toRoom(rooms[holding.i]!, e.clientX, e.clientY, at)) worlds[holding.i]!.drag(at);
   };
   const onUp = (e: PointerEvent) => {
     if (plaquePressed) {
@@ -754,7 +754,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       if (e.type === "pointerup" && overPlaque(e.clientX, e.clientY)) window.open(GITHUB_URL, "_blank", "noopener,noreferrer");
     }
     if (!holding) return;
-    worlds[holding.i].release();
+    worlds[holding.i]!.release();
     life.fetch(holding.i, holding.prop);
     holding = null;
     document.body.style.cursor = "";
@@ -778,7 +778,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const pb = new THREE.Vector3();
   const look = new THREE.Vector3();
   let pS = progress();
-  let yawNow = rooms[0].face;
+  let yawNow = rooms[0]!.face;
   let toUser = 0;
   let stride = 0;
   let prevX: number | null = null;
@@ -867,14 +867,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   };
   const overNeon = (sx: number, sy: number) => over(neons, sx, sy);
   // The notebook opens Alejandro's portfolio: under the pointer its screen lights up a little.
-  const notebook = rooms[0].content.children.filter((o) => o.userData.prop === "Notebook");
+  const notebook = rooms[0]!.content.children.filter((o) => o.userData.prop === "Notebook");
   const nbScreen = notebook[0]?.getObjectByName("NotebookScreen");
   const nbShot = nbScreen instanceof THREE.Mesh ? (nbScreen.material as THREE.MeshBasicMaterial) : null;
   let nbHover = false;
   let tvHover = false;
   const overNotebook = (sx: number, sy: number) => over(notebook, sx, sy);
   // The frames: a tap closes in on them, their photos' credits under them (stage.tsx).
-  const frames = rooms[0].content.children.filter((o) => FRAME_PHOTOS[String(o.userData.prop)]);
+  const frames = rooms[0]!.content.children.filter((o) => FRAME_PHOTOS[String(o.userData.prop)]);
   const overFrame = (sx: number, sy: number) => frames.find((f) => over([f], sx, sy));
   let frameHover = false;
   // The plaque under the TV: a tap opens Arandu's code on GitHub, and it glows under the pointer.
@@ -888,7 +888,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       }),
     );
   let plaqueHover = false;
-  const tvs = rooms[0].content.children.filter((o) => o.userData.prop === "Tv");
+  const tvs = rooms[0]!.content.children.filter((o) => o.userData.prop === "Tv");
   const overTv = (sx: number, sy: number) => over(tvs, sx, sy);
   const shine = (t: number, dt: number) => {
     neonHot = lerp(neonHot, neonHover ? 1 : 0, 1 - 0.0001 ** dt);
@@ -910,7 +910,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const site = document.querySelector<HTMLIFrameElement>("iframe[data-portfolio]");
   // The shelves and what stands on them, filling the screen; null where they already do (a phone).
   const shelfView = () => {
-    const r = rooms[0];
+    const r = rooms[0]!;
     shelfBox.makeEmpty();
     // The desk's things are props too, but lower than every plank.
     const planks = r.fixtures.filter((f) => String(f.object.userData.prop).startsWith("Shelf")).map((f) => f.object);
@@ -987,7 +987,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
 
   // The coffee's steam is the page's (stage.tsx), soft wisps over the mug's rim: the model's own stays hidden.
   const steam = document.querySelector<HTMLElement>("[data-steam]");
-  const mug = rooms[0].content.children.find((o) => o.userData.prop === "Mug");
+  const mug = rooms[0]!.content.children.find((o) => o.userData.prop === "Mug");
   const mugSteam = mug?.getObjectByName("MugSteam");
   mugSteam?.removeFromParent();
   const mugBox = new THREE.Box3();
@@ -996,12 +996,12 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     mugBox.setFromObject(mug);
     steam.dataset.on = "";
     steam.style.translate = `${screenX((mugBox.min.x + mugBox.max.x) / 2).toFixed(1)}px ${screenY(mugBox.max.y).toFixed(1)}px`;
-    steam.style.setProperty("--steam-k", ((rooms[0].k * camera.zoom) / STEAM_K).toFixed(3));
+    steam.style.setProperty("--steam-k", ((rooms[0]!.k * camera.zoom) / STEAM_K).toFixed(3));
   };
 
   // The hero's title card (hero.tsx) lies over the TV's screen, scaled from its 640 by 360 layout.
   const tvCard = document.querySelector<HTMLElement>("[data-tv]");
-  const tvScreen = rooms[0].content.getObjectByName("TvScreen");
+  const tvScreen = rooms[0]!.content.getObjectByName("TvScreen");
   // The TV switches off for an open book and back on once it is shut, as a branded set does: its
   // picture (the card, hero.module.css) goes, and the cat's head glows alone on the dark screen and
   // goes out; switching on, the head comes first, then the picture. The head is drawn on the 3D screen,
@@ -1073,7 +1073,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     last = now;
     const t = now / 1000;
 
-    rooms[0].reveal(intro.rise, intro.drop);
+    rooms[0]!.reveal(intro.rise, intro.drop);
     rooms.forEach((r) => r.place(W, H));
     for (const { r, lamp, bulb, light, reach, power } of lamps) {
       bulb.getWorldPosition(light.position);
@@ -1096,8 +1096,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     const i0 = clamp(Math.floor(pS), 0, Math.max(0, rooms.length - 2));
     const iB = Math.min(i0 + 1, rooms.length - 1);
     const f = clamp(pS - i0, 0, 1);
-    const A = rooms[i0];
-    const B = rooms[iB];
+    const A = rooms[i0]!;
+    const B = rooms[iB]!;
 
     // He lives in a room while its scene stays put, and leaves it as soon as the scroll moves on.
     const settled = f < 0.01 ? i0 : f > 0.99 ? iB : -1;
@@ -1106,9 +1106,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (life.room < 0 && settled >= 0) {
       // The rooms he left wait for him at their seats.
       spots.forEach((s, i) => {
-        if (i !== settled) s.copy(rooms[i].seat.position);
+        if (i !== settled) s.copy(rooms[i]!.seat.position);
       });
-      life.enter(settled, spots[settled], yawNow);
+      life.enter(settled, spots[settled]!, yawNow);
       lifeStride = life.pose.stride;
     }
 
@@ -1120,8 +1120,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     let air: number;
     let leap: number;
     if (own) {
-      const r = rooms[life.room];
-      spots[life.room].copy(p.pos);
+      const r = rooms[life.room]!;
+      spots[life.room]!.copy(p.pos);
       r.content.localToWorld(catAt.copy(p.pos));
       r.content.localToWorld(shadowAt.copy(p.pos).setY(p.pos.y - p.lift));
       k = r.k;
@@ -1133,8 +1133,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       lifeStride = p.stride;
       ({ sit: sitTo, air, leap } = p);
     } else {
-      A.content.localToWorld(pa.copy(spots[i0]));
-      B.content.localToWorld(pb.copy(spots[iB]));
+      A.content.localToWorld(pa.copy(spots[i0]!));
+      B.content.localToWorld(pb.copy(spots[iB]!));
       const e = ease(f);
       const dx = pb.x - pa.x;
       const dy = pb.y - pa.y;
@@ -1171,7 +1171,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // What he looks at: his book while he reads, you while he talks, else the pointer while it
     // moves, else around.
     let gaze: THREE.Vector3 | null = null;
-    if (own && p.look) gaze = rooms[life.room].content.localToWorld(look.copy(p.look));
+    if (own && p.look) gaze = rooms[life.room]!.content.localToWorld(look.copy(p.look));
     else if (sayUntil > 0 && hinting && neons[0]) gaze = neons[0].getWorldPosition(neonAt).setZ(700);
     else if (sayUntil > 0) gaze = look.set(catAt.x, catAt.y + 0.3 * k, 2000);
     else if (pointer.on && sitNow > 0.5 && t - lastMove < GAZE) gaze = look.set(worldX(pointer.x), worldY(pointer.y), 700);
@@ -1194,14 +1194,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     // What he carries sits in his mouth, where the pose just put it: its origin is at its bottom.
     if (own && life.carried) {
       cat.root.updateMatrixWorld(true);
-      rooms[life.room].content.worldToLocal(cat.mouth.getWorldPosition(mouthAt));
+      rooms[life.room]!.content.worldToLocal(cat.mouth.getWorldPosition(mouthAt));
       life.carried.position.copy(mouthAt).y -= 0.1 * CARRY;
     }
     // The open book he reads sits between his paws, facing him.
     if (own && life.held) {
       const book = life.held;
       cat.root.updateMatrixWorld(true);
-      heldAt.copy(rooms[life.room].content.matrixWorld).invert().multiply(cat.paws.matrixWorld);
+      heldAt.copy(rooms[life.room]!.content.matrixWorld).invert().multiply(cat.paws.matrixWorld);
       heldAt.decompose(book.position, book.quaternion, book.scale);
       book.scale.multiplyScalar(HELD_SCALE);
     }
@@ -1210,7 +1210,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     const home = own ? life.room : f < 0.5 ? i0 : iB;
     worlds.forEach((w, i) => {
       if (i !== home || air > 0.2) w.cat(null, 0);
-      else w.cat(rooms[i].content.worldToLocal(catLocal.copy(catAt)), yawNow);
+      else w.cat(rooms[i]!.content.worldToLocal(catLocal.copy(catAt)), yawNow);
     });
 
     // The pointer drags the hanging lamp as it passes, and shows a hand over what a tap would knock.
@@ -1259,7 +1259,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
           neonBurst = t + line.length * pace;
         } else {
           said = (said + 1 + Math.floor(Math.random() * (SAYS.length - 1))) % SAYS.length;
-          line = SAYS[said];
+          line = SAYS[said]!;
         }
         said1.textContent = "";
         said2.textContent = line;

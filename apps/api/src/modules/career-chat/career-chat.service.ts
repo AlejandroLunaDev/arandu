@@ -157,7 +157,7 @@ export class CareerChatService {
 /** The last turns only, starting on the person's message; past sessions reach Arandu through the memory's summary. */
 function recent(messages: ChatMessage[]): ChatMessage[] {
   const last = messages.slice(-RECENT_MESSAGES);
-  if (last[0].role === 'assistant') last.shift();
+  if (last[0]?.role === 'assistant') last.shift();
   return last;
 }
 

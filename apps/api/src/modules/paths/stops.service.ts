@@ -404,7 +404,9 @@ export class StopsService {
       const cards = found.find((e) => e.topic === topic)?.cards;
       if (cards) return cards;
     }
-    return this.cards(name, topic, topics[topic], topics.length);
+    const topicText = topics[topic];
+    if (topicText === undefined) throw stopNotFound();
+    return this.cards(name, topic, topicText, topics.length);
   }
 
   /**
@@ -440,6 +442,7 @@ export class StopsService {
     topics: string[],
   ): Promise<StopContent> {
     const topicText = topics[topic];
+    if (topicText === undefined) throw stopNotFound();
     const total = topics.length;
     const cards = await this.stopCards(id, name, topic, topics);
     const facts = JSON.stringify(

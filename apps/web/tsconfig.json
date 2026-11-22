@@ -5,6 +5,7 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     // Lets plain node --test load a module that imports a sibling .ts file (src/onboarding/answers.ts).
     "allowImportingTsExtensions": true,

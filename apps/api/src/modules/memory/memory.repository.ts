@@ -7,6 +7,7 @@ import type {
 } from '@arandu/contracts';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { SQL, type Sql } from '../../core/database/database.module.js';
+import { one } from '../../core/database/one.js';
 
 /** The memory's limit: Arandu's note on past sessions never grows past this. */
 export const SUMMARY_MAX = 1500;
@@ -161,9 +162,11 @@ export class MemoryRepository {
     kind: SessionKind,
     professionSlug: string | null = null,
   ): Promise<string> {
-    const [{ id }] = await asPerson(this.sql<{ id: string }[]>`
+    const { id } = one(
+      await asPerson(this.sql<{ id: string }[]>`
       insert into public.arandu_sessions (user_id, kind, profession_slug)
-      values (${userId}, ${kind}, ${professionSlug}) returning id`);
+      values (${userId}, ${kind}, ${professionSlug}) returning id`),
+    );
     return id;
   }
 
@@ -256,10 +259,11 @@ export class MemoryRepository {
     const transcript = [...new Set(rows.map((r) => r.id))]
       .map((id) => {
         const lines = rows.filter((r) => r.id === id);
+        const { kind, slug } = one(lines);
         const about =
-          lines[0].kind === 'career'
-            ? `source conversation, career ${lines[0].slug}`
-            : lines[0].kind === 'choosing'
+          kind === 'career'
+            ? `source conversation, career ${slug}`
+            : kind === 'choosing'
               ? 'source conversation, choosing among the recommended careers'
               : 'source onboarding';
         return `Session (${about}):\n${lines.map((r) => `${r.role}: ${r.content}`).join('\n')}`;

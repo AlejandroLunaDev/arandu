@@ -166,6 +166,7 @@ export class BooksRepository {
       const grade = subjects.filter(
         (s) => s.course_id === r.course_id && s.source_id === r.grade_source_id,
       );
+      const [first] = grade;
       return {
         institution: toInstitution(r),
         course: {
@@ -180,12 +181,12 @@ export class BooksRepository {
         },
         // The owner keeps cut-offs out of the book: it is about the career and its first year, not getting in.
         admission: [],
-        curriculum: grade.length
+        curriculum: first
           ? {
               years: [
                 { year: 1, subjects: [...new Set(grade.map((g) => g.name))] },
               ],
-              source: source(grade[0]),
+              source: source(first),
             }
           : null,
       };

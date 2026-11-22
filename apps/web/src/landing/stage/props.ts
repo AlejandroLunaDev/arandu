@@ -306,8 +306,9 @@ export function makeKit(gltf: GLTF): Kit {
         );
       }
     }
-    if (FACES[m.name]) {
-      const map = FACES[m.name]();
+    const face = FACES[m.name];
+    if (face) {
+      const map = face();
       // Its own light, so it reads in the dark room; the GitHub plaque's rises under the pointer (run-stage).
       owned.push(
         map,

@@ -12,6 +12,7 @@ import {
   refill,
 } from './progress.logic.js';
 import { noNovelosLeft, novelosLeft, rereadUsed } from './progress.errors.js';
+import { one } from '../../core/database/one.js';
 
 /** Days, patinhas and weeks are counted in Brazil's time. */
 export const TIME_ZONE = 'America/Sao_Paulo';
@@ -74,8 +75,10 @@ export class ProgressRepository {
   /** The person's wallet row, created full on first use and locked for the rest of the transaction. */
   async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
     await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
-    const [row] = await tx<WalletRow[]>`
-      select novelos, novelos_at, peixinhos, marcadores from public.wallets where user_id = ${userId} for update`;
+    const row = one(
+      await tx<WalletRow[]>`
+      select novelos, novelos_at, peixinhos, marcadores from public.wallets where user_id = ${userId} for update`,
+    );
     return row;
   }
 
@@ -93,16 +96,20 @@ export class ProgressRepository {
       this.sql.begin(async (tx) => {
         const row = await this.lockWallet(tx, userId);
         const now = new Date();
-        const [{ finished }] = await tx<{ finished: boolean }[]>`
-          select exists (select 1 from public.stop_results where user_id = ${userId}) as finished`;
+        const { finished } = one(
+          await tx<{ finished: boolean }[]>`
+          select exists (select 1 from public.stop_results where user_id = ${userId}) as finished`,
+        );
         if (!finished) return toWallet(row, now);
         const { novelos, at } = refill(row.novelos, row.novelos_at, now);
         if (novelos === 0) throw noNovelosLeft();
         // Spending from full starts the refill clock now.
         const since = novelos === MAX_NOVELOS ? now : at;
-        const [updated] = await tx<WalletRow[]>`
+        const updated = one(
+          await tx<WalletRow[]>`
           update public.wallets set novelos = ${novelos - 1}, novelos_at = ${since}, updated_at = now()
-          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`;
+          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`,
+        );
         return toWallet(updated, now);
       }),
     );
@@ -120,9 +127,11 @@ export class ProgressRepository {
           insert into public.stop_rereads (user_id, discipline_id, topic) values (${userId}, ${disciplineId}, ${topic})
           on conflict do nothing returning 1`;
         if (!inserted.length) throw rereadUsed();
-        const [updated] = await tx<WalletRow[]>`
+        const updated = one(
+          await tx<WalletRow[]>`
           update public.wallets set novelos = 1, novelos_at = ${at}, updated_at = now()
-          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`;
+          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`,
+        );
         return toWallet(updated, now);
       }),
     );
@@ -154,20 +163,24 @@ export class ProgressRepository {
   }
 
   async sabedoria(userId: string): Promise<{ total: number; week: number }> {
-    const [row] = await this.sql<{ total: number; week: number }[]>`
+    const row = one(
+      await this.sql<{ total: number; week: number }[]>`
       select coalesce(sum(sabedoria), 0)::int as total,
         coalesce(sum(sabedoria) filter (
           where completed_at at time zone ${TIME_ZONE} >= date_trunc('week', now() at time zone ${TIME_ZONE})
         ), 0)::int as week
-      from public.stop_results where user_id = ${userId}`;
+      from public.stop_results where user_id = ${userId}`,
+    );
     return row;
   }
 
   /** Today's São Paulo day and the Monday of its week. */
   async calendar(): Promise<{ today: string; monday: string }> {
-    const [row] = await this.sql<{ today: string; monday: string }[]>`
+    const row = one(
+      await this.sql<{ today: string; monday: string }[]>`
       select to_char(now() at time zone ${TIME_ZONE}, 'YYYY-MM-DD') as today,
-        to_char(date_trunc('week', now() at time zone ${TIME_ZONE}), 'YYYY-MM-DD') as monday`;
+        to_char(date_trunc('week', now() at time zone ${TIME_ZONE}), 'YYYY-MM-DD') as monday`,
+    );
     return row;
   }
 
@@ -205,9 +218,11 @@ export class ProgressRepository {
       from public.stop_results r
       left join public.stop_contents c on c.discipline_id = r.discipline_id and c.topic = r.topic
       where r.user_id = ${userId} and r.discipline_id = ${disciplineId} order by r.topic`;
-    const [{ questions }] = await this.sql<{ questions: number }[]>`
+    const { questions } = one(
+      await this.sql<{ questions: number }[]>`
       select count(*)::int as questions from public.stop_questions
-      where user_id = ${userId} and discipline_id = ${disciplineId}`;
+      where user_id = ${userId} and discipline_id = ${disciplineId}`,
+    );
     const [feeling] = await this.sql<BookReflectionRequest[]>`
       select chips, text from public.book_reflections where user_id = ${userId} and discipline_id = ${disciplineId}`;
     return { stops, questions, feeling: feeling ?? null };

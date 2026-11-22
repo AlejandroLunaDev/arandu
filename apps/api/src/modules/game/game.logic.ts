@@ -50,7 +50,7 @@ export function rivals(
     const seed = seeded(rank, start, i);
     const total = (rank - 1) * 15 + (seed % 120);
     return {
-      nickname: RIVALS[(seed >>> 8) % RIVALS.length],
+      nickname: RIVALS[(seed >>> 8) % RIVALS.length] ?? 'Leitor',
       sabedoria: Math.round(total * weeks),
     };
   });
@@ -84,6 +84,20 @@ export function seasonOf(today: string): {
 
 export const levelOf = (sabedoria: number) =>
   Math.min(LEVELS, Math.floor(sabedoria / PER_LEVEL));
+
+/** The league of a rank (1 = calouro); the database keeps ranks in range. */
+export function leagueAt(rank: number): { id: LeagueId; name: string } {
+  const league = LEAGUES[rank - 1];
+  if (!league) throw new Error(`No league ${rank}`);
+  return league;
+}
+
+/** The free track's reward of a level (1-based); the route only accepts reached levels. */
+export function rewardAt(level: number): SeasonReward {
+  const reward = FREE_TRACK[level - 1];
+  if (!reward) throw new Error(`No reward for level ${level}`);
+  return reward;
+}
 
 export const FREE_TRACK: SeasonReward[] = [
   { kind: 'peixinhos', amount: 20 },

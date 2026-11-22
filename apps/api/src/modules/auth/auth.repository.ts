@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { SQL, type Sql } from '../../core/database/database.module.js';
+import { one } from '../../core/database/one.js';
 
 /** What Google says about the person, through Supabase. */
 export interface GoogleIdentity {
@@ -44,8 +45,10 @@ export class AuthRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
   async createGuest(): Promise<string> {
-    const [row] = await this.sql<{ id: string }[]>`
-      insert into public.users default values returning id`;
+    const row = one(
+      await this.sql<{ id: string }[]>`
+      insert into public.users default values returning id`,
+    );
     return row.id;
   }
 
@@ -74,12 +77,14 @@ export class AuthRepository {
 
   /** The user of this Google identity, created on its first sign-in; its profile follows Google's. */
   async saveGoogleUser(identity: GoogleIdentity): Promise<string> {
-    const [row] = await this.sql<{ id: string }[]>`
+    const row = one(
+      await this.sql<{ id: string }[]>`
       insert into public.users (google_sub, email, name, avatar_url)
       values (${identity.googleSub}, ${identity.email}, ${identity.name}, ${identity.avatarUrl})
       on conflict (google_sub) do update
         set email = excluded.email, name = excluded.name, avatar_url = excluded.avatar_url
-      returning id`;
+      returning id`,
+    );
     return row.id;
   }
 
@@ -100,10 +105,12 @@ export class AuthRepository {
     await this.sql`
       delete from public.sessions
       where user_id = ${input.userId} and (revoked_at is not null or expires_at < now())`;
-    const [row] = await this.sql<{ id: string }[]>`
+    const row = one(
+      await this.sql<{ id: string }[]>`
       insert into public.sessions (user_id, user_agent, ip, expires_at)
       values (${input.userId}, ${input.userAgent}, ${input.ip}, ${input.expiresAt})
-      returning id`;
+      returning id`,
+    );
     return row.id;
   }
 
