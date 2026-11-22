@@ -102,8 +102,8 @@ describe('paths and journey routes', () => {
       await server().get('/careers/direito/paths').expect(404);
     });
 
-    it('400s for a bad slug', async () => {
-      await server().get('/careers/Direito_X/paths').expect(400);
+    it('404s for a bad slug', async () => {
+      await server().get('/careers/Direito_X/paths').expect(404);
 
       expect(paths.careerPaths).not.toHaveBeenCalled();
     });
@@ -111,9 +111,9 @@ describe('paths and journey routes', () => {
 
   describe('GET /stops/:disciplineId/:topic', () => {
     it.each(['/stops/0/0', '/stops/abc/0', '/stops/7/-1', '/stops/7/201'])(
-      '400s for %s',
+      '404s for %s',
       async (url) => {
-        await server().get(url).expect(400);
+        await server().get(url).expect(404);
 
         expect(paths.discipline).not.toHaveBeenCalled();
       },

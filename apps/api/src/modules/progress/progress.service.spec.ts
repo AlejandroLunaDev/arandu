@@ -73,13 +73,13 @@ describe('ProgressService', () => {
     });
 
     it('marks studied days of this week, Monday first, and counts them', async () => {
-      repo.finishes.mockResolvedValue([
+      repo.finishes!.mockResolvedValue([
         finish('2026-03-08', 0), // last Sunday: not this week
         finish('2026-03-09', 1),
         finish('2026-03-09', 2),
         finish('2026-03-11', 0),
       ]);
-      repo.journey.mockResolvedValue({ discipline: null, weeklyGoal: 5 });
+      repo.journey!.mockResolvedValue({ discipline: null, weeklyGoal: 5 });
 
       const { week, lastStudiedOn } = await service.home('u');
 
@@ -98,7 +98,7 @@ describe('ProgressService', () => {
     });
 
     it('never marks a future day as studied', async () => {
-      repo.finishes.mockResolvedValue([finish('2026-03-12', 0)]);
+      repo.finishes!.mockResolvedValue([finish('2026-03-12', 0)]);
 
       const { week } = await service.home('u');
 
@@ -107,8 +107,8 @@ describe('ProgressService', () => {
     });
 
     it('current book points to the first topic not done', async () => {
-      repo.journey.mockResolvedValue({ discipline, weeklyGoal: null });
-      repo.finishes.mockResolvedValue([
+      repo.journey!.mockResolvedValue({ discipline, weeklyGoal: null });
+      repo.finishes!.mockResolvedValue([
         finish('2026-03-09', 0),
         finish('2026-03-10', 2),
         finish('2026-03-10', 5, 99), // another subject: ignored
@@ -125,14 +125,14 @@ describe('ProgressService', () => {
     });
 
     it('current book is at topic 0 with no finishes', async () => {
-      repo.journey.mockResolvedValue({ discipline, weeklyGoal: null });
+      repo.journey!.mockResolvedValue({ discipline, weeklyGoal: null });
 
       expect((await service.home('u')).current?.nextTopic).toBe(0);
     });
 
     it('nextTopic is null when every topic is done', async () => {
-      repo.journey.mockResolvedValue({ discipline, weeklyGoal: null });
-      repo.finishes.mockResolvedValue(
+      repo.journey!.mockResolvedValue({ discipline, weeklyGoal: null });
+      repo.finishes!.mockResolvedValue(
         [0, 1, 2].map((t) => finish('2026-03-09', t)),
       );
 
@@ -143,7 +143,7 @@ describe('ProgressService', () => {
     });
 
     it('asks topic counts only for the subjects finished', async () => {
-      repo.finishes.mockResolvedValue([
+      repo.finishes!.mockResolvedValue([
         finish('2026-03-09', 0, 7),
         finish('2026-03-09', 1, 7),
         finish('2026-03-10', 0, 8),
@@ -157,7 +157,7 @@ describe('ProgressService', () => {
 
   describe('book', () => {
     it('404s for an unknown subject', async () => {
-      repo.discipline.mockResolvedValue(null);
+      repo.discipline!.mockResolvedValue(null);
 
       await expect(service.book('u', 1)).rejects.toBeInstanceOf(
         NotFoundException,
@@ -178,7 +178,7 @@ describe('ProgressService', () => {
     });
 
     it('the first stop not done is current, even after a gap; later ones are locked', async () => {
-      repo.finishes.mockResolvedValue([
+      repo.finishes!.mockResolvedValue([
         finish('2026-03-09', 1),
         finish('2026-03-09', 2, 99),
       ]);
@@ -189,7 +189,7 @@ describe('ProgressService', () => {
     });
 
     it('has no current when all are done', async () => {
-      repo.finishes.mockResolvedValue(
+      repo.finishes!.mockResolvedValue(
         [0, 1, 2].map((t) => finish('2026-03-09', t)),
       );
 
@@ -201,7 +201,7 @@ describe('ProgressService', () => {
 
   describe('reflection', () => {
     const reading = (over: object) =>
-      repo.reflection.mockResolvedValue({
+      repo.reflection!.mockResolvedValue({
         stops: [],
         questions: 0,
         feeling: null,
@@ -209,7 +209,7 @@ describe('ProgressService', () => {
       });
 
     it('404s for an unknown subject', async () => {
-      repo.discipline.mockResolvedValue(null);
+      repo.discipline!.mockResolvedValue(null);
 
       await expect(service.reflection('u', 1)).rejects.toBeInstanceOf(
         NotFoundException,
@@ -265,7 +265,7 @@ describe('ProgressService', () => {
     });
 
     it('is finished once every stop is done', async () => {
-      repo.finishes.mockResolvedValue(
+      repo.finishes!.mockResolvedValue(
         [0, 1, 2].map((t) => finish('2026-03-09', t)),
       );
 
@@ -273,7 +273,7 @@ describe('ProgressService', () => {
     });
 
     it('is not finished when a subject has no stops', async () => {
-      repo.discipline.mockResolvedValue({ ...discipline, topics: [] });
+      repo.discipline!.mockResolvedValue({ ...discipline, topics: [] });
 
       expect((await service.reflection('u', 7)).finished).toBe(false);
     });
@@ -295,18 +295,18 @@ describe('ProgressService', () => {
       { length: 10 },
       (_, i) => new Date(`2026-03-09T10:0${i}:00Z`),
     );
-    repo.questionTimes.mockResolvedValue(times);
+    repo.questionTimes!.mockResolvedValue(times);
 
     const list = await service.achievements('u');
 
     expect(list).toEqual([
-      { code: 'curiosidade_de_gato', earnedAt: times[9].toISOString() },
+      { code: 'curiosidade_de_gato', earnedAt: times[9]!.toISOString() },
     ]);
     expect(repo.questionTimes).toHaveBeenCalledWith('u');
   });
 
   it('home includes the achievements that come from questions', async () => {
-    repo.questionTimes.mockResolvedValue(
+    repo.questionTimes!.mockResolvedValue(
       Array.from({ length: 10 }, () => new Date('2026-03-09T10:00:00Z')),
     );
 
@@ -316,7 +316,7 @@ describe('ProgressService', () => {
   });
 
   it('achievements derives from the finishes', async () => {
-    repo.finishes.mockResolvedValue([finish('2026-03-09', 0)]);
+    repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
 
     const list = await service.achievements('u');
 

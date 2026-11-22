@@ -114,7 +114,7 @@ describe('publicLookup', () => {
 
     await call(false);
 
-    expect(vi.mocked(lookup).mock.calls[0][1]).toMatchObject({ all: true });
+    expect(vi.mocked(lookup).mock.calls[0]![1]).toMatchObject({ all: true });
   });
 
   it('answers a single address when all is false', async () => {
@@ -289,7 +289,7 @@ describe('quoteIsOnPage', () => {
 
     await quoteIsOnPage('https://a.org/x', 'hello');
 
-    expect(vi.mocked(request).mock.calls[0][1]).toMatchObject({
+    expect(vi.mocked(request).mock.calls[0]![1]).toMatchObject({
       lookup: publicLookup,
     });
   });

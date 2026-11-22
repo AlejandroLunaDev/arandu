@@ -144,19 +144,19 @@ describe('exercisesOf (all kinds)', () => {
 
   it.each([-1, 2])('drops na_grade with an item row %i', (row) => {
     const d = full();
-    d.naGrade!.items[0].row = row;
+    d.naGrade!.items[0]!.row = row;
     expect(kinds(d)).not.toContain('na_grade');
   });
 
   it.each([-1, 2])('drops na_grade with an item column %i', (column) => {
     const d = full();
-    d.naGrade!.items[0].column = column;
+    d.naGrade!.items[0]!.column = column;
     expect(kinds(d)).not.toContain('na_grade');
   });
 
   it.each([-1, 2])('drops separe_nas_cestas with basket %i', (basket) => {
     const d = full();
-    d.separeNasCestas!.items[0].basket = basket;
+    d.separeNasCestas!.items[0]!.basket = basket;
     expect(kinds(d)).not.toContain('separe_nas_cestas');
   });
 
@@ -212,14 +212,14 @@ describe('exercisesOf (repeated choices)', () => {
     [
       'una_os_pares',
       'matches',
-      (d) => (d.unaOsPares.pairs[2].match = d.unaOsPares.pairs[0].match),
+      (d) => (d.unaOsPares.pairs[2]!.match = d.unaOsPares.pairs[0]!.match),
     ],
     [
       'una_os_pares',
       'terms differing only in case and spaces',
       (d) => {
-        d.unaOsPares.pairs[0].term = 'Termo';
-        d.unaOsPares.pairs[1].term = ' termo ';
+        d.unaOsPares.pairs[0]!.term = 'Termo';
+        d.unaOsPares.pairs[1]!.term = ' termo ';
       },
     ],
     [
@@ -227,11 +227,11 @@ describe('exercisesOf (repeated choices)', () => {
       'options',
       (d) => (d.escolhaAFraseCerta!.options[0] = 'c'),
     ],
-    ['na_grade', 'item texts', (d) => (d.naGrade!.items[3].text = 'a')],
+    ['na_grade', 'item texts', (d) => (d.naGrade!.items[3]!.text = 'a')],
     [
       'separe_nas_cestas',
       'item texts',
-      (d) => (d.separeNasCestas!.items[2].text = 'a'),
+      (d) => (d.separeNasCestas!.items[2]!.text = 'a'),
     ],
     [
       'toque_no_trecho',
@@ -242,7 +242,7 @@ describe('exercisesOf (repeated choices)', () => {
     [
       'verdadeiro_ou_falso',
       'statements',
-      (d) => (d.verdadeiroOuFalso.statements[1].text = ' A '),
+      (d) => (d.verdadeiroOuFalso.statements[1]!.text = ' A '),
     ],
     [
       'monte_a_frase',
@@ -333,7 +333,15 @@ describe('StopsService', () => {
     name: 'Cálculo',
     topics: ['Limites', 'Derivadas'],
   };
-  type Fn = Mock<(...args: any[]) => any>;
+  type Fn = Mock<
+    (call: {
+      model?: string;
+      label?: string;
+      instructions: string;
+      prompt?: string;
+      maxOutputTokens?: number;
+    }) => unknown
+  >;
   // One mock per step; `ai.generateObject` routes to it by the call's model / instructions.
   let steps: { subject: Fn; cards: Fn; basic: Fn; extra: Fn };
   let ai: { generateObject: Fn };
@@ -366,7 +374,7 @@ describe('StopsService', () => {
   });
   const reply = (object: unknown) => ({ object });
   const outputError = () => new AiOutputError('bad schema', '{}');
-  const extraPromptOf = () => steps.extra.mock.calls[0][0].prompt as string;
+  const extraPromptOf = () => steps.extra.mock.calls[0]![0].prompt as string;
 
   beforeEach(() => {
     vi.mocked(quoteIsOnPage).mockReset().mockResolvedValue(true);
@@ -473,11 +481,11 @@ describe('StopsService', () => {
     const stop = await service.make(7, 1);
 
     expect(steps.cards).toHaveBeenCalledTimes(1);
-    expect(steps.cards.mock.calls[0][0]).toMatchObject({ model: 'web' });
+    expect(steps.cards.mock.calls[0]![0]).toMatchObject({ model: 'web' });
     expect(steps.basic).toHaveBeenCalledTimes(1);
     expect(steps.extra).toHaveBeenCalledTimes(1);
-    expect(steps.basic.mock.calls[0][0].model).toBeUndefined();
-    expect(extraPromptOf()).toBe(steps.basic.mock.calls[0][0].prompt);
+    expect(steps.basic.mock.calls[0]![0].model).toBeUndefined();
+    expect(extraPromptOf()).toBe(steps.basic.mock.calls[0]![0].prompt);
     expect(stop.cards.map((c) => c.title)).toEqual(['t2']);
     expect(stop.topic).toEqual({ index: 1, text: 'Derivadas', total: 2 });
     expect(stop.exercises).toHaveLength(11);
@@ -518,7 +526,7 @@ describe('StopsService', () => {
     d.ordene = undefined;
     d.expliqueParaOArandu = undefined;
     if (n >= 8) return d;
-    d.separeNasCestas!.items[0].basket = 5;
+    d.separeNasCestas!.items[0]!.basket = 5;
     return d;
   };
 
@@ -676,7 +684,7 @@ describe('StopsService', () => {
       source: { label: 'l', url: 'https://a.org/s', quote: 'q' },
     });
     const titles = (cards: { title: string }[]) => cards.map((c) => c.title);
-    const subjectCall = () => steps.subject.mock.calls[0][0];
+    const subjectCall = () => steps.subject.mock.calls[0]![0];
     const savedEntry = (topic: number, ...cardTitles: string[]) => ({
       topic,
       topicText: `T${topic}`,
@@ -777,7 +785,7 @@ describe('StopsService', () => {
         savedEntry(1, 'other'),
       ]);
       expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(steps.cards.mock.calls[0][0]).toMatchObject({ model: 'web' });
+      expect(steps.cards.mock.calls[0]![0]).toMatchObject({ model: 'web' });
       expect(titles(stop.cards)).toEqual(['t1', 't2']);
     });
 

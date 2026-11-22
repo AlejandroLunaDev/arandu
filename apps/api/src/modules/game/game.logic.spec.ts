@@ -1,6 +1,10 @@
 import {
   defaultNickname,
+  FREE_TRACK,
+  LEAGUES,
+  leagueAt,
   levelOf,
+  rewardAt,
   rivals,
   rollCaixa,
   seasonOf,
@@ -31,8 +35,8 @@ describe('rivals', () => {
 
     expect(none.every((r) => r.sabedoria === 0)).toBe(true);
     half.forEach((r, i) => {
-      expect(r.sabedoria).toBe(Math.round(full[i].sabedoria * 0.5));
-      expect(r.nickname).toBe(full[i].nickname);
+      expect(r.sabedoria).toBe(Math.round(full[i]!.sabedoria * 0.5));
+      expect(r.nickname).toBe(full[i]!.nickname);
     });
     expect(full.some((r) => r.sabedoria > 0)).toBe(true);
   });
@@ -42,8 +46,8 @@ describe('rivals', () => {
     const day = rivals(3, '2026-03-09', 11, 1 / 7);
 
     day.forEach((r, i) => {
-      expect(r.sabedoria).toBe(Math.round(week[i].sabedoria / 7));
-      expect(r.nickname).toBe(week[i].nickname);
+      expect(r.sabedoria).toBe(Math.round(week[i]!.sabedoria / 7));
+      expect(r.nickname).toBe(week[i]!.nickname);
     });
   });
 });
@@ -148,5 +152,27 @@ describe('defaultNickname', () => {
     );
 
     expect(names.size).toBeGreaterThan(1);
+  });
+});
+
+describe('leagueAt', () => {
+  it('returns the league of a rank, 1-based', () => {
+    expect(leagueAt(1)).toBe(LEAGUES[0]);
+    expect(leagueAt(LEAGUES.length)).toBe(LEAGUES.at(-1));
+  });
+
+  it.each([0, LEAGUES.length + 1])('throws for rank %s', (rank) => {
+    expect(() => leagueAt(rank)).toThrow(`No league ${rank}`);
+  });
+});
+
+describe('rewardAt', () => {
+  it('returns the reward of a level, 1-based', () => {
+    expect(rewardAt(1)).toBe(FREE_TRACK[0]);
+    expect(rewardAt(FREE_TRACK.length)).toBe(FREE_TRACK.at(-1));
+  });
+
+  it.each([0, FREE_TRACK.length + 1])('throws for level %s', (level) => {
+    expect(() => rewardAt(level)).toThrow(`No reward for level ${level}`);
   });
 });

@@ -109,8 +109,8 @@ describe('Books HTTP', () => {
       expect(res.body).toEqual({
         error: {
           statusCode: 404,
-          code: 'not_found',
-          message: 'No book for "sem-livro"',
+          code: 'book_not_found',
+          message: 'No such book',
         },
       });
     });
@@ -124,9 +124,9 @@ describe('Books HTTP', () => {
       ['space', 'a%20b'],
       ['over 100 characters', 'a'.repeat(101)],
     ])(
-      'answers 400 for an invalid slug (%s) without querying',
+      'answers 404 for an invalid slug (%s) without querying',
       async (_n, slug) => {
-        await get(`/books/${slug}`).expect(400);
+        await get(`/books/${slug}`).expect(404);
 
         expect(repository.book).not.toHaveBeenCalled();
       },
@@ -172,7 +172,7 @@ describe('Books HTTP', () => {
       async (b) => {
         const res = await get(`/books/own/${b}`).expect(404);
 
-        expect(res.body.error.message).toBe(`No own book "${b}"`);
+        expect(res.body.error.message).toBe('No such book');
         expect(repository.ownBook).not.toHaveBeenCalled();
       },
     );

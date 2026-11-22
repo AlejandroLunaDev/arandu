@@ -107,11 +107,11 @@ describe('Memory', () => {
     });
 
     it.each(['0', '-1', 'abc', '1.5', '9007199254740993'])(
-      '400s for %s',
+      '404s for %s',
       async (id) => {
         await request(app.getHttpServer())
           .delete(`/arandu/memory/facts/${id}`)
-          .expect(400);
+          .expect(404);
 
         expect(memory.deleteFact).not.toHaveBeenCalled();
       },

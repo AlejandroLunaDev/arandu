@@ -86,8 +86,8 @@ describe('progress routes', () => {
       await server().get('/me/books/7').expect(404);
     });
 
-    it.each(['0', 'abc', '-1', '2147483648'])('400s for %s', async (id) => {
-      await server().get(`/me/books/${id}`).expect(400);
+    it.each(['0', 'abc', '-1', '2147483648'])('404s for %s', async (id) => {
+      await server().get(`/me/books/${id}`).expect(404);
 
       expect(repo.discipline).not.toHaveBeenCalled();
     });
@@ -113,8 +113,8 @@ describe('progress routes', () => {
       await server().get('/me/books/7/reflection').expect(404);
     });
 
-    it.each(['0', 'abc', '2147483648'])('400s for %s', async (id) => {
-      await server().get(`/me/books/${id}/reflection`).expect(400);
+    it.each(['0', 'abc', '2147483648'])('404s for %s', async (id) => {
+      await server().get(`/me/books/${id}/reflection`).expect(404);
     });
   });
 
@@ -168,8 +168,8 @@ describe('progress routes', () => {
       expect(repo.saveReflection).not.toHaveBeenCalled();
     });
 
-    it('400s for a bad subject id', async () => {
-      await post({ chips: ['a'], text: null }, '0').expect(400);
+    it('404s for a bad subject id', async () => {
+      await post({ chips: ['a'], text: null }, '0').expect(404);
     });
   });
 
@@ -231,8 +231,8 @@ describe('progress routes', () => {
       '/stops/7/-1/reread',
       '/stops/7/201/reread',
       '/stops/x/0/reread',
-    ])('400s for %s', async (url) => {
-      await server().post(url).expect(400);
+    ])('404s for %s', async (url) => {
+      await server().post(url).expect(404);
 
       expect(repo.reread).not.toHaveBeenCalled();
     });

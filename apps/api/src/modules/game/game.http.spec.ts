@@ -59,8 +59,8 @@ describe('game routes', () => {
       expect(repo.claim).toHaveBeenCalledWith(USER_ID, level);
     });
 
-    it.each(['0', '9', 'abc', '-1', '1.5'])('400s for level %s', async (l) => {
-      await server().post(`/me/season/levels/${l}/claim`).expect(400);
+    it.each(['0', '9', 'abc', '-1', '1.5'])('404s for level %s', async (l) => {
+      await server().post(`/me/season/levels/${l}/claim`).expect(404);
 
       expect(repo.claim).not.toHaveBeenCalled();
     });
@@ -79,8 +79,8 @@ describe('game routes', () => {
       expect(repo.open).toHaveBeenCalledWith(USER_ID, 42);
     });
 
-    it.each(['0', 'abc', '-1', '2147483648'])('400s for id %s', async (id) => {
-      await server().post(`/me/caixas/${id}/open`).expect(400);
+    it.each(['0', 'abc', '-1', '2147483648'])('404s for id %s', async (id) => {
+      await server().post(`/me/caixas/${id}/open`).expect(404);
 
       expect(repo.open).not.toHaveBeenCalled();
     });
@@ -93,8 +93,8 @@ describe('game routes', () => {
       expect(repo.buy).toHaveBeenCalledWith(USER_ID, item);
     });
 
-    it.each(['cachecol', 'caixa', 'Novelos'])('400s for %s', async (item) => {
-      await server().post(`/me/shop/${item}`).expect(400);
+    it.each(['cachecol', 'caixa', 'Novelos'])('404s for %s', async (item) => {
+      await server().post(`/me/shop/${item}`).expect(404);
 
       expect(repo.buy).not.toHaveBeenCalled();
     });

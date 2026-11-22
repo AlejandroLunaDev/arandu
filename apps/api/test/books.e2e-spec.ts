@@ -63,9 +63,9 @@ describe('Books (e2e)', () => {
     expect(res.headers['cache-control']).toBe('public, max-age=21600');
   });
 
-  it('GET /books/:slug answers 404 and 400 without a token', async () => {
+  it('GET /books/:slug answers 404 and 404 without a token', async () => {
     await request(app.getHttpServer()).get('/books/outro').expect(404);
-    await request(app.getHttpServer()).get('/books/Invalid_Slug').expect(400);
+    await request(app.getHttpServer()).get('/books/Invalid_Slug').expect(404);
   });
 
   it('GET /books/own/:book is public and cached, 404 for an unknown book', async () => {

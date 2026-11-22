@@ -31,7 +31,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       insert into public.sources (adapter, url, label, last_fetched_at)
       values ('books_test', ${`https://example.test/${label.replaceAll(' ', '-')}`}, ${label}, ${fetched ? '2026-01-02T03:04:05Z' : null})
       returning id::text`;
-    return row.id;
+    return row!.id;
   };
 
   interface InstitutionOptions {
@@ -65,7 +65,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     const [existing] = await sql<
       { id: string }[]
     >`select id::text from public.institutions where inep_code = ${inep}`;
-    return existing.id;
+    return existing!.id;
   };
 
   const profession = async (slug: string, name: string) => {
@@ -73,7 +73,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       insert into public.professions (slug, name, cine_code)
       values (${slug}, ${name}, ${`0411A${String(++professions).padStart(2, '0')}`})
       returning id::text`;
-    return row.id;
+    return row!.id;
   };
 
   interface CourseOptions {
@@ -96,7 +96,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       values (${99900000 + ++seq}, ${inst}, ${prof}, ${name}, ${o.degree ?? 'bacharelado'}, ${o.shift ?? null},
         ${o.duration ?? null}, ${o.city ?? 'Sao Paulo'}, ${o.campus ?? null}, ${base})
       returning id::text`;
-    return row.id;
+    return row!.id;
   };
 
   const discipline = async (
@@ -109,7 +109,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       insert into public.disciplines (institution_id, code, name, topics, source_id)
       values (${inst}, ${`D${++seq}`}, ${name}, ${topics}, ${src})
       returning id::text`;
-    return row.id;
+    return row!.id;
   };
 
   interface Row {
@@ -746,7 +746,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         ]);
         expect(names(await book('t-fiap-empty'))).toEqual(['sample']);
       } finally {
-        await sql`update public.institutions set ${sql(saved)} where inep_code = ${FIAP}`;
+        await sql`update public.institutions set ${sql(saved!)} where inep_code = ${FIAP}`;
       }
     });
 
@@ -785,15 +785,15 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       const result = await book('t-fiap-empty');
 
       expect(names(result)).toEqual(['sample', 'fiap-campinas']);
-      expect(result?.offerings[1].curriculum).toBeNull();
-      expect(result?.offerings[1].institution.name).toBe('FIAP');
+      expect(result?.offerings[1]!.curriculum).toBeNull();
+      expect(result?.offerings[1]!.institution.name).toBe('FIAP');
     });
 
     it('shows the FIAP course that has a grade, never an empty second FIAP page', async () => {
       const result = await book('t-fiap-grade');
 
       expect(names(result)).toEqual(['sample', 'fiap-grade-sp']);
-      expect(result?.offerings[1].curriculum?.years).toEqual([
+      expect(result?.offerings[1]!.curriculum?.years).toEqual([
         { year: 1, subjects: ['Intro fiap-grade-sp'] },
       ]);
     });
@@ -841,19 +841,19 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     it('gives a logo or photo only with its full attribution, and null otherwise', async () => {
       const [, beta, carl] = (await book('t-photo'))?.offerings ?? [];
 
-      expect(beta.institution.logo).toEqual({
+      expect(beta!.institution.logo).toEqual({
         url: 'https://img.test/Beta Univ.png',
         license: 'CC0',
         sourceUrl: 'https://commons.test/Beta Univ',
       });
-      expect(carl.institution.logo).toBeNull();
-      expect(carl.institution.photo).toEqual({
+      expect(carl!.institution.logo).toBeNull();
+      expect(carl!.institution.photo).toEqual({
         url: 'https://img.test/Carl Univ.jpg',
         credit: 'Ana Foto',
         license: 'CC BY',
         sourceUrl: 'https://commons.test/photo-Carl Univ',
       });
-      expect(carl.institution.kind).toBe('special');
+      expect(carl!.institution.kind).toBe('special');
     });
 
     it('has no admission cut-offs in any offering', async () => {
@@ -865,8 +865,8 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     it('has a null durationYears when the census gives none, and a number when it does', async () => {
       const result = await book('t-main');
 
-      expect(result?.offerings[0].course.durationYears).toBe(4);
-      expect(result?.offerings[2].course.durationYears).toBeNull();
+      expect(result?.offerings[0]!.course.durationYears).toBe(4);
+      expect(result?.offerings[2]!.course.durationYears).toBeNull();
     });
   });
 
@@ -899,7 +899,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     it('counts a year-less subject by its term as first year, and leaves out electives and later years', async () => {
       const result = await book('t-grade');
       const subjects = result?.offerings.flatMap(
-        (o) => o.curriculum?.years[0].subjects ?? [],
+        (o) => o.curriculum?.years[0]!.subjects ?? [],
       );
 
       expect(subjects).toContain('Term two');
@@ -938,7 +938,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
             9990002: ['Anatomia'],
             9990004: ['Undated term'],
           } as Record<number, string[]>
-        )[picked.inep],
+        )[picked!.inep],
       );
       expect(new Set(result?.sample.map((s) => s.institution)).size).toBe(1);
     });
@@ -946,7 +946,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     it('never takes the sample from an institution without a photo, even when its hash sorts first', async () => {
       const slug = 't-photo-sample';
       // Premise: unfiltered, the institution without a photo (9990015) would win the hash.
-      expect((await pickedInstitution(slug, [9990001, 9990015])).inep).toBe(
+      expect((await pickedInstitution(slug, [9990001, 9990015]))!.inep).toBe(
         9990015,
       );
       const result = await book(slug);
@@ -981,7 +981,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
 
     it('uses the name of an institution without a short name', async () => {
-      expect((await book('t-sample-alpha'))?.sample[0].institution).toBe(
+      expect((await book('t-sample-alpha'))?.sample[0]!.institution).toBe(
         'Alpha Univ',
       );
     });
@@ -1060,15 +1060,15 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
         const result = await book(slug);
         const picked = await pickedInstitution(slug, shared);
         const [lead] = result?.offerings ?? [];
-        const [{ name, short }] = await sql<
+        const [{ name, short } = { name: '', short: null }] = await sql<
           { name: string; short: string | null }[]
-        >`select name, short_name as short from public.institutions where id = ${picked.id}`;
+        >`select name, short_name as short from public.institutions where id = ${picked!.id}`;
 
         expect(result?.sample.length).toBeGreaterThan(0);
         expect(new Set(result?.sample.map((s) => s.institution))).toEqual(
           new Set([short ?? name]),
         );
-        expect(label(lead.institution)).toBe(short ?? name);
+        expect(label(lead!.institution)).toBe(short ?? name);
         // by name, at most two: a mix across institutions would start 'A zeta', 'B alpha'.
         const own = result?.sample.map((s) => s.name) ?? [];
         expect(own).toEqual([...own].sort());
@@ -1161,7 +1161,9 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   afterAll(() => sql.end());
 
   it('has the migration seed: 7 pages and 28 facts', async () => {
-    const [{ pages, facts }] = await sql<{ pages: number; facts: number }[]>`
+    const [{ pages, facts } = { pages: -1, facts: -1 }] = await sql<
+      { pages: number; facts: number }[]
+    >`
       select (select count(*)::int from public.story_pages) as pages,
              (select count(*)::int from public.story_facts) as facts`;
 
@@ -1178,18 +1180,18 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
       'Como o Arandu resolve',
     ]);
     expect(pages.map((p) => p.facts.length)).toEqual([4, 2, 5]);
-    expect(pages[0].facts[0].figure).toBeNull();
-    expect(pages[0].facts[0].text).toMatch(
+    expect(pages[0]!.facts[0]!.figure).toBeNull();
+    expect(pages[0]!.facts[0]!.text).toMatch(
       /^Escolher uma carreira universitária é difícil/,
     );
-    const source = pages[0].facts[0].source;
+    const source = pages[0]!.facts[0]!.source;
     expect(source?.label).toBe('Semesp, Mapa do Ensino Superior, 16ª ed.');
     expect(source?.url).toMatch(/^https:\/\//);
     expect(source?.verifiedOn).toBe('2026-11-19');
-    expect(pages[1].facts[0].figure).toBe(
+    expect(pages[1]!.facts[0]!.figure).toBe(
       'Escolhe-se sem ter experimentado a carreira.',
     );
-    expect(pages[1].facts[0].source).toBeNull();
+    expect(pages[1]!.facts[0]!.source).toBeNull();
   });
 
   it('serves the produto book in four pages', async () => {
@@ -1202,9 +1204,9 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
       'Feito com dados reais',
     ]);
     expect(pages.map((p) => p.facts.length)).toEqual([1, 5, 5, 6]);
-    expect(pages[3].facts[0].text).toBe('Hoje a base do Arandu reúne:');
-    expect(pages[3].facts[0].source).toBeNull();
-    const grades = pages[3].facts.find(
+    expect(pages[3]!.facts[0]!.text).toBe('Hoje a base do Arandu reúne:');
+    expect(pages[3]!.facts[0]!.source).toBeNull();
+    const grades = pages[3]!.facts.find(
       (f) =>
         f.source?.label ===
         'Grades publicadas pelas próprias instituições, cada uma com seu link',
@@ -1220,10 +1222,10 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
         label: 'L',
         url: 'http://insecure.test/x',
       });
-      return (await inTx(tx).ownBook('solucao')).pages[1].facts[2];
+      return (await inTx(tx).ownBook('solucao')).pages[1]!.facts[2];
     });
 
-    expect(fact.source).toEqual({
+    expect(fact!.source).toEqual({
       label: 'L',
       url: null,
       verifiedOn: '2026-01-01',
@@ -1237,7 +1239,7 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
     });
 
     expect(pages[1]).toEqual({ title: 'Por que acontece', facts: [] });
-    expect(pages[0].facts).toHaveLength(4);
+    expect(pages[0]!.facts).toHaveLength(4);
   });
 
   it('returns the one page left, titled with its own title, when page 1 is gone', async () => {
@@ -1248,7 +1250,7 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
     });
 
     expect(pages).toHaveLength(1);
-    expect(pages[0].title).toBe('Por que acontece');
+    expect(pages[0]!.title).toBe('Por que acontece');
   });
 
   it('throws when a book has no pages', async () => {
@@ -1283,7 +1285,7 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
           values ('solucao', 3, 'x') returning page`;
       });
 
-      expect(row.page).toBe(3);
+      expect(row!.page).toBe(3);
     });
 
     it('rejects a fact on a missing page', async () => {
@@ -1311,7 +1313,7 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   });
 
   it('carries no phrase the owner dropped', async () => {
-    const [{ n }] = await sql<{ n: number }[]>`
+    const [{ n } = { n: -1 }] = await sql<{ n: number }[]>`
       select (select count(*)::int from public.story_facts
               where text ilike any (array['%vivido%', '%viver a carreira%', '%dos outros%'])
                  or figure ilike any (array['%vivido%', '%viver a carreira%', '%dos outros%'])
@@ -1323,7 +1325,9 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   });
 
   it('left the story tables as seeded', async () => {
-    const [{ pages, facts }] = await sql<{ pages: number; facts: number }[]>`
+    const [{ pages, facts } = { pages: -1, facts: -1 }] = await sql<
+      { pages: number; facts: number }[]
+    >`
       select (select count(*)::int from public.story_pages) as pages,
              (select count(*)::int from public.story_facts) as facts`;
 

@@ -40,10 +40,10 @@ describe('SupabaseIdentity', () => {
       name: 'Ana',
       avatarUrl: 'http://img',
     });
-    expect(fetchMock.mock.calls[0][0]).toBe(
+    expect(fetchMock.mock.calls[0]![0]).toBe(
       'https://p.supabase.co/auth/v1/user',
     );
-    expect(fetchMock.mock.calls[0][1].headers).toEqual({
+    expect(fetchMock.mock.calls[0]![1].headers).toEqual({
       apikey: 'publishable',
       authorization: 'Bearer tok',
     });

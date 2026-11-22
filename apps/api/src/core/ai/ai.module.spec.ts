@@ -1,7 +1,16 @@
 import type { ConfigService } from '@nestjs/config';
 
+type Opts = { providerOptions: { openrouter: unknown } };
+
 const captured = vi.hoisted(() => ({
-  options: undefined as { useFactory: (config: unknown) => any } | undefined,
+  options: undefined as
+    | {
+        useFactory: (config: unknown) => {
+          models: Record<string, Opts>;
+          defaults: Opts;
+        };
+      }
+    | undefined,
 }));
 
 vi.mock('@nestjs/ai', () => ({
@@ -23,7 +32,7 @@ describe('AiModule config', () => {
   it('keeps data_collection deny and reasoning off on the web model beside the Exa plugin', async () => {
     const { models } = await build();
 
-    expect(models.web.providerOptions.openrouter).toEqual({
+    expect(models.web!.providerOptions.openrouter).toEqual({
       provider: { data_collection: 'deny' },
       reasoning: { enabled: false },
       plugins: [{ id: 'web', engine: 'exa', max_results: 10 }],

@@ -144,7 +144,7 @@ describe('achievementsOf', () => {
       const list = achievementsOf(run, topics);
       expect(list.find((a) => a.code === 'semana_de_patinhas')).toEqual({
         code: 'semana_de_patinhas',
-        earnedAt: run[6].completedAt.toISOString(),
+        earnedAt: run[6]!.completedAt.toISOString(),
       });
     });
 
@@ -153,7 +153,7 @@ describe('achievementsOf', () => {
       const week = achievementsOf(run, topics).find(
         (a) => a.code === 'semana_de_patinhas',
       );
-      expect(week?.earnedAt).toBe(run[6].completedAt.toISOString());
+      expect(week?.earnedAt).toBe(run[6]!.completedAt.toISOString());
     });
 
     it('repeated days count once', () => {
@@ -214,7 +214,7 @@ describe('achievementsOf', () => {
         achievementsOf(run, topics).find((a) => a.code === 'primeiro_livro'),
       ).toEqual({
         code: 'primeiro_livro',
-        earnedAt: run[2].completedAt.toISOString(),
+        earnedAt: run[2]!.completedAt.toISOString(),
       });
     });
 
@@ -243,7 +243,7 @@ describe('achievementsOf', () => {
       const book = achievementsOf(run, two).find(
         (a) => a.code === 'primeiro_livro',
       );
-      expect(book?.earnedAt).toBe(run[2].completedAt.toISOString());
+      expect(book?.earnedAt).toBe(run[2]!.completedAt.toISOString());
     });
 
     it('is earned only once when two subjects complete', () => {
@@ -258,7 +258,7 @@ describe('achievementsOf', () => {
       const list = achievementsOf(run, two);
       expect(codes(list).filter((c) => c === 'primeiro_livro')).toHaveLength(1);
       expect(list.find((a) => a.code === 'primeiro_livro')?.earnedAt).toBe(
-        run[0].completedAt.toISOString(),
+        run[0]!.completedAt.toISOString(),
       );
     });
 
@@ -298,7 +298,7 @@ describe('achievementsOf', () => {
     it('is earned at the 10th question time', () => {
       const times = asked(12);
       expect(achievementsOf([], topics, times)).toEqual([
-        { code: 'curiosidade_de_gato', earnedAt: times[9].toISOString() },
+        { code: 'curiosidade_de_gato', earnedAt: times[9]!.toISOString() },
       ]);
     });
 

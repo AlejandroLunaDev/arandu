@@ -56,7 +56,7 @@ describe("toProfileInput", () => {
     }
   });
   it("cuts an item over 200 chars to 200", () => {
-    for (const k of lists) assert.equal(toProfileInput({ ...base, [k]: ["x".repeat(250)] })[k][0].length, 200);
+    for (const k of lists) assert.equal(toProfileInput({ ...base, [k]: ["x".repeat(250)] })[k][0]!.length, 200);
   });
   it("keeps the first 10 of 12 items", () => {
     const twelve = Array.from({ length: 12 }, (_, i) => `i${i}`);

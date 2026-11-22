@@ -256,7 +256,7 @@ describe('MemoryRepository saveFacts', () => {
     });
 
     const [rows] = helpers as [{ text: string }[]];
-    expect(rows[0].text).toHaveLength(300);
+    expect(rows[0]!.text).toHaveLength(300);
   });
 
   it.each([
@@ -357,8 +357,8 @@ describe('MemoryRepository conversations', () => {
     );
 
     expect(conversations).toHaveLength(50);
-    expect(conversations[0].startedAt).toBe(day(80));
-    expect(conversations[49].startedAt).toBe(day(31));
+    expect(conversations[0]!.startedAt).toBe(day(80));
+    expect(conversations[49]!.startedAt).toBe(day(31));
   });
 
   it('asks both reads for the person', async () => {

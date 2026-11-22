@@ -21,7 +21,7 @@ const catchWith = (exception: unknown) => {
     }),
   } as unknown as ArgumentsHost;
   new AllExceptionsFilter().catch(exception, host);
-  return { status: status.mock.calls[0][0], body: json.mock.calls[0][0] };
+  return { status: status.mock.calls[0]![0], body: json.mock.calls[0]![0] };
 };
 
 describe('AllExceptionsFilter', () => {
@@ -71,6 +71,21 @@ describe('AllExceptionsFilter', () => {
       statusCode: 429,
       code: 'too_many_requests',
       message: 'slow down',
+    });
+  });
+
+  it('answers a Postgres unique violation (23505) as a 409 conflict', () => {
+    const { status, body } = catchWith(
+      Object.assign(new Error('duplicate key'), { code: '23505' }),
+    );
+
+    expect(status).toBe(409);
+    expect(body).toEqual({
+      error: {
+        statusCode: 409,
+        code: 'conflict',
+        message: 'It already exists',
+      },
     });
   });
 

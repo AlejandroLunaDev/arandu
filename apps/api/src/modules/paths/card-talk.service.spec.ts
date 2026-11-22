@@ -85,7 +85,7 @@ describe('CardTalkService', () => {
         reply: 'ok',
       });
       expect(paths.stopContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
-      const prompt = JSON.parse(ai.generateObject.mock.calls[0][0].prompt);
+      const prompt = JSON.parse(ai.generateObject.mock.calls[0]![0].prompt);
       expect(prompt).toEqual({
         question: 'Explique',
         ideas: ['i1', 'i2', 'i3'],
@@ -158,7 +158,7 @@ describe('CardTalkService', () => {
         'Por que?',
         'A resposta.',
       );
-      const call = ai.generateText.mock.calls[0][0];
+      const call = ai.generateText.mock.calls[0]![0];
       expect(call.prompt).toBe('Por que?');
       expect(call.instructions).toContain('Derivadas');
       expect(call.instructions).toContain('x2');
