@@ -76,11 +76,14 @@ export function QuestionView({ question, say, step, picks, said, busy, failed, o
             Não consegui seguir agora. Tenta de novo?
           </p>
         )}
-        <MainButton disabled={busy || (question !== null && picks.length === 0 && !said)} onClick={onContinue}>
-          Continuar
-        </MainButton>
+        {/* With a question, going on lives in the composer's button; Arandu's closing words have no composer. */}
+        {!question && (
+          <MainButton disabled={busy} onClick={onContinue}>
+            Continuar
+          </MainButton>
+        )}
       </footer>
-      {question && <Composer placeholder={question.placeholder} busy={busy} onSend={onSay} />}
+      {question && <Composer placeholder={question.placeholder} busy={busy} onSend={onSay} onNext={picks.length > 0 ? onContinue : undefined} />}
     </main>
   );
 }

@@ -224,6 +224,11 @@
   padding: 12px 16px 8px;
 }
 
+/* A question's footer holds only an error, if any: going on lives in the composer. */
+.foot:empty {
+  display: none;
+}
+
 .hello + .foot,
 .foot.last {
   padding-bottom: 20px;

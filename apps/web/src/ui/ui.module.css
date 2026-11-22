@@ -157,6 +157,8 @@
 /* The composer: one field, its button inside. */
 .compose {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 6px 12px 16px;
   background: var(--ink-900);
 }
@@ -212,12 +214,40 @@
   cursor: pointer;
 }
 
+.send:disabled,
+.mic:disabled {
+  opacity: 0.5;
+}
+
+/* The mic rests quiet in the field; listening, it turns amber. */
+.mic {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-400);
+}
+
+.mic[data-on] {
+  background: var(--amber-400);
+  color: var(--ink-900);
+}
+
+.mic::after,
 .send::after {
   content: "";
   position: absolute;
   inset: -4px;
 }
 
+.mic svg,
 .send svg {
   width: 18px;
   height: 18px;
@@ -226,6 +256,14 @@
   stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.listening {
+  margin: 0;
+  color: var(--amber-300);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
