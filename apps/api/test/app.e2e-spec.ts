@@ -38,12 +38,11 @@ describe('AppModule (e2e)', () => {
       .expect(401);
 
     expect(res.body).toEqual({
-      statusCode: 401,
-      error: 'UNAUTHORIZED',
-      message: 'Sign in again',
-      code: 'unauthorized',
-      path: '/arandu/chat',
-      timestamp: expect.any(String),
+      error: {
+        statusCode: 401,
+        code: 'unauthorized',
+        message: 'Sign in again',
+      },
     });
   });
 

@@ -60,12 +60,11 @@ describe('Rate limit', () => {
     const res = await ping('ana').expect(429);
 
     expect(res.body).toEqual({
-      statusCode: 429,
-      error: 'TOO_MANY_REQUESTS',
-      message: 'Too many messages, take a short break and try again',
-      code: 'too_many_requests',
-      path: '/ping',
-      timestamp: expect.any(String),
+      error: {
+        statusCode: 429,
+        code: 'too_many_requests',
+        message: 'Too many messages, take a short break and try again',
+      },
     });
     await ping('bia').expect(200);
   });

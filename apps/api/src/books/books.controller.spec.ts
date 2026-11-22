@@ -107,11 +107,11 @@ describe('Books HTTP', () => {
       const res = await get('/books/sem-livro').expect(404);
 
       expect(res.body).toEqual({
-        statusCode: 404,
-        error: 'NOT_FOUND',
-        message: 'No book for "sem-livro"',
-        path: '/books/sem-livro',
-        timestamp: expect.any(String),
+        error: {
+          statusCode: 404,
+          code: 'not_found',
+          message: 'No book for "sem-livro"',
+        },
       });
     });
 
@@ -172,7 +172,7 @@ describe('Books HTTP', () => {
       async (b) => {
         const res = await get(`/books/own/${b}`).expect(404);
 
-        expect(res.body.message).toBe(`No own book "${b}"`);
+        expect(res.body.error.message).toBe(`No own book "${b}"`);
         expect(repository.ownBook).not.toHaveBeenCalled();
       },
     );

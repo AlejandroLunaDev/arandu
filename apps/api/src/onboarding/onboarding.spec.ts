@@ -71,11 +71,12 @@ describe('POST /arandu/onboarding', () => {
 
     const res = await post({}).expect(401);
 
-    expect(res.body).toMatchObject({
-      statusCode: 401,
-      error: 'UNAUTHORIZED',
-      message: 'This account no longer exists',
-      path: '/arandu/onboarding',
+    expect(res.body).toEqual({
+      error: {
+        statusCode: 401,
+        code: 'unauthorized',
+        message: 'This account no longer exists',
+      },
     });
     expect(model.calls).toHaveLength(0);
   });
