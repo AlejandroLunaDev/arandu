@@ -7,9 +7,28 @@
 // exit 0 with `hookSpecificOutput.permissionDecision` ("deny" or "ask"); no output lets the normal flow continue.
 
 const LINT_CONFIG = /eslint\.config\.|\.oxlintrc\.json/;
-// Setting it to anything but .githooks, or unsetting it; reading it (`git config core.hooksPath`) is fine.
-const HOOKS_PATH_OVERRIDE =
-  /--unset(-all)?\s+core\.hookspath|core\.hookspath[\s=]+(""|''|["']?(?!\.githooks(?![\w./-]))[^\s;&|)`"'])/i;
+// True when the command unsets core.hooksPath or gives it any value but exactly .githooks (quoted or not).
+// Reading it (`git config core.hooksPath`, no value after it) is fine.
+function overridesHooksPath(command) {
+  if (/--unset(-all)?\s+core\.hookspath|--remove-section\s+core(\s|$)/i.test(command)) return true;
+  const name = /core\.hookspath/gi;
+  for (let m; (m = name.exec(command)); ) {
+    const rest = command.slice(m.index + m[0].length);
+    const separator = /^[\s=]*/.exec(rest)[0];
+    const after = rest.slice(separator.length);
+    const quote = after[0] === '"' || after[0] === "'" ? after[0] : null;
+    let value;
+    if (quote) {
+      const end = after.indexOf(quote, 1);
+      value = after.slice(1, end === -1 ? undefined : end);
+    } else {
+      value = /^[^\s;&|)`]*/.exec(after)[0];
+      if (value === '' && !separator.includes('=')) continue;
+    }
+    if (value !== '.githooks') return true;
+  }
+  return false;
+}
 // git takes any unambiguous prefix of a long option: --no-veri and --no-verif skip the hook as --no-verify does.
 const NO_VERIFY = /--no-veri(fy?)?(?![\w-])/;
 
@@ -21,7 +40,7 @@ const askForLintConfig = (target) => ({
 function decide({ tool_name: tool, tool_input: input = {} }) {
   if (tool === 'Bash' || tool === 'PowerShell') {
     const command = String(input.command || '');
-    if (NO_VERIFY.test(command) || HOOKS_PATH_OVERRIDE.test(command))
+    if (NO_VERIFY.test(command) || overridesHooksPath(command))
       return {
         permissionDecision: 'deny',
         permissionDecisionReason:
