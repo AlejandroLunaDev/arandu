@@ -11,7 +11,9 @@ export const metadata: Metadata = {
 };
 
 // cover: the app draws under the notch and the home bar, and pads itself with the safe-area insets.
-export const viewport: Viewport = { viewportFit: "cover", themeColor: bg.dark };
+// resizes-content: the keyboard shrinks the layout (h-dvh), so the composer rides above it instead of the page
+// scrolling up and hiding it (Chrome on Android; Safari already keeps the focused field in view).
+export const viewport: Viewport = { viewportFit: "cover", themeColor: bg.dark, interactiveWidget: "resizes-content" };
 
 // The app: a phone-sized column, full screen on a phone, centered on a desktop.
 export default function AppLayout({ children }: LayoutProps<"/app">) {
