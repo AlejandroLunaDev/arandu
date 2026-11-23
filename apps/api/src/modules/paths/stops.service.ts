@@ -398,11 +398,10 @@ export class StopsService {
       index,
       [...new Map(kept.map((r) => [`${r.topic}:${r.index}`, r])).values()],
     );
-    const achievements = result.sabedoria
-      ? (await this.progress.achievements(userId))
-          .map((a) => a.code)
-          .filter((code) => !before.has(code))
-      : [];
+    // Always compared: a practice lesson gives no sabedoria but its study day can still complete semana_de_patinhas.
+    const achievements = (await this.progress.achievements(userId))
+      .map((a) => a.code)
+      .filter((code) => !before.has(code));
     return { ...result, achievements };
   }
 

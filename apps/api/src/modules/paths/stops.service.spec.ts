@@ -1058,18 +1058,37 @@ describe('StopsService', () => {
         expect(result.achievements).toEqual(['primeira_parada']);
       });
 
-      it('skips the second achievements read when no sabedoria was given', async () => {
+      it('on a replay with the same achievements before and after returns none', async () => {
         paths.finishLesson.mockResolvedValue({
           sabedoria: 0,
           peixinhos: 0,
           patinha: false,
           chapterDone: false,
         });
+        progress.achievements.mockResolvedValue([
+          { code: 'primeira_parada', earnedAt: 'x' },
+        ]);
 
         const result = await service.finishLesson('u', 7, 1, 1, []);
 
         expect(result.achievements).toEqual([]);
-        expect(progress.achievements).toHaveBeenCalledTimes(1);
+        expect(progress.achievements).toHaveBeenCalledTimes(2);
+      });
+
+      it('with sabedoria 0 still returns semana_de_patinhas earned by the study day', async () => {
+        paths.finishLesson.mockResolvedValue({
+          sabedoria: 0,
+          peixinhos: 0,
+          patinha: true,
+          chapterDone: true,
+        });
+        progress.achievements
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ code: 'semana_de_patinhas', earnedAt: 'x' }]);
+
+        const result = await service.finishLesson('u', 7, 1, 1, []);
+
+        expect(result.achievements).toEqual(['semana_de_patinhas']);
       });
     });
   });
