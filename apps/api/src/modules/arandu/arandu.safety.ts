@@ -89,10 +89,38 @@ export function isAbusive(text: string): boolean {
   return BLOCKED.some((w) => words.includes(` ${w} `));
 }
 
-/** True when the person's message should skip the model: a blocked word, and no sign they are hurting. */
+/** A message this short with a blocked word is the insult itself; anything longer may be telling something. */
+const MAX_BLOCKED_WORDS = 5;
+
+// Whole words of a person talking about themselves ("me odeio, viado", "sou um lixo"): an insult aims at someone else.
+const SELF = [
+  'me',
+  'eu',
+  'sou',
+  'mim',
+  'comigo',
+  'meu',
+  'minha',
+  'ninguem',
+  'lixo',
+  'odeio',
+  'quero',
+  'nao',
+].map(normalize);
+
+/**
+ * True when the person's message should skip the model: a short insult with no sign they are hurting. No list can
+ * hold every way to say a crisis, so every longer message reaches the model and VOICE's crisis rule.
+ */
 export function blocksMessage(text: string): boolean {
-  const words = ` ${normalize(text)}`;
-  return isAbusive(text) && !DISTRESS.some((w) => words.includes(` ${w}`));
+  const normalized = normalize(text);
+  const words = ` ${normalized} `;
+  return (
+    normalized.split(' ').length <= MAX_BLOCKED_WORDS &&
+    isAbusive(text) &&
+    !DISTRESS.some((w) => words.includes(` ${w}`)) &&
+    !SELF.some((w) => words.includes(` ${w} `))
+  );
 }
 
 /** How Arandu lets a blocked message pass before going back to the step. */
