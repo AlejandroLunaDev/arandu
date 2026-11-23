@@ -1,4 +1,4 @@
-import type { CareerOption, Institution } from "@arandu/contracts";
+import type { CareerOption, CourseChoice, Institution } from "@arandu/contracts";
 
 /** One course to pick, with the recommended career it belongs to. */
 export type PlaceCourse = { courseId: number; course: string; profession: CareerOption["profession"]; reason: string };
@@ -8,6 +8,14 @@ export type Place = { institution: Institution; city: string; courses: PlaceCour
 
 /** The name the person reads: the short one when there is one ("USP"). */
 export const placeName = (institution: Institution) => institution.shortName ?? institution.name;
+
+/** A course on screen as the chat takes it, so Arandu can tell the places apart (O10). */
+export const toChoice = (place: Place, course: PlaceCourse): CourseChoice => ({
+  courseId: course.courseId,
+  course: course.course,
+  institution: placeName(place.institution),
+  city: place.city,
+});
 
 /**
  * O10 lists institutions, not careers: the recommendations turned inside out, in alphabetical order. The same course

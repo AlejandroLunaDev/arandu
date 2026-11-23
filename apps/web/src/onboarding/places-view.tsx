@@ -36,6 +36,7 @@ export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
         onChat={setChat}
         failed={failed}
         onOpen={(courseId) => setView({ course: courseId })}
+        onChoose={onChoose}
         onBack={() => setView(null)}
       />
     );

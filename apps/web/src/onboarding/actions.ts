@@ -4,13 +4,13 @@ import type {
   AranduChatReply,
   AranduProfile,
   CareerPaths,
+  CourseChoice,
   Journey,
   JourneyUpdate,
   Me,
   OnboardingReply,
   Recommendations,
   StopContent,
-  StopResult,
 } from "@arandu/contracts";
 import { api } from "@/app-shell/api";
 import { ensureGuest } from "@/auth/sign-in";
@@ -41,9 +41,14 @@ export async function recommend(profile: AranduProfile): Promise<Recommendations
 }
 
 /** O10: the person asks about the recommended careers before choosing; Arandu works out which one they mean. */
-export async function askAboutCareers(professionSlugs: string[], message: string, sessionId?: string): Promise<AranduChatReply> {
+export async function askAboutCareers(
+  professionSlugs: string[],
+  message: string,
+  sessionId?: string,
+  choices?: CourseChoice[],
+): Promise<AranduChatReply> {
   if (!Array.isArray(professionSlugs) || !professionSlugs.every((s) => typeof s === "string" && SLUG.test(s))) throw new Error("Not career slugs");
-  return api<AranduChatReply>("/arandu/chat", { method: "POST", body: { professionSlugs, message, sessionId } });
+  return api<AranduChatReply>("/arandu/chat", { method: "POST", body: { professionSlugs, message, sessionId, choices } });
 }
 
 export async function getCareerPaths(slug: string): Promise<CareerPaths> {
@@ -54,11 +59,6 @@ export async function getCareerPaths(slug: string): Promise<CareerPaths> {
 export async function getStop(disciplineId: number, topic: number): Promise<StopContent> {
   if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a stop");
   return stopContent(disciplineId, topic);
-}
-
-export async function saveStopResult(disciplineId: number, topic: number, mistakes: number): Promise<StopResult> {
-  if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a stop");
-  return api<StopResult>(`/stops/${disciplineId}/${topic}/result`, { method: "POST", body: { mistakes } });
 }
 
 /** O20: whether the person still has to link Google (O21), or already came in with it. */
