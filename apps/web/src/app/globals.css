@@ -16,6 +16,11 @@
   padding-left: env(safe-area-inset-left);
 }
 /* A phone without a home bar still gets the nav's bottom padding. */
+/* The app column: the screen's height, or what the keyboard leaves of it (--vvh, set by FitViewport). */
+@utility h-app {
+  height: min(100dvh, calc(var(--vvh, 100000) * 1px));
+}
+
 @utility pb-safe {
   padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
 }
