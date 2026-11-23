@@ -9,6 +9,8 @@
 const LINT_CONFIG = /eslint\.config\.|\.oxlintrc\.json/;
 // True when the command unsets core.hooksPath or gives it any value but exactly .githooks (quoted or not).
 // Reading it (`git config core.hooksPath`, no value after it) is fine.
+// A guard against accidental skips, not a security boundary: it reads only the command text, so a key split by
+// quotes (core.hooks""Path) or a direct write to .git/config gets past it. The merge review is the hard control.
 function overridesHooksPath(command) {
   if (/--unset(-all)?\s+core\.hookspath|--remove-section\s+core(\s|$)/i.test(command)) return true;
   const name = /core\.hookspath/gi;
@@ -20,7 +22,9 @@ function overridesHooksPath(command) {
     let value;
     if (quote) {
       const end = after.indexOf(quote, 1);
-      value = after.slice(1, end === -1 ? undefined : end);
+      // The shell glues whatever follows the closing quote onto the value (".githooks"x is .githooksx).
+      if (end === -1 || !/^([\s;&|)]|$)/.test(after.slice(end + 1))) return true;
+      value = after.slice(1, end);
     } else {
       value = /^[^\s;&|)`]*/.exec(after)[0];
       if (value === '' && !separator.includes('=')) continue;
