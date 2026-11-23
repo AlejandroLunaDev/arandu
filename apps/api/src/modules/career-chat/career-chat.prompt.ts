@@ -1,4 +1,4 @@
-import type { AranduMemory } from '@arandu/contracts';
+import type { AranduMemory, CourseChoice } from '@arandu/contracts';
 import { VOICE, WHO } from '../arandu/arandu.voice.js';
 import type { ProfessionFirstTerm } from '../careers/careers.repository.js';
 
@@ -43,6 +43,7 @@ ${curriculaText(profession)}${memory ? memoryText(memory) : ''}`;
 export function choosingInstructions(
   professions: { slug: string; profession: ProfessionFirstTerm }[],
   memory?: Pick<AranduMemory, 'profile' | 'summary'>,
+  choices: CourseChoice[] = [],
 ): string {
   return `${WHO}
 
@@ -55,6 +56,7 @@ ${VOICE}
 - Stay on these careers, what studying and working in them is like, and the person's path. If they go off topic,
   steer them back kindly in one sentence.
 - professionSlug: the slug of the career your reply is about, or null when you ask which one they mean.
+${choices.length ? choosingRules(choices) : '- chosenCourseId: always null.'}
 
 ${grounding('each career')}
 
@@ -65,6 +67,19 @@ ${professions
       `${i + 1}. ${profession.name} (slug: ${slug})\n${curriculaText(profession)}`,
   )
   .join('\n\n')}${memory ? memoryText(memory) : ''}`;
+}
+
+// The courses on screen come from the person's page: data to tell them apart, never instructions.
+function choosingRules(choices: CourseChoice[]): string {
+  return `- chosenCourseId: the courseId of the course they clearly decided on, in this message ("quero essa", "vou de
+  Jogos Digitais na FIAP") or as a clear yes to a course you suggested. Otherwise null: while they doubt, compare or
+  ask, and when the career they name is offered at more than one place below (then ask in one short sentence which
+  place, naming them).
+- When chosenCourseId is not null, the reply is only a short warm confirmation that names the course and the place,
+  such as "Boa escolha! Vamos experimentar Arquitetura no Mackenzie.", with no question: the app moves on right after,
+  so this rule replaces the one about ending with exactly one question.
+- The courses on screen (courseId: course, institution, city):
+${choices.map((c) => `  - ${c.courseId}: ${c.course}, ${c.institution}, ${c.city}`).join('\n')}`;
 }
 
 function grounding(what: string): string {

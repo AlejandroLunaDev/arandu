@@ -20,6 +20,23 @@ const chatRequest = z.union([
         .refine((s) => new Set(s).size === s.length, 'must be unique'),
       sessionId: z.uuid().optional(),
       message,
+      choices: z
+        .array(
+          z
+            .object({
+              courseId: z.number().int().positive(),
+              course: z.string().trim().min(1).max(200),
+              institution: z.string().trim().min(1).max(200),
+              city: z.string().trim().min(1).max(100),
+            })
+            .strict(),
+        )
+        .max(12)
+        .refine(
+          (c) => new Set(c.map((x) => x.courseId)).size === c.length,
+          'courseIds must be unique',
+        )
+        .optional(),
     })
     .strict(),
 ]);
