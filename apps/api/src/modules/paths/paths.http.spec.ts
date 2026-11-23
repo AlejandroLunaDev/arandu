@@ -7,12 +7,14 @@ import { JourneyRepository } from '../journey/journey.repository.js';
 import { PathsModule } from './paths.module.js';
 import { ProgressRepository } from '../progress/progress.repository.js';
 import { PathsRepository } from './paths.repository.js';
+import { lessonLocked } from './paths.errors.js';
 
 describe('paths and journey routes', () => {
   let app: INestApplication;
   const journey = { read: vi.fn(), update: vi.fn() };
   const progress = {
     finishes: vi.fn(),
+    achievements: vi.fn(),
     topicCounts: vi.fn(),
     questionTimes: vi.fn(),
     studyTimes: vi.fn(),
@@ -236,6 +238,27 @@ describe('paths and journey routes', () => {
       await server().post('/stops/7/1/lessons/1/result').send(body).expect(400);
 
       expect(paths.finishLesson).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST lesson result when an earlier lesson is not done', () => {
+    it('409s with lesson_locked', async () => {
+      paths.stopContent.mockResolvedValue({
+        topic: { index: 1 },
+        discipline: { id: 7 },
+        cards: [],
+        exercises: [],
+      });
+      paths.lessons.mockResolvedValue([]);
+      progress.achievements.mockResolvedValue([]);
+      paths.finishLesson.mockRejectedValue(lessonLocked());
+
+      const res = await server()
+        .post('/stops/7/1/lessons/3/result')
+        .send({ missed: [] })
+        .expect(409);
+
+      expect(res.body).toMatchObject({ error: { code: 'lesson_locked' } });
     });
   });
 

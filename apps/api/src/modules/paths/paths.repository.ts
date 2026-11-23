@@ -255,8 +255,9 @@ export class PathsRepository {
 
   /**
    * Records a finished lesson, in order: 409 `lesson_locked` while an earlier one is not done (none once the chapter
-   * was finished the old way). The first finish gives LESSON_SABEDORIA; lesson 4 also finishes the chapter, with its
-   * peixinhos. The patinha is the day's first lesson or stop. Achievements are added by the caller.
+   * was finished the old way). The first finish gives LESSON_SABEDORIA, none once the chapter is finished; lesson 4
+   * also finishes the chapter, with its peixinhos. The patinha is the day's first lesson or stop. Achievements are added
+   * by the caller.
    */
   async finishLesson(
     userId: string,
@@ -280,9 +281,11 @@ export class PathsRepository {
                 and (s.completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date) as studied`,
         );
         if (!finished && lesson > done + 1) throw lessonLocked();
+        // A chapter already finished (in one pass or in lessons) gave its sabedoria: its lessons are practice.
+        const sabedoria = finished ? 0 : LESSON_SABEDORIA;
         const inserted = await tx`
           insert into public.lesson_results (user_id, discipline_id, topic, lesson, missed, sabedoria)
-          values (${userId}, ${disciplineId}, ${topic}, ${lesson}, ${tx.json(missed as never)}, ${LESSON_SABEDORIA})
+          values (${userId}, ${disciplineId}, ${topic}, ${lesson}, ${tx.json(missed as never)}, ${sabedoria})
           on conflict do nothing returning 1`;
         if (!inserted.length)
           return {
@@ -315,7 +318,7 @@ export class PathsRepository {
           }
         }
         return {
-          sabedoria: LESSON_SABEDORIA,
+          sabedoria,
           peixinhos,
           patinha: !studied,
           chapterDone: lesson === LESSONS,
@@ -336,9 +339,16 @@ export class PathsRepository {
       return await this.sql.begin(async (tx) => {
         // One finish at a time per person, so two at once cannot both be "the first" of the day.
         await tx`select pg_advisory_xact_lock(hashtext(${userId}))`;
+        // Lessons of this chapter done first already gave part of its sabedoria.
+        const { earned } = one(
+          await tx<{ earned: number }[]>`
+          select coalesce(sum(sabedoria), 0)::int as earned from public.lesson_results
+          where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}`,
+        );
+        const sabedoria = Math.max(0, STOP_SABEDORIA - earned);
         const inserted = await tx`
           insert into public.stop_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
-          values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${relampagoMistakes}, ${STOP_SABEDORIA})
+          values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${relampagoMistakes}, ${sabedoria})
           on conflict do nothing returning 1`;
         if (!inserted.length)
           return { sabedoria: 0, peixinhos: 0, patinha: false };
@@ -354,7 +364,7 @@ export class PathsRepository {
             and (s.completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`,
         );
         return {
-          sabedoria: STOP_SABEDORIA,
+          sabedoria,
           peixinhos: STOP_PEIXINHOS,
           patinha: today === 1,
         };
