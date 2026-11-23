@@ -8,6 +8,7 @@ import type {
 import { AiService } from '@nestjs/ai';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import { isAbusive, SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { MemoryService } from '../memory/memory.service.js';
 import {
   boundProfile,
@@ -23,6 +24,17 @@ const onboardingTurn = z.object({
   reply: z.string(),
   quickReplies: z.array(z.string()),
 });
+
+const EMPTY_PROFILE: AranduProfile = {
+  situation: null,
+  likedSubjects: [],
+  hardSubjects: [],
+  interests: [],
+  workStyle: [],
+  admired: [],
+  careerIdea: null,
+  covered: [],
+};
 
 /** A cap on the onboarding: after this many answers it ends even with a topic left, so it never loops. */
 const MAX_ANSWERS = 10;
@@ -65,6 +77,16 @@ export class OnboardingService {
     );
     const said: ChatMessage = { role: 'user', content: message };
     const before = await this.memory.covered(sessionId);
+    // Nothing is recorded, so the next turn rebuilds the full profile from the history as if this one never happened.
+    if (isAbusive(message))
+      return {
+        sessionId,
+        reply: SAFE_REPLY,
+        quickReplies: [],
+        profile: { ...boundProfile(EMPTY_PROFILE), covered: before },
+        progress: { answered: before.length, total: TOPICS.length },
+        done: false,
+      };
     const turn = await this.turn([...history, said], before);
     await this.memory.recordTurn(
       sessionId,
@@ -107,9 +129,14 @@ export class OnboardingService {
     const profile = { ...read, covered };
     const answers = messages.filter((m) => m.role === 'user').length;
     const done = covered.length === TOPICS.length || answers >= MAX_ANSWERS;
+    // A replaced reply drops its quick replies too: they answered the question it no longer asks.
+    const safe = !isAbusive(object.reply);
     return {
-      reply: object.reply,
-      quickReplies: done ? [] : object.quickReplies.slice(0, 5),
+      reply: safe ? object.reply : SAFE_REPLY,
+      quickReplies:
+        done || !safe
+          ? []
+          : object.quickReplies.filter((q) => !isAbusive(q)).slice(0, 5),
       profile,
       progress: { answered: covered.length, total: TOPICS.length },
       done,

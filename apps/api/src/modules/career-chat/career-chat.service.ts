@@ -12,6 +12,7 @@ import {
   CareersRepository,
   type ProfessionFirstTerm,
 } from '../careers/careers.repository.js';
+import { isAbusive, SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { MemoryService } from '../memory/memory.service.js';
 import {
   careerChatInstructions,
@@ -50,6 +51,16 @@ export class CareerChatService {
     const { professionSlug, sessionId, message } = request;
     // The career is checked before a session is opened, so a wrong slug stores nothing.
     const profession = await this.career(professionSlug);
+    if (isAbusive(message))
+      return {
+        sessionId:
+          sessionId ??
+          (await this.memory.openSession(userId, 'career', professionSlug)),
+        reply: SAFE_REPLY,
+        sources: [],
+        professionSlug,
+        chosenCourseId: null,
+      };
     const history = sessionId
       ? await this.memory.history(
           userId,
@@ -96,6 +107,15 @@ export class CareerChatService {
         profession: await this.career(slug),
       })),
     );
+    if (isAbusive(message))
+      return {
+        sessionId:
+          sessionId ?? (await this.memory.openSession(userId, 'choosing')),
+        reply: SAFE_REPLY,
+        sources: [],
+        professionSlug: null,
+        chosenCourseId: null,
+      };
     const history = sessionId
       ? await this.memory.history(
           userId,
@@ -124,20 +144,20 @@ export class CareerChatService {
       ),
       messages: recent([...history, said]),
     });
-    await this.memory.record(id, [
-      said,
-      { role: 'assistant', content: object.reply },
-    ]);
+    const safe = !isAbusive(object.reply);
+    const reply = safe ? object.reply : SAFE_REPLY;
+    await this.memory.record(id, [said, { role: 'assistant', content: reply }]);
     const about = professions.find((p) => p.slug === object.professionSlug);
     return {
       sessionId: id,
-      reply: object.reply,
+      reply,
       sources: about ? sourcesOf(about.profession) : [],
       professionSlug: about ? about.slug : null,
-      // The model's pick is trusted only when it is one of the courses on screen.
-      chosenCourseId: choices.some((c) => c.courseId === object.chosenCourseId)
-        ? object.chosenCourseId
-        : null,
+      // The model's pick is trusted only when it is one of the courses on screen, and its reply confirms it.
+      chosenCourseId:
+        safe && choices.some((c) => c.courseId === object.chosenCourseId)
+          ? object.chosenCourseId
+          : null,
     };
   }
 
@@ -163,7 +183,10 @@ export class CareerChatService {
       instructions: careerChatInstructions(profession, memory),
       messages: recent(messages),
     });
-    return { reply: text, sources: sourcesOf(profession) };
+    return {
+      reply: isAbusive(text) ? SAFE_REPLY : text,
+      sources: sourcesOf(profession),
+    };
   }
 }
 

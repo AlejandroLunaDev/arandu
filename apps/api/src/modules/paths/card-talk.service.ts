@@ -2,6 +2,7 @@ import type { AskReply, ExplainReply, StopContent } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
+import { isAbusive, SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { askInstructions, explainInstructions } from './card-talk.prompt.js';
 import { PathsRepository } from './paths.repository.js';
 import {
@@ -44,6 +45,11 @@ export class CardTalkService {
       (e) => e.kind === 'explique_para_o_arandu',
     );
     if (exercise?.kind !== 'explique_para_o_arandu') throw explainNotFound();
+    if (isAbusive(answer))
+      return {
+        ideas: exercise.ideas.map((text) => ({ text, got: false })),
+        reply: SAFE_REPLY,
+      };
     const { object } = await this.ai.generateObject({
       label: 'arandu-explain',
       schema: z.object({ got: z.array(z.boolean()), reply: z.string().min(1) }),
@@ -61,7 +67,7 @@ export class CardTalkService {
         text,
         got: object.got[i] === true,
       })),
-      reply: object.reply,
+      reply: isAbusive(object.reply) ? SAFE_REPLY : object.reply,
     };
   }
 
@@ -72,6 +78,8 @@ export class CardTalkService {
     question: string,
   ): Promise<AskReply> {
     const content = await this.content(disciplineId, topic);
+    // Not saved: an abusive question never becomes part of the stop's history.
+    if (isAbusive(question)) return { reply: SAFE_REPLY, sources: [] };
     const cards = content.cards
       .map(
         (c, i) =>
@@ -84,8 +92,9 @@ export class CardTalkService {
       prompt: question,
       maxOutputTokens: 400,
     });
-    const reply = text.trim();
-    if (!reply) throw aranduUnavailable();
+    const said = text.trim();
+    if (!said) throw aranduUnavailable();
+    const reply = isAbusive(said) ? SAFE_REPLY : said;
     await this.paths.saveQuestion(userId, disciplineId, topic, question, reply);
     return {
       reply,
