@@ -26,28 +26,38 @@ const BLOCKED = [
   'vai tomar no cu',
 ].map(normalize);
 
-// Word starts that say the person is hurting or telling what is done to them ("me chamam de viado", "quero morrer"):
-// such a message reaches the model even with a blocked word, so the crisis rule in VOICE answers it.
+// Word starts that may mean the person is hurting or telling what is done to them ("me chamam de viado", "não quero
+// mais viver"): such a message reaches the model even with a blocked word, so the crisis rule in VOICE answers it.
+// Kept broad on purpose: a needless match only costs a model call (VOICE and the output check still hold), a missed
+// crisis leaves the person without the CVV.
 const DISTRESS = [
-  'morrer',
-  'morte',
-  'me matar',
+  'morr',
+  'mort',
+  'matar',
+  'me mat',
+  'viver',
+  'vida',
   'suicid',
   'sumir',
-  'me cortar',
-  'me machuc',
-  'nao aguento',
-  'me bate',
-  'me bateu',
-  'bate em mim',
+  'desaparec',
+  'acabar com tudo',
+  'enforc',
+  'cort',
+  'machuc',
+  'aguent',
+  'bat',
   'apanh',
   'agred',
   'abus',
   'estupr',
-  'me chama',
-  'me chamou',
-  'me xing',
-  'bullying',
+  'humilh',
+  'cham',
+  'xing',
+  'bully',
+  'sozinh',
+  'triste',
+  'depress',
+  'chor',
 ].map(normalize);
 
 const LEET: Record<string, string> = {

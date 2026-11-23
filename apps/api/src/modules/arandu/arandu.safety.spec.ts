@@ -57,6 +57,26 @@ describe('blocksMessage', () => {
     expect(blocksMessage(text)).toBe(false);
   });
 
+  it.each([
+    'sou um viado nojento, não quero mais viver',
+    'sou um otário, quero tirar minha vida',
+    'queria estar morto, sou um babaca',
+    'tô me cortando, sou uma vadia',
+    'vou acabar com tudo, sou um corno',
+    'quero me enforcar, arrombado',
+    'quero desaparecer, viado',
+    'me humilham de viado',
+  ])('is false for the crisis message %s', (text) =>
+    expect(blocksMessage(text)).toBe(false),
+  );
+
+  it.each([
+    'vai tomar no cu',
+    'seu otário de merda',
+    'arandu seu corno',
+    'boiola',
+  ])('is true for %s', (text) => expect(blocksMessage(text)).toBe(true));
+
   // "foda se" is no longer blocked, so this one never reaches the distress check.
   it('is false for Foda-se, não aguento mais, quero morrer', () => {
     expect(blocksMessage('Foda-se, não aguento mais, quero morrer')).toBe(

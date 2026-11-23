@@ -163,6 +163,19 @@ describe('POST /arandu/onboarding', () => {
     expect(memory.saveCovered).not.toHaveBeenCalled();
   });
 
+  it('repeats the last real question, not a stored safe line', async () => {
+    await start();
+    memory.sessionMessages.mockResolvedValue([
+      { role: 'assistant', content: 'Oi, o que você faz?' },
+      { role: 'user', content: 'seu viado' },
+      { role: 'assistant', content: SAFE_REPLY },
+    ]);
+
+    const res = await answer('seu viado').expect(200);
+
+    expect(res.body.reply).toBe(`${SAFE_LEAD} Oi, o que você faz?`);
+  });
+
   it('falls back to the whole safe reply when the history has no assistant message', async () => {
     await start();
 

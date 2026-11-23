@@ -85,7 +85,10 @@ export class OnboardingService {
     // Nothing is recorded, so the next turn rebuilds the full profile from the history as if this one never happened.
     // Arandu asks the step's question again; its quick replies were not stored, so the person writes the answer.
     if (blocksMessage(message)) {
-      const asked = history.findLast((m) => m.role === 'assistant')?.content;
+      // The last real question: a stored safe line is skipped, so it never repeats itself.
+      const asked = history.findLast(
+        (m) => m.role === 'assistant' && !m.content.startsWith(SAFE_LEAD),
+      )?.content;
       return {
         sessionId,
         reply: asked ? `${SAFE_LEAD} ${asked}` : SAFE_REPLY,
