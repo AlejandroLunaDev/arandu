@@ -29,7 +29,7 @@ export async function rereadStop(disciplineId: number, topic: number): Promise<W
   }
 }
 
-/** P6: full novelos for peixinhos; null when there are not enough of them. */
+/** P6: one novelo for peixinhos, at today's price; null when the API refuses (too few peixinhos, or novelos left). */
 export async function refillNovelos(): Promise<Wallet | null> {
   try {
     return await api<Wallet>("/me/shop/novelos", { method: "POST" });

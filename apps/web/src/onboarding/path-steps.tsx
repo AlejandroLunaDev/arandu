@@ -125,7 +125,7 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
           <Image src="/img/props/yarn.webp" alt="" width={46} height={46} />
           <div>
             <strong>Novelos</strong>
-            <span>Errou, gasta um. Eles voltam com o tempo. Nesta amostra, errar não gasta.</span>
+            <span>São 3 por dia: errou, gasta um. Eles voltam à meia-noite. Nesta amostra, errar não gasta.</span>
           </div>
         </div>
         <div className={p.row}>
