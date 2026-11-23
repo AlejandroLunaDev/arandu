@@ -47,7 +47,7 @@ describe('blocksMessage', () => {
     expect(blocksMessage(text)).toBe(true),
   );
 
-  // A blocked word beside a sign of distress is still abusive, but the person is heard, not blocked.
+  // A blocked word beside any word that is neither blocked nor filler is still abusive, but the message reaches the model.
   it.each([
     'Na escola me chamam de viado… quero sumir',
     'Meu padrasto me chama de vagabunda e me bate',
@@ -71,6 +71,11 @@ describe('blocksMessage', () => {
   );
 
   it.each([
+    'v1ad00',
+    'VIADOOOO',
+    'vai tomar no cu otario',
+    'seu babaca',
+    'porra arandu seu corno',
     'vai tomar no cu',
     'seu otário de merda',
     'arandu seu corno',
@@ -81,7 +86,7 @@ describe('blocksMessage', () => {
     'filho da puta',
   ])('is true for %s', (text) => expect(blocksMessage(text)).toBe(true));
 
-  // A crisis or a person talking about themselves, even short, reaches the model: no list holds every way to say it.
+  // A crisis or a person talking about themselves, even short, has a word that is neither blocked nor filler, so it reaches the model.
   it.each([
     'quero me jogar do prédio, sou um lixo viado',
     'vou pular da janela, sou uma vadia',
@@ -100,7 +105,24 @@ describe('blocksMessage', () => {
     expect(blocksMessage(text)).toBe(false),
   );
 
-  it('sends a long insult with no distress or self word to the model', () => {
+  // Any word that is neither blocked nor filler sends the message to the model, however short.
+  it.each([
+    'vou pular do prédio',
+    'vou pular da janela',
+    'tomei remédio demais',
+    'queria nunca ter nascido',
+    'vou pular da ponte',
+    'tomei os remédios',
+    'vou tomar veneno',
+    'vou acabar com isso',
+    'tchau pra sempre',
+    'tô sangrando',
+    'já escrevi a carta',
+  ])('is false for the short crisis message "%s, babaca"', (text) =>
+    expect(blocksMessage(`${text}, babaca`)).toBe(false),
+  );
+
+  it('sends a long insult with a word that is neither blocked nor filler to the model', () => {
     const text = 'vai tomar no cu seu gato preto idiota';
     expect(isAbusive(text)).toBe(true);
     expect(blocksMessage(text)).toBe(false);

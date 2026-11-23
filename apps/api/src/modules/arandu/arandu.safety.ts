@@ -26,40 +26,6 @@ const BLOCKED = [
   'vai tomar no cu',
 ].map(normalize);
 
-// Word starts that may mean the person is hurting or telling what is done to them ("me chamam de viado", "não quero
-// mais viver"): such a message reaches the model even with a blocked word, so the crisis rule in VOICE answers it.
-// Kept broad on purpose: a needless match only costs a model call (VOICE and the output check still hold), a missed
-// crisis leaves the person without the CVV.
-const DISTRESS = [
-  'morr',
-  'mort',
-  'matar',
-  'me mat',
-  'viver',
-  'vida',
-  'suicid',
-  'sumir',
-  'desaparec',
-  'acabar com tudo',
-  'enforc',
-  'cort',
-  'machuc',
-  'aguent',
-  'bat',
-  'apanh',
-  'agred',
-  'abus',
-  'estupr',
-  'humilh',
-  'cham',
-  'xing',
-  'bully',
-  'sozinh',
-  'triste',
-  'depress',
-  'chor',
-].map(normalize);
-
 const LEET: Record<string, string> = {
   '0': 'o',
   '1': 'i',
@@ -89,37 +55,52 @@ export function isAbusive(text: string): boolean {
   return BLOCKED.some((w) => words.includes(` ${w} `));
 }
 
-/** A message this short with a blocked word is the insult itself; anything longer may be telling something. */
-const MAX_BLOCKED_WORDS = 5;
-
-// Whole words of a person talking about themselves ("me odeio, viado", "sou um lixo"): an insult aims at someone else.
-const SELF = [
-  'me',
-  'eu',
-  'sou',
-  'mim',
-  'comigo',
-  'meu',
-  'minha',
-  'ninguem',
-  'lixo',
-  'odeio',
-  'quero',
-  'nao',
-].map(normalize);
+// The words a bare insult is made of besides the blocked ones: how it addresses Arandu and fills the sentence.
+const FILLER = [
+  'seu',
+  'sua',
+  'voce',
+  'vc',
+  'tu',
+  'e',
+  'eh',
+  'um',
+  'uma',
+  'o',
+  'a',
+  'de',
+  'do',
+  'da',
+  'que',
+  'q',
+  'mais',
+  'muito',
+  'mt',
+  'arandu',
+  'gato',
+  'merda',
+  'porra',
+  'caralho',
+  'ei',
+  'oi',
+  'ai',
+];
+const INSULT_WORDS = new Set([
+  ...FILLER.map(normalize),
+  ...BLOCKED.flatMap((w) => w.split(' ')),
+]);
 
 /**
- * True when the person's message should skip the model: a short insult with no sign they are hurting. No list can
- * hold every way to say a crisis, so every longer message reaches the model and VOICE's crisis rule.
+ * True when the person's message should skip the model: a bare insult, every word a blocked one or filler. No list
+ * can hold every way to say a crisis, so any other word ("vou pular da ponte, babaca") sends it to the model and
+ * VOICE's crisis rule.
  */
 export function blocksMessage(text: string): boolean {
-  const normalized = normalize(text);
-  const words = ` ${normalized} `;
   return (
-    normalized.split(' ').length <= MAX_BLOCKED_WORDS &&
     isAbusive(text) &&
-    !DISTRESS.some((w) => words.includes(` ${w}`)) &&
-    !SELF.some((w) => words.includes(` ${w} `))
+    normalize(text)
+      .split(' ')
+      .every((w) => INSULT_WORDS.has(w))
   );
 }
 
