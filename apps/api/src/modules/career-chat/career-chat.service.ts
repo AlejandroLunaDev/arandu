@@ -12,6 +12,11 @@ import {
   CareersRepository,
   type ProfessionFirstTerm,
 } from '../careers/careers.repository.js';
+import {
+  blocksMessage,
+  isAbusive,
+  SAFE_REPLY,
+} from '../arandu/arandu.safety.js';
 import { MemoryService } from '../memory/memory.service.js';
 import {
   careerChatInstructions,
@@ -62,6 +67,15 @@ export class CareerChatService {
     const id =
       sessionId ??
       (await this.memory.openSession(userId, 'career', professionSlug));
+    // After history, which checks the session is theirs; nothing is recorded.
+    if (blocksMessage(message))
+      return {
+        sessionId: id,
+        reply: SAFE_REPLY,
+        sources: [],
+        professionSlug,
+        chosenCourseId: null,
+      };
 
     const said: ChatMessage = { role: 'user', content: message };
     const { reply, sources } = await this.reply(profession, {
@@ -105,6 +119,14 @@ export class CareerChatService {
         )
       : [];
     const id = sessionId ?? (await this.memory.openSession(userId, 'choosing'));
+    if (blocksMessage(message))
+      return {
+        sessionId: id,
+        reply: SAFE_REPLY,
+        sources: [],
+        professionSlug: null,
+        chosenCourseId: null,
+      };
 
     const said: ChatMessage = { role: 'user', content: message };
     const { object } = await this.ai.generateObject({
@@ -124,20 +146,20 @@ export class CareerChatService {
       ),
       messages: recent([...history, said]),
     });
-    await this.memory.record(id, [
-      said,
-      { role: 'assistant', content: object.reply },
-    ]);
+    const safe = !isAbusive(object.reply);
+    const reply = safe ? object.reply : SAFE_REPLY;
+    await this.memory.record(id, [said, { role: 'assistant', content: reply }]);
     const about = professions.find((p) => p.slug === object.professionSlug);
     return {
       sessionId: id,
-      reply: object.reply,
+      reply,
       sources: about ? sourcesOf(about.profession) : [],
       professionSlug: about ? about.slug : null,
-      // The model's pick is trusted only when it is one of the courses on screen.
-      chosenCourseId: choices.some((c) => c.courseId === object.chosenCourseId)
-        ? object.chosenCourseId
-        : null,
+      // The model's pick is trusted only when it is one of the courses on screen, and its reply confirms it.
+      chosenCourseId:
+        safe && choices.some((c) => c.courseId === object.chosenCourseId)
+          ? object.chosenCourseId
+          : null,
     };
   }
 
@@ -163,7 +185,10 @@ export class CareerChatService {
       instructions: careerChatInstructions(profession, memory),
       messages: recent(messages),
     });
-    return { reply: text, sources: sourcesOf(profession) };
+    return {
+      reply: isAbusive(text) ? SAFE_REPLY : text,
+      sources: sourcesOf(profession),
+    };
   }
 }
 

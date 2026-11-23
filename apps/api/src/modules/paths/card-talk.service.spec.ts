@@ -1,6 +1,7 @@
 import type { StopContent } from '@arandu/contracts';
 import type { AiService } from '@nestjs/ai';
 import { NotFoundException } from '@nestjs/common';
+import { SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { CardTalkService } from './card-talk.service.js';
 import type { PathsRepository } from './paths.repository.js';
 
@@ -93,6 +94,29 @@ describe('CardTalkService', () => {
       });
     });
 
+    it('an abusive answer gets the safe reply and no idea, without calling the model', async () => {
+      await expect(service.explain(7, 1, 'V1@D0')).resolves.toEqual({
+        ideas: [
+          { text: 'i1', got: false },
+          { text: 'i2', got: false },
+          { text: 'i3', got: false },
+        ],
+        reply: SAFE_REPLY,
+      });
+      expect(ai.generateObject).not.toHaveBeenCalled();
+    });
+
+    it('an abusive model reply is replaced, keeping the verdicts', async () => {
+      ai.generateObject.mockResolvedValue({
+        object: { got: [true, false, true], reply: 'seu babaca' },
+      });
+
+      const { ideas, reply } = await service.explain(7, 1, 'a');
+
+      expect(reply).toBe(SAFE_REPLY);
+      expect(ideas.map((i) => i.got)).toEqual([true, false, true]);
+    });
+
     it('an idea the model left out counts as not got', async () => {
       ai.generateObject.mockResolvedValue({
         object: { got: [true], reply: 'r' },
@@ -162,6 +186,30 @@ describe('CardTalkService', () => {
       expect(call.prompt).toBe('Por que?');
       expect(call.instructions).toContain('Derivadas');
       expect(call.instructions).toContain('x2');
+    });
+
+    it('an abusive question gets the safe reply, without calling the model or saving', async () => {
+      await expect(service.ask('u', 7, 1, 'vai se foder')).resolves.toEqual({
+        reply: SAFE_REPLY,
+        sources: [],
+      });
+      expect(ai.generateText).not.toHaveBeenCalled();
+      expect(paths.saveQuestion).not.toHaveBeenCalled();
+    });
+
+    it('an abusive model reply is replaced, and the replacement is what is saved', async () => {
+      ai.generateText.mockResolvedValue({ text: ' arrombado ' });
+
+      const { reply } = await service.ask('u', 7, 1, 'Por que?');
+
+      expect(reply).toBe(SAFE_REPLY);
+      expect(paths.saveQuestion).toHaveBeenCalledWith(
+        'u',
+        7,
+        1,
+        'Por que?',
+        SAFE_REPLY,
+      );
     });
 
     it.each([
