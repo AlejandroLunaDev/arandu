@@ -11,8 +11,10 @@ export function FitViewport() {
     if (!view) return;
     const root = document.documentElement;
     const fit = () => {
+      // Zoomed in, the visible height is the zoomed one: the app keeps its size and the zoom pans over it.
+      if (Math.abs(view.scale - 1) >= 0.01) return;
       root.style.setProperty("--vvh", String(view.height));
-      if (Math.abs(view.scale - 1) < 0.01 && window.scrollY !== 0) window.scrollTo(0, 0);
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
     };
     fit();
     view.addEventListener("resize", fit);

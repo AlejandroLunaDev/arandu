@@ -178,6 +178,11 @@
 }
 
 /* A question's footer holds only an error, if any: going on lives in the composer. */
+/* Last on the screen (no composer under it): clear of the iPhone's home bar. */
+.foot:last-child {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
 .foot:empty {
   display: none;
 }
