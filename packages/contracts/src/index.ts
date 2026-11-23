@@ -147,7 +147,16 @@ export type AranduChatRequest =
       professionSlugs: string[];
       sessionId?: string;
       message: string;
+      /** The courses on screen (up to 12, unique courseIds, from CareerOption.offerings), so Arandu can tell them apart by place. */
+      choices?: CourseChoice[];
     };
+
+export interface CourseChoice {
+  courseId: number;
+  course: string;
+  institution: string;
+  city: string;
+}
 
 export interface AranduChatReply {
   sessionId: string;
@@ -156,6 +165,11 @@ export interface AranduChatReply {
   sources: Source[];
   /** The career the reply is about; null when Arandu asked which one they mean (only with professionSlugs). */
   professionSlug: string | null;
+  /**
+   * One of the sent choices once the person clearly decided on it; the reply is then a short confirmation and the
+   * web moves on. Null while they doubt, ask, or name a career offered at several places (Arandu asks which).
+   */
+  chosenCourseId: number | null;
 }
 
 /** The onboarding's topics, one question each (docs/05-functional-map.md S1). */

@@ -70,7 +70,13 @@ export class CareerChatService {
       memory: await this.memory.read(userId),
     });
     await this.memory.record(id, [said, { role: 'assistant', content: reply }]);
-    return { sessionId: id, reply, sources, professionSlug };
+    return {
+      sessionId: id,
+      reply,
+      sources,
+      professionSlug,
+      chosenCourseId: null,
+    };
   }
 
   /** O10: Arandu among the recommended careers, answering about the one the person names or points to. */
@@ -80,6 +86,7 @@ export class CareerChatService {
       professionSlugs,
       sessionId,
       message,
+      choices = [],
     }: Extract<AranduChatRequest, { professionSlugs: string[] }>,
   ): Promise<AranduChatReply> {
     // Every career is checked before a session is opened, so a wrong slug stores nothing.
@@ -102,16 +109,18 @@ export class CareerChatService {
     const said: ChatMessage = { role: 'user', content: message };
     const { object } = await this.ai.generateObject({
       label: 'arandu-choosing',
-      // The career comes first, so the model decides what it talks about before it writes.
+      // The career and the choice come first, so the model decides what it talks about before it writes.
       schema: z.object({
         professionSlug: z
           .enum(professionSlugs as [string, ...string[]])
           .nullable(),
+        chosenCourseId: z.number().int().nullable(),
         reply: z.string().min(1),
       }),
       instructions: choosingInstructions(
         professions,
         await this.memory.read(userId),
+        choices,
       ),
       messages: recent([...history, said]),
     });
@@ -125,6 +134,10 @@ export class CareerChatService {
       reply: object.reply,
       sources: about ? sourcesOf(about.profession) : [],
       professionSlug: about ? about.slug : null,
+      // The model's pick is trusted only when it is one of the courses on screen.
+      chosenCourseId: choices.some((c) => c.courseId === object.chosenCourseId)
+        ? object.chosenCourseId
+        : null,
     };
   }
 
