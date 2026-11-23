@@ -7,18 +7,24 @@ import { JourneyRepository } from '../journey/journey.repository.js';
 import { PathsModule } from './paths.module.js';
 import { ProgressRepository } from '../progress/progress.repository.js';
 import { PathsRepository } from './paths.repository.js';
+import { lessonLocked } from './paths.errors.js';
 
 describe('paths and journey routes', () => {
   let app: INestApplication;
   const journey = { read: vi.fn(), update: vi.fn() };
   const progress = {
     finishes: vi.fn(),
+    achievements: vi.fn(),
     topicCounts: vi.fn(),
     questionTimes: vi.fn(),
+    studyTimes: vi.fn(),
   };
   const paths = {
     careerPaths: vi.fn(),
     discipline: vi.fn(),
+    lessons: vi.fn(),
+    chapterFinished: vi.fn(),
+    finishLesson: vi.fn(),
     madeCount: vi.fn(),
     stopContent: vi.fn(),
     saveStopContent: vi.fn(),
@@ -38,6 +44,7 @@ describe('paths and journey routes', () => {
     progress.finishes.mockResolvedValue([]);
     progress.topicCounts.mockResolvedValue(new Map());
     progress.questionTimes.mockResolvedValue([]);
+    progress.studyTimes.mockResolvedValue([]);
     paths.finishStop.mockResolvedValue({
       sabedoria: 15,
       peixinhos: 5,
@@ -201,6 +208,57 @@ describe('paths and journey routes', () => {
         .expect(404);
 
       expect(paths.finishStop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('lesson routes', () => {
+    it.each(['0', '5', 'abc'])('GET lesson %s 404s', async (n) => {
+      await server().get(`/stops/7/1/lessons/${n}`).expect(404);
+
+      expect(paths.lessons).not.toHaveBeenCalled();
+    });
+
+    it.each(['0', '5'])('POST lesson %s result 404s', async (n) => {
+      await server()
+        .post(`/stops/7/1/lessons/${n}/result`)
+        .send({ missed: [] })
+        .expect(404);
+
+      expect(paths.finishLesson).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an unknown key', { missed: [], extra: 1 }],
+      ['an unknown key in a miss', { missed: [{ topic: 0, index: 0, x: 1 }] }],
+      ['no missed', {}],
+      ['index 100', { missed: [{ topic: 0, index: 100 }] }],
+      ['topic 201', { missed: [{ topic: 201, index: 0 }] }],
+      ['51 misses', { missed: Array(51).fill({ topic: 0, index: 0 }) }],
+    ])('POST result 400s for %s', async (_, body) => {
+      await server().post('/stops/7/1/lessons/1/result').send(body).expect(400);
+
+      expect(paths.finishLesson).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST lesson result when an earlier lesson is not done', () => {
+    it('409s with lesson_locked', async () => {
+      paths.stopContent.mockResolvedValue({
+        topic: { index: 1 },
+        discipline: { id: 7 },
+        cards: [],
+        exercises: [],
+      });
+      paths.lessons.mockResolvedValue([]);
+      progress.achievements.mockResolvedValue([]);
+      paths.finishLesson.mockRejectedValue(lessonLocked());
+
+      const res = await server()
+        .post('/stops/7/1/lessons/3/result')
+        .send({ missed: [] })
+        .expect(409);
+
+      expect(res.body).toMatchObject({ error: { code: 'lesson_locked' } });
     });
   });
 

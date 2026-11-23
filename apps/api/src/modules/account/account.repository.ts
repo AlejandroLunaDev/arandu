@@ -8,6 +8,7 @@ const PERSON_TABLES = [
   'arandu_facts',
   'arandu_sessions',
   'stop_results',
+  'lesson_results',
   'stop_questions',
   'stop_rereads',
   'book_reflections',

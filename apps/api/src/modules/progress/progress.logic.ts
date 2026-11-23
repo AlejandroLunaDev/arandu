@@ -69,6 +69,8 @@ export function achievementsOf(
   finishes: Finish[],
   topicsOf: Map<number, number>,
   questionTimes: Date[] = [],
+  /** Every stop or lesson finished, oldest first: the days studied. */
+  studied: { completedAt: Date; day: string }[] = finishes,
 ): Achievement[] {
   const earned: Achievement[] = [];
   const at = (date: Date) => date.toISOString();
@@ -86,7 +88,7 @@ export function achievementsOf(
   // Seven days in a row: earned on the first finish of the seventh day.
   let run = 0;
   let previous: string | null = null;
-  for (const finish of finishes) {
+  for (const finish of studied) {
     if (finish.day === previous) continue;
     run = previous && addDays(previous, 1) === finish.day ? run + 1 : 1;
     previous = finish.day;

@@ -1,4 +1,14 @@
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+
+export const lessonLocked = () =>
+  new ConflictException({
+    code: 'lesson_locked',
+    message: 'Finish the lessons before this one first',
+  });
 
 export const careerNotFound = () =>
   new NotFoundException({

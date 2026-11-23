@@ -8,6 +8,7 @@ import { Injectable } from '@nestjs/common';
 import { achievementsOf, addDays } from './progress.logic.js';
 import { ProgressRepository } from './progress.repository.js';
 import { subjectNotFound } from './progress.errors.js';
+import { LESSONS } from '../paths/lessons.logic.js';
 
 /** The home (S1, K1), each book's path (P1, K3) and the achievements (K4), all derived from the stops finished. */
 @Injectable()
@@ -15,30 +16,39 @@ export class ProgressService {
   constructor(private readonly progress: ProgressRepository) {}
 
   async achievements(userId: string): Promise<Achievement[]> {
-    const [finishes, questions] = await Promise.all([
+    const [finishes, questions, studied] = await Promise.all([
       this.progress.finishes(userId),
       this.progress.questionTimes(userId),
+      this.progress.studyTimes(userId),
     ]);
     const topics = await this.progress.topicCounts([
       ...new Set(finishes.map((f) => f.disciplineId)),
     ]);
-    return achievementsOf(finishes, topics, questions);
+    return achievementsOf(finishes, topics, questions, studied);
   }
 
   async home(userId: string): Promise<Home> {
-    const [wallet, finishes, sabedoria, { today, monday }, journey, questions] =
-      await Promise.all([
-        this.progress.wallet(userId),
-        this.progress.finishes(userId),
-        this.progress.sabedoria(userId),
-        this.progress.calendar(),
-        this.progress.journey(userId),
-        this.progress.questionTimes(userId),
-      ]);
+    const [
+      wallet,
+      finishes,
+      sabedoria,
+      { today, monday },
+      journey,
+      questions,
+      studied,
+    ] = await Promise.all([
+      this.progress.wallet(userId),
+      this.progress.finishes(userId),
+      this.progress.sabedoria(userId),
+      this.progress.calendar(),
+      this.progress.journey(userId),
+      this.progress.questionTimes(userId),
+      this.progress.studyTimes(userId),
+    ]);
     const topics = await this.progress.topicCounts([
       ...new Set(finishes.map((f) => f.disciplineId)),
     ]);
-    const studiedDays = new Set(finishes.map((f) => f.day));
+    const studiedDays = new Set(studied.map((f) => f.day));
     const days = Array.from({ length: 7 }, (_, i) => {
       const date = addDays(monday, i);
       return { date, studied: date <= today && studiedDays.has(date) };
@@ -67,9 +77,9 @@ export class ProgressService {
         studied: days.filter((d) => d.studied).length,
         goal: journey.weeklyGoal,
       },
-      lastStudiedOn: finishes.at(-1)?.day ?? null,
+      lastStudiedOn: studied.at(-1)?.day ?? null,
       current,
-      achievements: achievementsOf(finishes, topics, questions),
+      achievements: achievementsOf(finishes, topics, questions, studied),
     };
   }
 
@@ -114,14 +124,17 @@ export class ProgressService {
         .filter((f) => f.disciplineId === disciplineId)
         .map((f) => f.topic),
     );
+    const lessons = await this.progress.lessonsDone(userId, disciplineId);
     let currentFound = false;
     return {
       discipline: { id: discipline.id, name: discipline.name },
       stops: discipline.topics.map((text, index) => {
-        if (done.has(index)) return { index, text, state: 'done' };
-        if (currentFound) return { index, text, state: 'locked' };
+        if (done.has(index))
+          return { index, text, state: 'done', lessonsDone: LESSONS };
+        const lessonsDone = lessons.get(index) ?? 0;
+        if (currentFound) return { index, text, state: 'locked', lessonsDone };
         currentFound = true;
-        return { index, text, state: 'current' };
+        return { index, text, state: 'current', lessonsDone };
       }),
     };
   }

@@ -1,6 +1,7 @@
 import type {
   CareerPath,
   CareerPaths,
+  LessonResult,
   StopCard,
   StopContent,
   StopResult,
@@ -9,14 +10,25 @@ import { Inject, Injectable } from '@nestjs/common';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../../core/database/database.module.js';
 
-/** Sabedoria a finished stop gives (demo value). */
+/** Sabedoria a stop finished in one pass gives (demo value); in lessons it comes LESSON_SABEDORIA at a time. */
 export const STOP_SABEDORIA = 15;
 
-/** Peixinhos a finished stop gives (demo value). */
+/** Peixinhos a finished stop or chapter gives (demo value). */
 export const STOP_PEIXINHOS = 10;
 
-import { madeStops, TIME_ZONE } from '../progress/progress.repository.js';
+import {
+  asPerson,
+  madeStops,
+  sabedoriaRows,
+  TIME_ZONE,
+} from '../progress/progress.repository.js';
 import { one } from '../../core/database/one.js';
+import {
+  type ExerciseRef,
+  LESSON_SABEDORIA,
+  LESSONS,
+} from './lessons.logic.js';
+import { lessonLocked } from './paths.errors.js';
 
 export interface Discipline {
   id: number;
@@ -204,6 +216,117 @@ export class PathsRepository {
     }
   }
 
+  /** The person's finished lessons of a chapter, in order, with what they missed. */
+  async lessons(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+  ): Promise<{ lesson: number; missed: ExerciseRef[] }[]> {
+    return this.sql<{ lesson: number; missed: ExerciseRef[] }[]>`
+      select lesson, missed from public.lesson_results
+      where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic} order by lesson`;
+  }
+
+  /** Whether the person finished the chapter, in lessons or in one pass. */
+  async chapterFinished(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+  ): Promise<boolean> {
+    const [row] = await this.sql`
+      select 1 from public.stop_results
+      where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}`;
+    return row !== undefined;
+  }
+
+  /** What the person missed in lessons 1-3 of the subject's other chapters, newest first. */
+  async missedElsewhere(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+  ): Promise<ExerciseRef[]> {
+    const rows = await this.sql<{ missed: ExerciseRef[] }[]>`
+      select missed from public.lesson_results
+      where user_id = ${userId} and discipline_id = ${disciplineId} and topic <> ${topic} and lesson < ${LESSONS}
+        and jsonb_array_length(missed) > 0
+      order by completed_at desc limit 20`;
+    return rows.flatMap((r) => r.missed);
+  }
+
+  /**
+   * Records a finished lesson, in order: 409 `lesson_locked` while an earlier one is not done (none once the chapter
+   * was finished the old way). The first finish gives LESSON_SABEDORIA, none once the chapter is finished; lesson 4
+   * also finishes the chapter, with its peixinhos. The patinha is the day's first lesson or stop. Achievements are added
+   * by the caller.
+   */
+  async finishLesson(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    lesson: number,
+    missed: ExerciseRef[],
+  ): Promise<Omit<LessonResult, 'achievements'>> {
+    return asPerson(
+      this.sql.begin(async (tx) => {
+        await tx`select pg_advisory_xact_lock(hashtext(${userId}))`;
+        const { done, finished, studied } = one(
+          await tx<{ done: number; finished: boolean; studied: boolean }[]>`
+          select
+            (select count(*)::int from public.lesson_results
+              where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}) as done,
+            exists (select 1 from public.stop_results
+              where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}) as finished,
+            exists (select 1 from ${sabedoriaRows(tx)} s
+              where s.user_id = ${userId}
+                and (s.completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date) as studied`,
+        );
+        if (!finished && lesson > done + 1) throw lessonLocked();
+        // A chapter already finished (in one pass or in lessons) gave its sabedoria: its lessons are practice.
+        const sabedoria = finished ? 0 : LESSON_SABEDORIA;
+        const inserted = await tx`
+          insert into public.lesson_results (user_id, discipline_id, topic, lesson, missed, sabedoria)
+          values (${userId}, ${disciplineId}, ${topic}, ${lesson}, ${tx.json(missed as never)}, ${sabedoria})
+          on conflict do nothing returning 1`;
+        if (!inserted.length)
+          return {
+            sabedoria: 0,
+            peixinhos: 0,
+            patinha: false,
+            chapterDone: lesson === LESSONS,
+          };
+
+        let peixinhos = 0;
+        if (lesson === LESSONS) {
+          // The chapter's mistakes are the distinct exercises missed in lessons 1-3; the review plays the relâmpago.
+          const { mistakes } = one(
+            await tx<{ mistakes: number }[]>`
+            select count(distinct m.value)::int as mistakes from public.lesson_results r, jsonb_array_elements(r.missed) m
+            where r.user_id = ${userId} and r.discipline_id = ${disciplineId} and r.topic = ${topic}
+              and r.lesson < ${LESSONS}`,
+          );
+          const relampago = mistakes > 0 ? Math.min(missed.length, 100) : null;
+          const chapter = await tx`
+            insert into public.stop_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
+            values (${userId}, ${disciplineId}, ${topic}, ${Math.min(mistakes, 100)}, ${relampago}, 0)
+            on conflict do nothing returning 1`;
+          if (chapter.length) {
+            await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
+            await tx`
+              update public.wallets set peixinhos = peixinhos + ${STOP_PEIXINHOS}, updated_at = now()
+              where user_id = ${userId}`;
+            peixinhos = STOP_PEIXINHOS;
+          }
+        }
+        return {
+          sabedoria,
+          peixinhos,
+          patinha: !studied,
+          chapterDone: lesson === LESSONS,
+        };
+      }),
+    );
+  }
+
   /** Records a finished stop. Only the first finish counts: a replay gives nothing. Achievements are added by the caller. */
   async finishStop(
     userId: string,
@@ -216,9 +339,16 @@ export class PathsRepository {
       return await this.sql.begin(async (tx) => {
         // One finish at a time per person, so two at once cannot both be "the first" of the day.
         await tx`select pg_advisory_xact_lock(hashtext(${userId}))`;
+        // Lessons of this chapter done first already gave part of its sabedoria.
+        const { earned } = one(
+          await tx<{ earned: number }[]>`
+          select coalesce(sum(sabedoria), 0)::int as earned from public.lesson_results
+          where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}`,
+        );
+        const sabedoria = Math.max(0, STOP_SABEDORIA - earned);
         const inserted = await tx`
           insert into public.stop_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
-          values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${relampagoMistakes}, ${STOP_SABEDORIA})
+          values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${relampagoMistakes}, ${sabedoria})
           on conflict do nothing returning 1`;
         if (!inserted.length)
           return { sabedoria: 0, peixinhos: 0, patinha: false };
@@ -229,12 +359,12 @@ export class PathsRepository {
           where user_id = ${userId}`;
         const { today } = one(
           await tx<{ today: number }[]>`
-          select count(*)::int as today from public.stop_results
-          where user_id = ${userId}
-            and (completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`,
+          select count(*)::int as today from ${sabedoriaRows(tx)} s
+          where s.user_id = ${userId}
+            and (s.completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`,
         );
         return {
-          sabedoria: STOP_SABEDORIA,
+          sabedoria,
           peixinhos: STOP_PEIXINHOS,
           patinha: today === 1,
         };

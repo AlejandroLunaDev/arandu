@@ -1,5 +1,8 @@
 import type {
   Exercise,
+  Lesson,
+  LessonExercise,
+  LessonResult,
   StopCard,
   StopContent,
   StopResult,
@@ -15,7 +18,13 @@ import {
   exercisesInstructions,
   subjectCardsInstructions,
 } from './stop.prompt.js';
-import { stopNotFound, stopUnavailable } from './paths.errors.js';
+import { lessonLocked, stopNotFound, stopUnavailable } from './paths.errors.js';
+import {
+  type ExerciseRef,
+  LESSONS,
+  reviewRefs,
+  splitLessons,
+} from './lessons.logic.js';
 
 /** Topics whose cards one web search writes: the search is paid once for them, not once per stop. */
 export const TOPICS_PER_SEARCH = 6;
@@ -326,6 +335,98 @@ export class StopsService {
           .filter((code) => !before.has(code))
       : [];
     return { ...result, achievements };
+  }
+
+  /**
+   * One lesson of a chapter for this person (#123): lessons 1-3 split the stop's exercises in their own fixed order,
+   * lesson 4 reviews what they missed. 409 before the lessons ahead of it are done.
+   */
+  async lesson(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    index: number,
+  ): Promise<Lesson> {
+    const content = await this.stop(disciplineId, topic);
+    const done = await this.paths.lessons(userId, disciplineId, topic);
+    if (
+      index > done.length + 1 &&
+      !(await this.paths.chapterFinished(userId, disciplineId, topic))
+    )
+      throw lessonLocked();
+    const refs = await this.lessonRefs(userId, content, index, done);
+    const exercises: LessonExercise[] = [];
+    for (const ref of refs) {
+      const source =
+        ref.topic === topic
+          ? content
+          : await this.stop(disciplineId, ref.topic).catch(() => null);
+      const exercise = source?.exercises[ref.index];
+      if (exercise) exercises.push({ ...exercise, ...ref });
+    }
+    return {
+      index,
+      total: LESSONS,
+      cards: index === 1 ? content.cards : null,
+      exercises,
+    };
+  }
+
+  /** Records a lesson; only the misses that were in it count. Lesson 4 finishes the chapter. */
+  async finishLesson(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    index: number,
+    missed: ExerciseRef[],
+  ): Promise<LessonResult> {
+    const content = await this.stop(disciplineId, topic);
+    const done = await this.paths.lessons(userId, disciplineId, topic);
+    const inLesson = new Set(
+      (await this.lessonRefs(userId, content, index, done)).map(
+        (r) => `${r.topic}:${r.index}`,
+      ),
+    );
+    const kept = missed.filter((r) => inLesson.has(`${r.topic}:${r.index}`));
+    const before = new Set(
+      (await this.progress.achievements(userId)).map((a) => a.code),
+    );
+    const result = await this.paths.finishLesson(
+      userId,
+      disciplineId,
+      topic,
+      index,
+      [...new Map(kept.map((r) => [`${r.topic}:${r.index}`, r])).values()],
+    );
+    // Always compared: a practice lesson gives no sabedoria but its study day can still complete semana_de_patinhas.
+    const achievements = (await this.progress.achievements(userId))
+      .map((a) => a.code)
+      .filter((code) => !before.has(code));
+    return { ...result, achievements };
+  }
+
+  /** Where a lesson's exercises live, for this person. */
+  private async lessonRefs(
+    userId: string,
+    content: StopContent,
+    index: number,
+    done: { lesson: number; missed: ExerciseRef[] }[],
+  ): Promise<ExerciseRef[]> {
+    const topic = content.topic.index;
+    const seed = `${userId}:${content.discipline.id}:${topic}`;
+    const count = content.exercises.length;
+    if (index < LESSONS)
+      return (splitLessons(count, seed)[index - 1] ?? []).map((i) => ({
+        topic,
+        index: i,
+      }));
+    return reviewRefs(
+      topic,
+      done.filter((d) => d.lesson < LESSONS).flatMap((d) => d.missed),
+      await this.paths.missedElsewhere(userId, content.discipline.id, topic),
+      count,
+      seed,
+    );
   }
 
   /** The stop's cards from a web search, keeping only those whose quote is on its page. */

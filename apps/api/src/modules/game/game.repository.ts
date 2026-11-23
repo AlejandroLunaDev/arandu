@@ -21,6 +21,7 @@ import {
   asPerson,
   madeStops,
   ProgressRepository,
+  sabedoriaRows,
   TIME_ZONE,
   toWallet,
   walletColumns,
@@ -150,14 +151,14 @@ export class GameRepository {
     >`
       select p.user_id, p.nickname, coalesce(sum(r.sabedoria), 0)::int as sabedoria
       from public.players p
-      left join public.stop_results r on r.user_id = p.user_id and ${round(tx)}
+      left join ${sabedoriaRows(tx)} r on r.user_id = p.user_id and ${round(tx)}
       where p.league = ${rank} and p.user_id <> ${userId}
       group by p.user_id, p.nickname
       order by sabedoria desc limit ${LEAGUE_SIZE - 1}`;
     const mine = one(
       await tx<{ sabedoria: number }[]>`
       select coalesce(sum(r.sabedoria), 0)::int as sabedoria
-      from public.stop_results r where r.user_id = ${userId} and ${round(tx)}`,
+      from ${sabedoriaRows(tx)} r where r.user_id = ${userId} and ${round(tx)}`,
     );
     const rows = [
       {
@@ -304,7 +305,7 @@ export class GameRepository {
     const season = seasonOf(today);
     const { sabedoria } = one(
       await tx<{ sabedoria: number }[]>`
-      select coalesce(sum(sabedoria), 0)::int as sabedoria from public.stop_results
+      select coalesce(sum(sabedoria), 0)::int as sabedoria from ${sabedoriaRows(tx)} s
       where user_id = ${userId}
         and (completed_at at time zone ${TIME_ZONE})::date between ${season.start}::date and ${season.endsOn}::date`,
     );

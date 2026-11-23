@@ -402,6 +402,32 @@ export interface StopContent {
   exercises: Exercise[];
 }
 
+/** Where an exercise lives: lesson 4 mixes in misses from earlier stops, so /explain goes to `topic`. */
+export type LessonExercise = Exercise & { topic: number; index: number };
+
+/**
+ * GET /stops/:disciplineId/:topic/lessons/:lesson (1-4): one lesson of a chapter, for this person. Lessons 1-3 split the
+ * stop's exercises in a random order that stays the same for them; lesson 4 reviews what they missed. 409
+ * `lesson_locked` before the lessons ahead of it are done.
+ */
+export interface Lesson {
+  index: number;
+  total: 4;
+  /** The stop's cards, in lesson 1 only; GET /stops/:disciplineId/:topic has them to re-read at any time. */
+  cards: StopCard[] | null;
+  exercises: LessonExercise[];
+}
+
+/** POST /stops/:disciplineId/:topic/lessons/:lesson/result: the exercises missed at least once. */
+export interface LessonResultRequest {
+  missed: { topic: number; index: number }[];
+}
+
+/** A lesson's rewards (0 on a replay); lesson 4 also finishes the chapter, with its peixinhos. */
+export interface LessonResult extends StopResult {
+  chapterDone: boolean;
+}
+
 /** POST /stops/:disciplineId/:topic/result: how many mistakes the person made before getting every item right. */
 export interface StopResultRequest {
   mistakes: number;
@@ -497,6 +523,8 @@ export interface BookProgress {
     index: number;
     text: string;
     state: "done" | "current" | "locked";
+    /** Lessons of the chapter done, 0-4: the circle fills one quarter each; 4 when done. */
+    lessonsDone: number;
   }[];
 }
 
