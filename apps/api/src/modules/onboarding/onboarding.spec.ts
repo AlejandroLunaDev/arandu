@@ -8,6 +8,7 @@ import {
   USER_ID,
   withMemory,
 } from '../../../test/http-app.js';
+import { SAFE_LEAD, SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { profileInput } from '../memory/profile.schema.js';
 import { OnboardingModule } from './onboarding.module.js';
@@ -138,6 +139,79 @@ describe('POST /arandu/onboarding', () => {
       { role: 'user', content: 'Estudo' },
       { role: 'assistant', content: 'Próxima pergunta?' },
     ]);
+  });
+
+  it('answers an abusive message with the safe reply, calling no model and recording nothing', async () => {
+    await start();
+    memory.covered.mockResolvedValue(['situation', 'interests']);
+    memory.sessionMessages.mockResolvedValue([
+      { role: 'assistant', content: 'Oi, o que você faz?' },
+    ]);
+
+    const res = await answer('seu viado').expect(200);
+
+    expect(res.body).toEqual({
+      sessionId: SESSION_ID,
+      reply: `${SAFE_LEAD} Oi, o que você faz?`,
+      quickReplies: [],
+      profile: profile({ covered: ['situation', 'interests'] }),
+      progress: { answered: 2, total: 7 },
+      done: false,
+    });
+    expect(model.calls).toHaveLength(0);
+    expect(memory.addMessages).not.toHaveBeenCalled();
+    expect(memory.saveCovered).not.toHaveBeenCalled();
+  });
+
+  it('repeats the last real question, not a stored safe line', async () => {
+    await start();
+    memory.sessionMessages.mockResolvedValue([
+      { role: 'assistant', content: 'Oi, o que você faz?' },
+      { role: 'user', content: 'seu viado' },
+      { role: 'assistant', content: SAFE_REPLY },
+    ]);
+
+    const res = await answer('seu viado').expect(200);
+
+    expect(res.body.reply).toBe(`${SAFE_LEAD} Oi, o que você faz?`);
+  });
+
+  it('falls back to the whole safe reply when the history has no assistant message', async () => {
+    await start();
+
+    const res = await answer('seu viado').expect(200);
+
+    expect(res.body.reply).toBe(SAFE_REPLY);
+  });
+
+  it('sends a distress message with a blocked word to the model', async () => {
+    await start();
+
+    await answer('Foda-se, não aguento mais, quero morrer').expect(200);
+
+    expect(model.calls).toHaveLength(1);
+  });
+
+  it('replaces an abusive model reply with the safe reply and no quick replies', async () => {
+    await start({ reply: 'vai se foder', quickReplies: ['a', 'b'] });
+
+    const res = await answer().expect(200);
+
+    expect(res.body.reply).toBe(SAFE_REPLY);
+    expect(res.body.quickReplies).toEqual([]);
+    expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
+      { role: 'user', content: 'Oi' },
+      { role: 'assistant', content: SAFE_REPLY },
+    ]);
+  });
+
+  it('filters out the abusive quick replies and keeps the rest', async () => {
+    await start({ quickReplies: ['a', 'seu viado', 'b'] });
+
+    const res = await answer().expect(200);
+
+    expect(res.body.reply).toBe('Próxima pergunta?');
+    expect(res.body.quickReplies).toEqual(['a', 'b']);
   });
 
   it('404s without calling the model for a session that is not the person own', async () => {
