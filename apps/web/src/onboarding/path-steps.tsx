@@ -1,6 +1,6 @@
 "use client";
 
-import type { CareerPath, StopResult } from "@arandu/contracts";
+import type { CareerPath } from "@arandu/contracts";
 import Image from "next/image";
 import { type ReactNode, useState } from "react";
 import { AranduSays, type Pose, Said, useReveal } from "@/ui/arandu-says";
@@ -110,7 +110,7 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
 // O13: the game in three things, before the first stop.
 export function HowView({ course, place, ...next }: Next & { course: string; place: string }) {
   return (
-    <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Começar o primeiro capítulo">
+    <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Experimentar o primeiro capítulo">
       <div className={p.rows}>
         <div className={p.row}>
           <Image src="/img/props/books.webp" alt="" width={46} height={46} />
@@ -125,14 +125,14 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
           <Image src="/img/props/yarn.webp" alt="" width={46} height={46} />
           <div>
             <strong>Novelos</strong>
-            <span>Errou, gasta um. Eles voltam com o tempo. No primeiro capítulo, errar não gasta.</span>
+            <span>São 3 por dia: errou, gasta um. Eles voltam à meia-noite. Nesta amostra, errar não gasta.</span>
           </div>
         </div>
         <div className={p.row}>
           <Image src="/img/props/paw.webp" alt="" width={46} height={46} />
           <div>
             <strong>Patinhas</strong>
-            <span>Cada dia que você estuda vira uma patinha. Vamos fazer a primeira?</span>
+            <span>Cada dia que você estuda vira uma patinha.</span>
           </div>
         </div>
       </div>
@@ -140,35 +140,19 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
   );
 }
 
-// O19: the first stop is done, with what it gave.
-export function DoneView({ course, subject, place, result, ...next }: Next & { course: string; subject: string; place: string; result: StopResult }) {
-  const say = `Você fez seu primeiro capítulo de ${course}! Pra não perder isso, vamos guardar seu progresso.`;
+// O19: the sample of the first stop is over. It gave nothing: inside the app, chapter 1 starts from zero.
+export function DoneView({ course, subject, place, ...next }: Next & { course: string; subject: string; place: string }) {
+  const say = `Esse foi um gostinho de ${course}. Guardando seu progresso, o primeiro capítulo começa de verdade, com mais exercícios.`;
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>
       <div className={styles.body}>
         <section className={p.done}>
           <Cat mood="hop" size={190} label="Arandu comemorando" className={p.doneCat} />
-          <h1>Primeiro capítulo feito!</h1>
+          <h1>Você provou o primeiro capítulo!</h1>
           <p className={p.meta}>
             {subject} · {place}
           </p>
-          <div className={p.stats}>
-            {result.sabedoria > 0 && (
-              <div>
-                <Image src="/img/props/books.webp" alt="" width={40} height={40} />
-                <strong>+{result.sabedoria}</strong>
-                <small>de sabedoria</small>
-              </div>
-            )}
-            {result.patinha && (
-              <div>
-                <Image src="/img/props/paw.webp" alt="" width={40} height={40} />
-                <strong>1</strong>
-                <small>patinha, a primeira</small>
-              </div>
-            )}
-          </div>
         </section>
         <div className={`${ui.bubble} ${p.loose}`} role="status">
           <Said text={say} shown={shown} />
@@ -214,7 +198,7 @@ export function AgeView({ onAge, ...next }: Omit<Next, "onNext"> & { onAge: (age
 // O21: Google keeps what the guest did, unless that Google already has an account, which loads instead; "Agora não"
 // goes on as a guest.
 export function GoogleView({ busy, failed, onGoogle, onLater, onBack }: { busy: boolean; failed: boolean; onGoogle: () => void; onLater: () => void; onBack: () => void }) {
-  const say = "Pronto! Entra com sua conta Google pra guardar seu caminho, sua patinha e tudo que você me contou.";
+  const say = "Pronto! Entra com sua conta Google pra guardar seu caminho e tudo que você me contou.";
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>

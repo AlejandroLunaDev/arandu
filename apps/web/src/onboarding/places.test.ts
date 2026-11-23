@@ -58,6 +58,13 @@ describe("byInstitution", () => {
     assert.equal(out[0]?.courses.length, 1);
     assert.equal(out[0]?.courses[0]?.profession.slug, "direito");
   });
+  it("lists a course name once per place when each career has its own courseId, keeping the first career", () => {
+    const out = byInstitution([
+      career("dev", [offering(10, "Engenharia De Software", usp, "São Paulo")]),
+      career("games", [offering(11, "Engenharia De Software", usp, "São Paulo"), offering(12, "Jogos Digitais", usp, "São Paulo")]),
+    ]);
+    assert.deepEqual(out[0]?.courses.map((c) => [c.courseId, c.profession.slug]), [[10, "dev"], [12, "games"]]);
+  });
   it("keeps two courses of the same career at one place", () => {
     const out = byInstitution([
       career("enfermagem", [offering(5038, "Enfermagem", usp, "São Paulo"), offering(5140, "Obstetrícia", usp, "São Paulo")]),

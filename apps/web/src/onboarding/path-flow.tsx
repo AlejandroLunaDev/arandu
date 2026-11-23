@@ -1,26 +1,29 @@
 "use client";
 
-import type { CareerPaths, StopContent, StopResult } from "@arandu/contracts";
+import type { CareerPaths, StopContent } from "@arandu/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
-import { getCareerPaths, getStop, isGuest, saveJourney, saveStopResult } from "./actions";
+import { getCareerPaths, getStop, isGuest, saveJourney } from "./actions";
 import { AgeView, DoneView, GoogleView, HowView, RhythmView, SemesterView } from "./path-steps";
 import { type Place, type PlaceCourse, placeName } from "./places";
 import { StopView } from "./stop-view";
 
 type Step = "semester" | "rhythm" | "how" | "stop" | "done" | "age" | "google";
 
-// O11-O21, after the person picked a course at O10: its first semester, the weekly goal, the first stop (its
-// cards and exercises), its result, the age and Google. Each choice is saved to the journey as it is made.
+/** The sample holds the four kinds of a subject's first stop, however many more the stop has (O15-O18). */
+const SAMPLE = new Set<StopContent["exercises"][number]["kind"]>(["escolha_uma", "una_os_pares", "verdadeiro_ou_falso", "complete_a_frase"]);
+
+// O11-O21, after the person picked a course at O10: its first semester, the weekly goal, a sample of the first stop
+// (its cards and basic exercises), its end, the age and Google. Each choice is saved to the journey as it is made;
+// the sample is not: inside the app, chapter 1 starts from zero as a full round.
 export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place: Place; onBack: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("semester");
   const [paths, setPaths] = useState<CareerPaths | null>(null);
   const [goal, setGoal] = useState<3 | 5 | 7 | null>(null);
   const [stop, setStop] = useState<StopContent | null>(null);
-  const [result, setResult] = useState<StopResult | null>(null);
   const [lost, setLost] = useState(false);
   const { busy, failed, attempt } = useAttempt();
 
@@ -39,7 +42,8 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
   const firstId = first?.disciplineId;
   useEffect(() => {
     // A failed prefetch is not an error yet: "Continuar" asks again.
-    if (firstId !== undefined) getStop(firstId, 0).then(setStop, () => undefined);
+    if (firstId !== undefined)
+      getStop(firstId, 0).then((s) => setStop({ ...s, exercises: s.exercises.filter((e) => SAMPLE.has(e.kind)) }), () => undefined);
   }, [firstId]);
 
   if (!path || !first)
@@ -106,17 +110,11 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
         stop={stop}
         caption={`${course.course} · ${name} · ${stop.discipline.name}`}
         onClose={() => setStep("how")}
-        onDone={(mistakes) =>
-          attempt(async () => {
-            setResult(await saveStopResult(first.disciplineId, 0, mistakes));
-            setStep("done");
-          })
-        }
+        onDone={() => setStep("done")}
       />
     );
 
-  if (step === "done" && result)
-    return <DoneView {...next} course={course.course} subject={first.name} place={name} result={result} onNext={() => setStep("age")} />;
+  if (step === "done") return <DoneView {...next} course={course.course} subject={first.name} place={name} onNext={() => setStep("age")} />;
 
   if (step === "age")
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import type { OnboardingAnswer, OnboardingReply } from "@arandu/contracts";
+import type { AranduProfile, OnboardingAnswer, OnboardingReply } from "@arandu/contracts";
 import { useState } from "react";
 import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
@@ -20,14 +20,20 @@ const MAX_PICKS = 10;
 // answers with its quick replies, their own words, or both. Once every topic is covered the
 // answers are saved to the journey (PATCH /me/journey), Arandu shows what it understood (O09), and the
 // recommended careers come by institution (O10, POST /arandu/recommendations).
+/** Whether a profile holds anything the person said. */
+const heard = (p: AranduProfile) =>
+  p.situation !== null ||
+  p.careerIdea !== null ||
+  [p.likedSubjects, p.hardSubjects, p.interests, p.workStyle, p.admired].some((list) => list.length > 0);
+
 export function OnboardingFlow() {
   const [turn, setTurn] = useState<OnboardingReply | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswer[]>([]);
   const [picks, setPicks] = useState<string[]>([]);
   const [said, setSaid] = useState<string | null>(null);
   const [profileShown, setProfileShown] = useState(false);
+  const [fixed, setFixed] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
-  const [pick, setPick] = useState<number | null>(null);
   const [chosen, setChosen] = useState<{ course: PlaceCourse; place: Place } | null>(null);
   const { busy, failed, attempt } = useAttempt();
 
@@ -40,15 +46,13 @@ export function OnboardingFlow() {
     return (
       <PlacesView
         places={places}
-        pick={pick}
         busy={busy}
         failed={failed}
-        onPick={setPick}
         onBack={() => setPlaces(null)}
-        onNext={() =>
+        onChoose={(courseId) =>
           attempt(async () => {
-            const place = places.find((p) => p.courses.some((c) => c.courseId === pick))!;
-            const course = place.courses.find((c) => c.courseId === pick)!;
+            const place = places.find((p) => p.courses.some((c) => c.courseId === courseId))!;
+            const course = place.courses.find((c) => c.courseId === courseId)!;
             await saveJourney({ professionSlug: course.profession.slug, courseId: course.courseId });
             setChosen({ course, place });
           })
@@ -60,8 +64,18 @@ export function OnboardingFlow() {
     return (
       <ProfileView
         profile={turn.profile}
+        reply={fixed ? turn.reply : null}
         busy={busy}
         failed={failed}
+        // A correction is one more message in the onboarding's conversation: the reply carries the profile read again.
+        onFix={(text) =>
+          attempt(async () => {
+            const next = await answerOnboarding(turn.sessionId, text);
+            // A message Arandu lets pass (guardrails) comes back with an empty profile: the one read so far stays.
+            setTurn(heard(next.profile) ? next : { ...next, profile: turn.profile });
+            setFixed(true);
+          })
+        }
         onNext={() =>
           attempt(async () => {
             const { careers } = await recommend(toProfileInput(turn.profile));

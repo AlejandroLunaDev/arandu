@@ -29,11 +29,15 @@ export async function rereadStop(disciplineId: number, topic: number): Promise<W
   }
 }
 
-/** P6: full novelos for peixinhos; null when there are not enough of them. */
+/**
+ * P6: one novelo for peixinhos, at today's price; null when there are too few of them. Novelos already back (midnight
+ * passed while P6 was open) are no refusal: the wallet as it is now comes back.
+ */
 export async function refillNovelos(): Promise<Wallet | null> {
   try {
     return await api<Wallet>("/me/shop/novelos", { method: "POST" });
   } catch (error) {
+    if (error instanceof ApiError && error.code === "novelos_left") return (await api<Home>("/me")).wallet;
     if (error instanceof ApiError && error.status === 409) return null;
     throw error;
   }
