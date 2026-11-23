@@ -8,6 +8,7 @@ import {
   USER_ID,
   withMemory,
 } from '../../../test/http-app.js';
+import { SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { profileInput } from '../memory/profile.schema.js';
 import { OnboardingModule } from './onboarding.module.js';
@@ -138,6 +139,47 @@ describe('POST /arandu/onboarding', () => {
       { role: 'user', content: 'Estudo' },
       { role: 'assistant', content: 'Próxima pergunta?' },
     ]);
+  });
+
+  it('answers an abusive message with the safe reply, calling no model and recording nothing', async () => {
+    await start();
+    memory.covered.mockResolvedValue(['situation', 'interests']);
+
+    const res = await answer('seu viado').expect(200);
+
+    expect(res.body).toEqual({
+      sessionId: SESSION_ID,
+      reply: SAFE_REPLY,
+      quickReplies: [],
+      profile: profile({ covered: ['situation', 'interests'] }),
+      progress: { answered: 2, total: 7 },
+      done: false,
+    });
+    expect(model.calls).toHaveLength(0);
+    expect(memory.addMessages).not.toHaveBeenCalled();
+    expect(memory.saveCovered).not.toHaveBeenCalled();
+  });
+
+  it('replaces an abusive model reply with the safe reply and no quick replies', async () => {
+    await start({ reply: 'vai se foder', quickReplies: ['a', 'b'] });
+
+    const res = await answer().expect(200);
+
+    expect(res.body.reply).toBe(SAFE_REPLY);
+    expect(res.body.quickReplies).toEqual([]);
+    expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
+      { role: 'user', content: 'Oi' },
+      { role: 'assistant', content: SAFE_REPLY },
+    ]);
+  });
+
+  it('filters out the abusive quick replies and keeps the rest', async () => {
+    await start({ quickReplies: ['a', 'seu viado', 'b'] });
+
+    const res = await answer().expect(200);
+
+    expect(res.body.reply).toBe('Próxima pergunta?');
+    expect(res.body.quickReplies).toEqual(['a', 'b']);
   });
 
   it('404s without calling the model for a session that is not the person own', async () => {

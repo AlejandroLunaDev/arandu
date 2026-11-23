@@ -12,6 +12,7 @@ import {
   CareersRepository,
   type ProfessionFirstTerm,
 } from '../careers/careers.repository.js';
+import { SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { CareerChatModule } from './career-chat.module.js';
 import {
   careerChatInstructions,
@@ -92,6 +93,38 @@ describe('POST /arandu/chat', () => {
     expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
       { role: 'user', content: 'Oi!' },
       { role: 'assistant', content: 'Oi, tudo bem?' },
+    ]);
+  });
+
+  it('answers an abusive message with the safe reply, calling no model and recording nothing', async () => {
+    const res = await post({ ...body, message: 'seu viado' }).expect(200);
+
+    expect(res.body).toEqual({
+      sessionId: SESSION_ID,
+      reply: SAFE_REPLY,
+      sources: [],
+      professionSlug: 'direito',
+      chosenCourseId: null,
+    });
+    expect(model.calls).toHaveLength(0);
+    expect(memory.addMessages).not.toHaveBeenCalled();
+  });
+
+  it('replaces an abusive model reply with the safe reply, in the answer and in the record', async () => {
+    await app.close();
+    model = fakeModel('vai se foder');
+    memory = fakeMemoryRepository();
+    app = await createHttpApp([CareerChatModule], model, [
+      withMemory(memory),
+      [CareersRepository, { firstTerm }],
+    ]);
+
+    const res = await post().expect(200);
+
+    expect(res.body.reply).toBe(SAFE_REPLY);
+    expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
+      { role: 'user', content: 'Oi!' },
+      { role: 'assistant', content: SAFE_REPLY },
     ]);
   });
 
@@ -324,6 +357,56 @@ describe('POST /arandu/chat among the recommended careers', () => {
     const res = await post().expect(200);
 
     expect(res.body.chosenCourseId).toBeNull();
+  });
+
+  it('answers an abusive message with the safe reply, calling no model and recording nothing', async () => {
+    const res = await post({ ...withChoices, message: 'V1@D0' }).expect(200);
+
+    expect(res.body).toEqual({
+      sessionId: SESSION_ID,
+      reply: SAFE_REPLY,
+      sources: [],
+      professionSlug: null,
+      chosenCourseId: null,
+    });
+    expect(model.calls).toHaveLength(0);
+    expect(memory.addMessages).not.toHaveBeenCalled();
+  });
+
+  it('opens no session for an abusive message that continues one', async () => {
+    const res = await post({
+      ...withChoices,
+      message: 'seu viado',
+      sessionId: SESSION_ID,
+    }).expect(200);
+
+    expect(res.body.sessionId).toBe(SESSION_ID);
+    expect(memory.createSession).not.toHaveBeenCalled();
+  });
+
+  it('replaces an abusive model reply and drops its chosen course, even when the id is on screen', async () => {
+    await app.close();
+    model = fakeModel({
+      object: {
+        professionSlug: 'arquitetura',
+        chosenCourseId: 9,
+        reply: 'arrombado',
+      },
+    });
+    memory = fakeMemoryRepository();
+    app = await createHttpApp([CareerChatModule], model, [
+      withMemory(memory),
+      [CareersRepository, { firstTerm }],
+    ]);
+
+    const res = await post(withChoices).expect(200);
+
+    expect(res.body.reply).toBe(SAFE_REPLY);
+    expect(res.body.chosenCourseId).toBeNull();
+    expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
+      { role: 'user', content: 'E a de arquitetura?' },
+      { role: 'assistant', content: SAFE_REPLY },
+    ]);
   });
 
   it('gives the courses on screen to the model', async () => {
