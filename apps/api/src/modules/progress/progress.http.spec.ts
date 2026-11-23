@@ -10,12 +10,12 @@ const list = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
 describe('progress routes', () => {
   let app: INestApplication;
   const wallet = {
-    novelos: 4,
-    maxNovelos: 5,
-    nextNoveloAt: '2026-03-10T12:30:00.000Z',
+    novelos: 2,
+    maxNovelos: 3,
+    nextNoveloAt: '2026-03-11T03:00:00.000Z',
     peixinhos: 0,
     marcadores: 0,
-    refillPrice: 100,
+    refillPrice: 15,
   };
   const repo = {
     wallet: vi.fn(),

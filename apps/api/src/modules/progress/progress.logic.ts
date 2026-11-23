@@ -1,24 +1,46 @@
 import type { Achievement } from '@arandu/contracts';
 
-// Demo values (docs: Arandu-Reka-producto-gamificacion §3).
-export const MAX_NOVELOS = 5;
-export const REFILL_MS = 30 * 60_000;
+/** Days, patinhas, weeks and the novelos' day are counted in Brazil's time. */
+export const TIME_ZONE = 'America/Sao_Paulo';
+
+// Demo values (docs: Arandu-Reka-producto-gamificacion §3, and #124).
+/** Novelos a day: they all come back at São Paulo midnight. */
+export const MAX_NOVELOS = 3;
+/** One more novelo at 0, priced by how many were bought that day; from the 4th on, the last price. */
+export const NOVELO_PRICES = [15, 20, 35, 50] as const;
 /** Questions to Arandu that earn "Curiosidade de gato". */
 export const CURIOSITY_QUESTIONS = 10;
 
-/** Novelos after the time passed since `at`; `at` moves by the novelos given back, or to `now` once full. */
+/** The São Paulo day of a moment, "YYYY-MM-DD". */
+export function dayOf(moment: Date): string {
+  return moment.toLocaleDateString('en-CA', { timeZone: TIME_ZONE });
+}
+
+/** The next São Paulo midnight after `now`. */
+// shortcut: Brazil has had no daylight saving since 2019, so midnight is 03:00 UTC; use a tz library if that returns.
+export function nextMidnight(now: Date): Date {
+  return new Date(`${addDays(dayOf(now), 1)}T03:00:00Z`);
+}
+
+/** The novelos now: the stored count on the day of `at`, all of them again on a later day. */
 export function refill(
   novelos: number,
   at: Date,
   now: Date,
 ): { novelos: number; at: Date } {
-  const steps = Math.max(
-    0,
-    Math.floor((now.getTime() - at.getTime()) / REFILL_MS),
-  );
-  const filled = Math.min(MAX_NOVELOS, novelos + steps);
-  if (filled >= MAX_NOVELOS) return { novelos: MAX_NOVELOS, at: now };
-  return { novelos: filled, at: new Date(at.getTime() + steps * REFILL_MS) };
+  if (dayOf(at) !== dayOf(now)) return { novelos: MAX_NOVELOS, at: now };
+  // A wallet from the old 5-novelo rule holds more until its next day.
+  return { novelos: Math.min(novelos, MAX_NOVELOS), at };
+}
+
+/** The price of the next novelo today, given how many were bought on `boughtOn`. */
+export function noveloPrice(
+  bought: number,
+  boughtOn: string | null,
+  now: Date,
+): number {
+  const today = boughtOn === dayOf(now) ? bought : 0;
+  return NOVELO_PRICES[Math.min(today, NOVELO_PRICES.length - 1)] ?? 50;
 }
 
 /** "YYYY-MM-DD" plus `days`. */
