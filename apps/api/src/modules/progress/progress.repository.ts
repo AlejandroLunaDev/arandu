@@ -1,23 +1,27 @@
 import type { BookReflectionRequest, Wallet } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
-import { SHOP } from '../game/game.logic.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../../core/database/database.module.js';
 import {
   CURIOSITY_QUESTIONS,
   type Finish,
   MAX_NOVELOS,
-  REFILL_MS,
+  nextMidnight,
+  noveloPrice,
   refill,
+  TIME_ZONE,
 } from './progress.logic.js';
 import { noNovelosLeft, novelosLeft, rereadUsed } from './progress.errors.js';
 import { one } from '../../core/database/one.js';
 
-/** Days, patinhas and weeks are counted in Brazil's time. */
-export const TIME_ZONE = 'America/Sao_Paulo';
+export { TIME_ZONE };
 
 type Tx = Sql | TransactionSql;
+
+/** The wallet columns every query returns, for toWallet. */
+export const walletColumns = (sql: Tx) =>
+  sql`novelos, novelos_at, peixinhos, marcadores, novelos_bought, novelos_bought_on::text as novelos_bought_on`;
 
 /**
  * SQL for how many leading topics of the discipline aliased `d` have a stored stop for the same topic text: the stops a
@@ -31,25 +35,26 @@ export const madeStops = (sql: Tx) => sql`
       where s.discipline_id = d.id and s.topic = g.t and s.topic_text = d.topics[g.t + 1])
   ), cardinality(coalesce(d.topics, '{}')))`;
 
-interface WalletRow {
+export interface WalletRow {
   novelos: number;
   novelos_at: Date;
   peixinhos: number;
   marcadores: number;
+  /** Novelos bought on novelos_bought_on, the São Paulo day of the last purchase. */
+  novelos_bought: number;
+  novelos_bought_on: string | null;
 }
 
 export function toWallet(row: WalletRow, now: Date): Wallet {
-  const { novelos, at } = refill(row.novelos, row.novelos_at, now);
+  const { novelos } = refill(row.novelos, row.novelos_at, now);
   return {
     novelos,
     maxNovelos: MAX_NOVELOS,
     nextNoveloAt:
-      novelos < MAX_NOVELOS
-        ? new Date(at.getTime() + REFILL_MS).toISOString()
-        : null,
+      novelos < MAX_NOVELOS ? nextMidnight(now).toISOString() : null,
     peixinhos: row.peixinhos,
     marcadores: row.marcadores,
-    refillPrice: SHOP.novelos,
+    refillPrice: noveloPrice(row.novelos_bought, row.novelos_bought_on, now),
   };
 }
 
@@ -77,7 +82,7 @@ export class ProgressRepository {
     await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
     const row = one(
       await tx<WalletRow[]>`
-      select novelos, novelos_at, peixinhos, marcadores from public.wallets where user_id = ${userId} for update`,
+      select ${walletColumns(tx)} from public.wallets where user_id = ${userId} for update`,
     );
     return row;
   }
@@ -101,14 +106,13 @@ export class ProgressRepository {
           select exists (select 1 from public.stop_results where user_id = ${userId}) as finished`,
         );
         if (!finished) return toWallet(row, now);
-        const { novelos, at } = refill(row.novelos, row.novelos_at, now);
+        const { novelos } = refill(row.novelos, row.novelos_at, now);
         if (novelos === 0) throw noNovelosLeft();
-        // Spending from full starts the refill clock now.
-        const since = novelos === MAX_NOVELOS ? now : at;
+        // novelos_at holds the day the count belongs to.
         const updated = one(
           await tx<WalletRow[]>`
-          update public.wallets set novelos = ${novelos - 1}, novelos_at = ${since}, updated_at = now()
-          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`,
+          update public.wallets set novelos = ${novelos - 1}, novelos_at = ${now}, updated_at = now()
+          where user_id = ${userId} returning ${walletColumns(tx)}`,
         );
         return toWallet(updated, now);
       }),
@@ -130,7 +134,7 @@ export class ProgressRepository {
         const updated = one(
           await tx<WalletRow[]>`
           update public.wallets set novelos = 1, novelos_at = ${at}, updated_at = now()
-          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`,
+          where user_id = ${userId} returning ${walletColumns(tx)}`,
         );
         return toWallet(updated, now);
       }),

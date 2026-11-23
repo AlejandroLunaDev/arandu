@@ -30,10 +30,10 @@ export const shopItemNotFound = () =>
     message: 'No such shop item',
   });
 
-export const novelosFull = () =>
+export const novelosNotOut = () =>
   new ConflictException({
-    code: 'novelos_full',
-    message: 'Novelos are already full',
+    code: 'novelos_left',
+    message: 'A novelo is sold only at 0',
   });
 
 export const marcadoresFull = () =>
