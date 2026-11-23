@@ -423,6 +423,11 @@ describe('career chat prompts', () => {
     expect(withChoices).toContain('7: Direito, USP, São Paulo');
     expect(withChoices).toContain('9: Direito, PUC, Santos');
     expect(withChoices).toContain('short warm confirmation');
+    expect(withChoices).toContain('offered at more than one place');
+    expect(withChoices).toContain('which');
+    expect(withChoices).toContain(
+      'replaces the one about ending with exactly one question',
+    );
     expect(withChoices).not.toContain('always null');
     expect(choosingInstructions(professions)).toContain(
       'chosenCourseId: always null',

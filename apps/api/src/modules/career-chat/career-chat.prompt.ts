@@ -76,7 +76,8 @@ function choosingRules(choices: CourseChoice[]): string {
   ask, and when the career they name is offered at more than one place below (then ask in one short sentence which
   place, naming them).
 - When chosenCourseId is not null, the reply is only a short warm confirmation that names the course and the place,
-  such as "Boa escolha! Vamos experimentar Arquitetura no Mackenzie.", with no question: the app moves on right after.
+  such as "Boa escolha! Vamos experimentar Arquitetura no Mackenzie.", with no question: the app moves on right after,
+  so this rule replaces the one about ending with exactly one question.
 - The courses on screen (courseId: course, institution, city):
 ${choices.map((c) => `  - ${c.courseId}: ${c.course}, ${c.institution}, ${c.city}`).join('\n')}`;
 }
