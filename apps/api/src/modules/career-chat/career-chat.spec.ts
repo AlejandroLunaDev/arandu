@@ -110,6 +110,29 @@ describe('POST /arandu/chat', () => {
     expect(memory.addMessages).not.toHaveBeenCalled();
   });
 
+  it('sends a distress message with a blocked word to the model', async () => {
+    await post({
+      ...body,
+      message: 'Foda-se, não aguento mais, quero morrer',
+    }).expect(200);
+
+    expect(model.calls).toHaveLength(1);
+    expect(memory.addMessages).toHaveBeenCalled();
+  });
+
+  it('404s for a blocked message on a session that is not the person own, with no model call', async () => {
+    memory.sessionMessages.mockResolvedValue(null);
+
+    await post({
+      ...body,
+      message: 'seu viado',
+      sessionId: SESSION_ID,
+    }).expect(404);
+
+    expect(model.calls).toHaveLength(0);
+    expect(memory.createSession).not.toHaveBeenCalled();
+  });
+
   it('replaces an abusive model reply with the safe reply, in the answer and in the record', async () => {
     await app.close();
     model = fakeModel('vai se foder');
@@ -371,6 +394,28 @@ describe('POST /arandu/chat among the recommended careers', () => {
     });
     expect(model.calls).toHaveLength(0);
     expect(memory.addMessages).not.toHaveBeenCalled();
+  });
+
+  it('sends a distress message with a blocked word to the model', async () => {
+    await post({
+      ...withChoices,
+      message: 'Na escola me chamam de viado… quero sumir',
+    }).expect(200);
+
+    expect(model.calls).toHaveLength(1);
+  });
+
+  it('404s for a blocked message on a session that is not the person own, with no model call', async () => {
+    memory.sessionMessages.mockResolvedValue(null);
+
+    await post({
+      ...withChoices,
+      message: 'seu viado',
+      sessionId: SESSION_ID,
+    }).expect(404);
+
+    expect(model.calls).toHaveLength(0);
+    expect(memory.createSession).not.toHaveBeenCalled();
   });
 
   it('opens no session for an abusive message that continues one', async () => {

@@ -8,7 +8,12 @@ import type {
 import { AiService } from '@nestjs/ai';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { isAbusive, SAFE_REPLY } from '../arandu/arandu.safety.js';
+import {
+  blocksMessage,
+  isAbusive,
+  SAFE_LEAD,
+  SAFE_REPLY,
+} from '../arandu/arandu.safety.js';
 import { MemoryService } from '../memory/memory.service.js';
 import {
   boundProfile,
@@ -78,15 +83,18 @@ export class OnboardingService {
     const said: ChatMessage = { role: 'user', content: message };
     const before = await this.memory.covered(sessionId);
     // Nothing is recorded, so the next turn rebuilds the full profile from the history as if this one never happened.
-    if (isAbusive(message))
+    // Arandu asks the step's question again; its quick replies were not stored, so the person writes the answer.
+    if (blocksMessage(message)) {
+      const asked = history.findLast((m) => m.role === 'assistant')?.content;
       return {
         sessionId,
-        reply: SAFE_REPLY,
+        reply: asked ? `${SAFE_LEAD} ${asked}` : SAFE_REPLY,
         quickReplies: [],
         profile: { ...boundProfile(EMPTY_PROFILE), covered: before },
         progress: { answered: before.length, total: TOPICS.length },
         done: false,
       };
+    }
     const turn = await this.turn([...history, said], before);
     await this.memory.recordTurn(
       sessionId,

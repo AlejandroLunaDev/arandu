@@ -20,12 +20,34 @@ const BLOCKED = [
   'piroca',
   'boquete',
   'punheta',
-  'fdp',
   'filho da puta',
   'filha da puta',
   'vai se foder',
   'vai tomar no cu',
-  'foda se',
+].map(normalize);
+
+// Word starts that say the person is hurting or telling what is done to them ("me chamam de viado", "quero morrer"):
+// such a message reaches the model even with a blocked word, so the crisis rule in VOICE answers it.
+const DISTRESS = [
+  'morrer',
+  'morte',
+  'me matar',
+  'suicid',
+  'sumir',
+  'me cortar',
+  'me machuc',
+  'nao aguento',
+  'me bate',
+  'me bateu',
+  'bate em mim',
+  'apanh',
+  'agred',
+  'abus',
+  'estupr',
+  'me chama',
+  'me chamou',
+  'me xing',
+  'bullying',
 ].map(normalize);
 
 const LEET: Record<string, string> = {
@@ -57,6 +79,14 @@ export function isAbusive(text: string): boolean {
   return BLOCKED.some((w) => words.includes(` ${w} `));
 }
 
+/** True when the person's message should skip the model: a blocked word, and no sign they are hurting. */
+export function blocksMessage(text: string): boolean {
+  const words = ` ${normalize(text)}`;
+  return isAbusive(text) && !DISTRESS.some((w) => words.includes(` ${w}`));
+}
+
+/** How Arandu lets a blocked message pass before going back to the step. */
+export const SAFE_LEAD = 'Essa parte eu deixo passar.';
+
 /** Arandu's answer instead of the model's when a message, or his own reply, holds a blocked word. */
-export const SAFE_REPLY =
-  'Essa parte eu deixo passar. Vamos voltar ao que a gente estava conversando: o que mais te chamou atenção até aqui?';
+export const SAFE_REPLY = `${SAFE_LEAD} Vamos voltar ao que a gente estava conversando: o que mais te chamou atenção até aqui?`;

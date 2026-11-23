@@ -1,5 +1,11 @@
 import { VOICE } from './arandu.voice.js';
-import { isAbusive, normalize, SAFE_REPLY } from './arandu.safety.js';
+import {
+  blocksMessage,
+  isAbusive,
+  normalize,
+  SAFE_LEAD,
+  SAFE_REPLY,
+} from './arandu.safety.js';
 
 describe('normalize', () => {
   it.each([
@@ -32,10 +38,38 @@ describe('isAbusive', () => {
     'movimento retardado',
     'porra, não aguento mais',
     'quero morrer',
+    'Em Estatística estudei a fdp da normal',
   ])('is false for %s', (text) => expect(isAbusive(text)).toBe(false));
 });
 
+describe('blocksMessage', () => {
+  it.each(['seu viado', 'V1@D0'])('is true for %s', (text) =>
+    expect(blocksMessage(text)).toBe(true),
+  );
+
+  // A blocked word beside a sign of distress is still abusive, but the person is heard, not blocked.
+  it.each([
+    'Na escola me chamam de viado… quero sumir',
+    'Meu padrasto me chama de vagabunda e me bate',
+    'meu pai é um filho da puta, ele me bate',
+  ])('is false for %s, though it holds a blocked word', (text) => {
+    expect(isAbusive(text)).toBe(true);
+    expect(blocksMessage(text)).toBe(false);
+  });
+
+  // "foda se" is no longer blocked, so this one never reaches the distress check.
+  it('is false for Foda-se, não aguento mais, quero morrer', () => {
+    expect(blocksMessage('Foda-se, não aguento mais, quero morrer')).toBe(
+      false,
+    );
+  });
+});
+
 describe('SAFE_REPLY', () => {
+  it('starts with SAFE_LEAD', () => {
+    expect(SAFE_REPLY.startsWith(SAFE_LEAD)).toBe(true);
+  });
+
   it('ends with exactly one question mark', () => {
     expect(SAFE_REPLY.endsWith('?')).toBe(true);
     expect(SAFE_REPLY.match(/\?/g)).toHaveLength(1);

@@ -8,7 +8,7 @@ import {
   USER_ID,
   withMemory,
 } from '../../../test/http-app.js';
-import { SAFE_REPLY } from '../arandu/arandu.safety.js';
+import { SAFE_LEAD, SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { profileInput } from '../memory/profile.schema.js';
 import { OnboardingModule } from './onboarding.module.js';
@@ -144,12 +144,15 @@ describe('POST /arandu/onboarding', () => {
   it('answers an abusive message with the safe reply, calling no model and recording nothing', async () => {
     await start();
     memory.covered.mockResolvedValue(['situation', 'interests']);
+    memory.sessionMessages.mockResolvedValue([
+      { role: 'assistant', content: 'Oi, o que você faz?' },
+    ]);
 
     const res = await answer('seu viado').expect(200);
 
     expect(res.body).toEqual({
       sessionId: SESSION_ID,
-      reply: SAFE_REPLY,
+      reply: `${SAFE_LEAD} Oi, o que você faz?`,
       quickReplies: [],
       profile: profile({ covered: ['situation', 'interests'] }),
       progress: { answered: 2, total: 7 },
@@ -158,6 +161,22 @@ describe('POST /arandu/onboarding', () => {
     expect(model.calls).toHaveLength(0);
     expect(memory.addMessages).not.toHaveBeenCalled();
     expect(memory.saveCovered).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the whole safe reply when the history has no assistant message', async () => {
+    await start();
+
+    const res = await answer('seu viado').expect(200);
+
+    expect(res.body.reply).toBe(SAFE_REPLY);
+  });
+
+  it('sends a distress message with a blocked word to the model', async () => {
+    await start();
+
+    await answer('Foda-se, não aguento mais, quero morrer').expect(200);
+
+    expect(model.calls).toHaveLength(1);
   });
 
   it('replaces an abusive model reply with the safe reply and no quick replies', async () => {

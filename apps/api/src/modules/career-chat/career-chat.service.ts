@@ -12,7 +12,11 @@ import {
   CareersRepository,
   type ProfessionFirstTerm,
 } from '../careers/careers.repository.js';
-import { isAbusive, SAFE_REPLY } from '../arandu/arandu.safety.js';
+import {
+  blocksMessage,
+  isAbusive,
+  SAFE_REPLY,
+} from '../arandu/arandu.safety.js';
 import { MemoryService } from '../memory/memory.service.js';
 import {
   careerChatInstructions,
@@ -51,16 +55,6 @@ export class CareerChatService {
     const { professionSlug, sessionId, message } = request;
     // The career is checked before a session is opened, so a wrong slug stores nothing.
     const profession = await this.career(professionSlug);
-    if (isAbusive(message))
-      return {
-        sessionId:
-          sessionId ??
-          (await this.memory.openSession(userId, 'career', professionSlug)),
-        reply: SAFE_REPLY,
-        sources: [],
-        professionSlug,
-        chosenCourseId: null,
-      };
     const history = sessionId
       ? await this.memory.history(
           userId,
@@ -73,6 +67,15 @@ export class CareerChatService {
     const id =
       sessionId ??
       (await this.memory.openSession(userId, 'career', professionSlug));
+    // After history, which checks the session is theirs; nothing is recorded.
+    if (blocksMessage(message))
+      return {
+        sessionId: id,
+        reply: SAFE_REPLY,
+        sources: [],
+        professionSlug,
+        chosenCourseId: null,
+      };
 
     const said: ChatMessage = { role: 'user', content: message };
     const { reply, sources } = await this.reply(profession, {
@@ -107,15 +110,6 @@ export class CareerChatService {
         profession: await this.career(slug),
       })),
     );
-    if (isAbusive(message))
-      return {
-        sessionId:
-          sessionId ?? (await this.memory.openSession(userId, 'choosing')),
-        reply: SAFE_REPLY,
-        sources: [],
-        professionSlug: null,
-        chosenCourseId: null,
-      };
     const history = sessionId
       ? await this.memory.history(
           userId,
@@ -125,6 +119,14 @@ export class CareerChatService {
         )
       : [];
     const id = sessionId ?? (await this.memory.openSession(userId, 'choosing'));
+    if (blocksMessage(message))
+      return {
+        sessionId: id,
+        reply: SAFE_REPLY,
+        sources: [],
+        professionSlug: null,
+        chosenCourseId: null,
+      };
 
     const said: ChatMessage = { role: 'user', content: message };
     const { object } = await this.ai.generateObject({
