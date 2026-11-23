@@ -4,50 +4,49 @@ import { useState } from "react";
 import { safeUrl, thumb } from "@/landing/book/book-data";
 import { AranduSays, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
-import { Composer } from "@/ui/composer";
-import { useAttempt } from "@/ui/use-attempt";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
-import { askAboutCareers } from "./actions";
+import { CareersChatView, type CareersChat } from "./careers-chat-view";
+import { CourseView } from "./course-view";
 import { type Place, placeName } from "./places";
 
-const SAY = "Separei carreiras que combinam com o que você me contou, e onde estudar cada uma.";
+const SAY = "Separei carreiras que combinam com o que você me contou, e onde estudar cada uma. Toca numa pra saber mais.";
 const KIND = { public: "Pública", private: "Privada", special: null } as const;
 
-type Props = { places: Place[]; pick: number | null; busy: boolean; failed: boolean; onPick: (courseId: number) => void; onNext: () => void; onBack: () => void };
+type Props = { places: Place[]; busy: boolean; failed: boolean; onChoose: (courseId: number) => void; onBack: () => void };
 
-/** Arandu's answer about a career: its words come out one by one, each answer anew. */
-function Answer({ text, busy }: { text: string; busy: boolean }) {
-  const { shown } = useReveal(text);
-  return (
-    <div className={busy ? styles.thinking : undefined}>
-      <AranduSays text={text} shown={shown} pose="sit" />
-    </div>
-  );
-}
-
-// O10: the recommended careers, by institution where each can be lived. Before choosing, the person can ask Arandu
-// about any of them in their own words; he works out which one they mean. Tapping a course picks it, and "Escolher"
-// on its card goes on. Anything the API leaves null (photo, logo) stays off the card: no stand-in image.
-export function PlacesView({ places, pick, busy, failed, onPick, onNext, onBack }: Props) {
+// O10: the recommended careers, by institution where each can be lived, on a screen of their own. Tapping a course
+// opens it with Arandu telling about it (CourseView); "Conversar com o Arandu" opens a chat about all of them
+// (CareersChatView). Either one chooses. Anything the API leaves null (photo, logo) stays off the card.
+export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
   const { shown, done } = useReveal(SAY);
-  const picked = places.flatMap((p) => p.courses).find((c) => c.courseId === pick);
-  const talk = useAttempt();
-  const [chat, setChat] = useState<{ sessionId: string; reply: string; slug: string | null } | null>(null);
-  // The careers on screen, in the order shown: the chat's grounding (the API takes 1 to 4).
-  const slugs = [...new Set(places.flatMap((p) => p.courses.map((c) => c.profession.slug)))].slice(0, 4);
-  const ask = (message: string) =>
-    talk.attempt(async () => {
-      const { sessionId, reply, professionSlug } = await askAboutCareers(slugs, message, chat?.sessionId);
-      setChat({ sessionId, reply, slug: professionSlug });
-    });
+  const [view, setView] = useState<{ course: number } | "chat" | null>(null);
+  // The chat with Arandu outlives a visit to a course: back from it, the conversation goes on.
+  const [chat, setChat] = useState<CareersChat | null>(null);
+  const courses = places.flatMap((place) => place.courses.map((course) => ({ place, course })));
+
+  const open = typeof view === "object" && view ? courses.find(({ course }) => course.courseId === view.course) : undefined;
+  if (open)
+    return <CourseView place={open.place} course={open.course} busy={busy} failed={failed} onChoose={onChoose} onBack={() => setView(chat ? "chat" : null)} />;
+  if (view === "chat")
+    return (
+      <CareersChatView
+        courses={courses}
+        chat={chat}
+        onChat={setChat}
+        failed={failed}
+        onOpen={(courseId) => setView({ course: courseId })}
+        onBack={() => setView(null)}
+      />
+    );
+
   return (
     <main className={styles.screen}>
       <div className={ui.backBar}>
         <Back onBack={onBack} />
       </div>
       <div className={styles.body}>
-        {chat ? <Answer key={chat.reply} text={chat.reply} busy={talk.busy} /> : <AranduSays text={SAY} shown={shown} pose="stand" />}
+        <AranduSays text={SAY} shown={shown} pose="stand" />
         {done && (
           <div className={`${styles.places} ${ui.after}`}>
             {places.map(({ institution, city, courses }) => {
@@ -55,7 +54,7 @@ export function PlacesView({ places, pick, busy, failed, onPick, onNext, onBack 
               const logo = safeUrl(institution.logo?.url);
               const kind = KIND[institution.kind];
               return (
-                <div key={`${institution.name} ${city}`} className={styles.place} data-on={courses.some((c) => c.courseId === pick) || undefined}>
+                <div key={`${institution.name} ${city}`} className={styles.place}>
                   {photo && institution.photo && (
                     <div className={styles.photo}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- Wikimedia Commons file of any size: no optimizer route for it. */}
@@ -86,27 +85,12 @@ export function PlacesView({ places, pick, busy, failed, onPick, onNext, onBack 
                     </span>
                   </div>
                   <div className={styles.careers}>
-                    {courses.map(({ courseId, course, profession }) => (
-                      <button
-                        key={courseId}
-                        type="button"
-                        className={styles.career}
-                        aria-pressed={pick === courseId}
-                        data-talk={chat?.slug === profession.slug || undefined}
-                        onClick={() => onPick(courseId)}
-                      >
+                    {courses.map(({ courseId, course }) => (
+                      <button key={courseId} type="button" className={styles.career} onClick={() => setView({ course: courseId })}>
                         {course}
                       </button>
                     ))}
                   </div>
-                  {picked && courses.includes(picked) && (
-                    <button type="button" className={styles.choose} disabled={busy} onClick={onNext}>
-                      Escolher {picked.course}
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M9 6l6 6-6 6" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
               );
             })}
@@ -114,14 +98,13 @@ export function PlacesView({ places, pick, busy, failed, onPick, onNext, onBack 
           </div>
         )}
       </div>
-      <footer className={styles.foot}>
-        {(failed || talk.failed) && (
-          <p className={styles.error} role="alert">
-            {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
-          </p>
-        )}
-      </footer>
-      {done && <Composer placeholder="Pergunte sobre uma carreira" busy={talk.busy} onSend={ask} />}
+      {done && (
+        <footer className={styles.foot}>
+          <button type="button" className={ui.ghost} onClick={() => setView("chat")}>
+            Conversar com o Arandu
+          </button>
+        </footer>
+      )}
     </main>
   );
 }

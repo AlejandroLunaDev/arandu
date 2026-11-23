@@ -160,6 +160,26 @@
   inset: -7px -3px;
 }
 
+/* O10, one course: where, then its name, over Arandu's words. */
+.courseHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 20px 6px;
+}
+
+.courseHead h1 {
+  margin: 0;
+  font: 800 26px/30px var(--font-bricolage), var(--font-display);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* O10's chat: the courses of the career Arandu talks about, to open one. */
+.talkCourses {
+  padding: 4px 16px 0;
+}
+
 .hint {
   margin: 8px 16px 0;
   color: var(--text-muted);

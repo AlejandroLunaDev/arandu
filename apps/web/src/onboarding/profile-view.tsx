@@ -2,12 +2,12 @@
 
 import type { AranduProfile } from "@arandu/contracts";
 import { AranduSays, useReveal } from "@/ui/arandu-says";
+import { Composer } from "@/ui/composer";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
 
-// shortcut: the board adds "Se algo ficou errado, toca pra corrigir."; tags can't be corrected yet, so it waits.
-const SAY = "Olha o que eu entendi de você.";
+const SAY = "Olha o que eu entendi de você. Se algo ficou errado ou faltou, me conta.";
 
 /** The profile's rows as on the O09 board; a row with nothing in it is left out. */
 function rows(profile: AranduProfile): [label: string, items: string[]][] {
@@ -23,13 +23,37 @@ function rows(profile: AranduProfile): [label: string, items: string[]][] {
   return all.filter(([, items]) => items.length > 0);
 }
 
-// O09: what Arandu understood of the person, read from the onboarding's conversation.
-export function ProfileView({ profile, busy, failed, onNext }: { profile: AranduProfile; busy: boolean; failed: boolean; onNext: () => void }) {
-  const { shown, done } = useReveal(SAY);
+/** What Arandu says over the profile: his words come out one by one, each anew. */
+function Says({ text }: { text: string }) {
+  const { shown } = useReveal(text);
+  return <AranduSays text={text} shown={shown} pose="sit" />;
+}
+
+// O09: what Arandu understood of the person, read from the onboarding's conversation. Something wrong or missing,
+// the person tells him in their own words: it goes to the same conversation, and he reads the profile again.
+export function ProfileView({
+  profile,
+  reply,
+  busy,
+  failed,
+  onFix,
+  onNext,
+}: {
+  profile: AranduProfile;
+  /** Arandu's answer to the last correction, or null before any. */
+  reply: string | null;
+  busy: boolean;
+  failed: boolean;
+  onFix: (text: string) => void;
+  onNext: () => void;
+}) {
+  const { done } = useReveal(SAY);
   return (
     <main className={styles.screen}>
       <div className={styles.body}>
-        <AranduSays text={SAY} shown={shown} pose="sit" />
+        <div className={busy ? styles.thinking : undefined}>
+          <Says key={reply ?? SAY} text={reply ?? SAY} />
+        </div>
         {done && (
           <div className={`${styles.profile} ${ui.after}`}>
             <dl>
@@ -59,6 +83,7 @@ export function ProfileView({ profile, busy, failed, onNext }: { profile: Arandu
           Ver onde dá pra estudar
         </MainButton>
       </footer>
+      {done && <Composer placeholder="Corrigir ou acrescentar algo" busy={busy} onSend={onFix} />}
     </main>
   );
 }

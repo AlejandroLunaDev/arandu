@@ -26,8 +26,8 @@ export function OnboardingFlow() {
   const [picks, setPicks] = useState<string[]>([]);
   const [said, setSaid] = useState<string | null>(null);
   const [profileShown, setProfileShown] = useState(false);
+  const [fixed, setFixed] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
-  const [pick, setPick] = useState<number | null>(null);
   const [chosen, setChosen] = useState<{ course: PlaceCourse; place: Place } | null>(null);
   const { busy, failed, attempt } = useAttempt();
 
@@ -40,15 +40,13 @@ export function OnboardingFlow() {
     return (
       <PlacesView
         places={places}
-        pick={pick}
         busy={busy}
         failed={failed}
-        onPick={setPick}
         onBack={() => setPlaces(null)}
-        onNext={() =>
+        onChoose={(courseId) =>
           attempt(async () => {
-            const place = places.find((p) => p.courses.some((c) => c.courseId === pick))!;
-            const course = place.courses.find((c) => c.courseId === pick)!;
+            const place = places.find((p) => p.courses.some((c) => c.courseId === courseId))!;
+            const course = place.courses.find((c) => c.courseId === courseId)!;
             await saveJourney({ professionSlug: course.profession.slug, courseId: course.courseId });
             setChosen({ course, place });
           })
@@ -60,8 +58,16 @@ export function OnboardingFlow() {
     return (
       <ProfileView
         profile={turn.profile}
+        reply={fixed ? turn.reply : null}
         busy={busy}
         failed={failed}
+        // A correction is one more message in the onboarding's conversation: the reply carries the profile read again.
+        onFix={(text) =>
+          attempt(async () => {
+            setTurn(await answerOnboarding(turn.sessionId, text));
+            setFixed(true);
+          })
+        }
         onNext={() =>
           attempt(async () => {
             const { careers } = await recommend(toProfileInput(turn.profile));
