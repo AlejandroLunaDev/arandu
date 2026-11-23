@@ -9,7 +9,9 @@
 const LINT_CONFIG = /eslint\.config\.|\.oxlintrc\.json/;
 // Setting it to anything but .githooks, or unsetting it; reading it (`git config core.hooksPath`) is fine.
 const HOOKS_PATH_OVERRIDE =
-  /--unset(-all)?\s+core\.hookspath|core\.hookspath[\s=]+["']?(?!\.githooks(?![\w./-]))[^\s;&|)`]/i;
+  /--unset(-all)?\s+core\.hookspath|core\.hookspath[\s=]+["']?(?!\.githooks(?![\w./-]))[^\s;&|)`"']/i;
+// git takes any unambiguous prefix of a long option: --no-veri and --no-verif skip the hook as --no-verify does.
+const NO_VERIFY = /--no-veri(fy?)?(?![\w-])/;
 
 const askForLintConfig = (target) => ({
   permissionDecision: 'ask',
@@ -19,7 +21,7 @@ const askForLintConfig = (target) => ({
 function decide({ tool_name: tool, tool_input: input = {} }) {
   if (tool === 'Bash' || tool === 'PowerShell') {
     const command = String(input.command || '');
-    if (command.includes('--no-verify') || HOOKS_PATH_OVERRIDE.test(command))
+    if (NO_VERIFY.test(command) || HOOKS_PATH_OVERRIDE.test(command))
       return {
         permissionDecision: 'deny',
         permissionDecisionReason:

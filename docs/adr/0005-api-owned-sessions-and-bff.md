@@ -19,8 +19,8 @@ already solved this with sessions owned by its API; that design was ported (PR #
   progress; a Google that already has a user loads that user and deletes the guest (`apps/api/src/modules/auth/auth.service.ts`).
 - The browser never holds a token: the web's Next server keeps them in one HttpOnly, Secure, SameSite=Lax cookie
   (`__Host-session`, `apps/web/src/auth/cookie.ts`).
-- Every call from the web's server carries `x-internal-secret`; the API's guard refuses any call without it
-  (`apps/api/src/modules/auth/auth.guard.ts`).
+- Every call from the web's server carries `x-internal-secret`; the API's guard refuses any call without it, except
+  routes marked `@OpenToBrowsers()`: the health check and the landing's books (`apps/api/src/modules/auth/auth.guard.ts:47`).
 - CORS allows only `GET` from the listed origins, for the landing's public books (`apps/api/src/main.ts`).
 
 ## Consequences

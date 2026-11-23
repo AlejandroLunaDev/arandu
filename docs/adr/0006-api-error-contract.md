@@ -26,5 +26,6 @@ landed in 8473e57 (PR #105); named codes per error came with this repository's e
 
 ## Consequences
 
-- The web reads `error.code` instead of matching statuses or text.
+- Clients branch on `error.code` when the status is not enough, never on the message. Today the web branches on
+  statuses alone (`apps/web/src/caminho/actions.ts:27`, `apps/web/src/app-shell/api.ts:46`), which this keeps.
 - Adding an error means adding a factory and, when the web branches on it, its code to `packages/contracts`.

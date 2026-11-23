@@ -44,8 +44,8 @@ export class AuthService {
 
     const owner = await this.repository.findUserByGoogle(identity.googleSub);
     if (owner?.bannedAt) throw userBanned();
-    // shortcut: two simultaneous first sign-ins of one Google can make promote break the unique key (a 500 the
-    // retry clears); a transaction with a row lock would close it if it ever shows up.
+    // shortcut: two simultaneous first sign-ins of one Google can make promote break the unique key (a 409 conflict
+    // the retry clears); a transaction with a row lock would close it if it ever shows up.
     const userId =
       !owner &&
       current?.guest &&

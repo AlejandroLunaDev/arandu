@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - The browser never calls the API, except the landing's public books (GET). Everything else goes through this app's
   server, which holds the session cookie and sends `x-internal-secret` (ADR-0005).
-- Branch on `error.code` from API errors, never on the status alone or the message (ADR-0006).
+- When the status is not enough to tell API errors apart, branch on `error.code`, never on the message (ADR-0006).
 - No raw design values (hex, px, inline styles): every value comes from the tokens; `arandu/no-raw-design-values`
   enforces it.
 - In the 3D loops (`src/ui/cat-scene.ts`, `src/ui/shelf-scene.ts`, `src/landing/stage/*`): no allocations per frame,

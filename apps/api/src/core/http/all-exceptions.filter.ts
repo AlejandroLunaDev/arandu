@@ -107,6 +107,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: 'conflict',
         message: 'It already exists',
       };
+      // Logged so a constraint broken by a bug, not a race, still shows up.
+      this.logger.warn(`${where}: ${(exception as Error).message}`);
     } else {
       error = {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
