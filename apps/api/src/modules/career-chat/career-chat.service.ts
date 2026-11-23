@@ -1,0 +1,170 @@
+import type {
+  AranduChatReply,
+  AranduChatRequest,
+  AranduMemory,
+  ChatMessage,
+  Source,
+} from '@arandu/contracts';
+import { AiService } from '@nestjs/ai';
+import { Injectable } from '@nestjs/common';
+import { z } from 'zod';
+import {
+  CareersRepository,
+  type ProfessionFirstTerm,
+} from '../careers/careers.repository.js';
+import { MemoryService } from '../memory/memory.service.js';
+import {
+  careerChatInstructions,
+  choosingInstructions,
+} from './career-chat.prompt.js';
+import {
+  curriculumNotFound,
+  professionNotFound,
+} from './career-chat.errors.js';
+
+/** The person's last 6 exchanges with Arandu: history is the main token cost. */
+export const RECENT_MESSAGES = 12;
+
+export interface ChatInput {
+  professionSlug: string;
+  /** The conversation so far; the last message is the person's. */
+  messages: ChatMessage[];
+  memory?: Pick<AranduMemory, 'profile' | 'summary'>;
+}
+
+/** Arandu inside the career the person chose, grounded on its real first-term subjects (§4.2, §6). */
+@Injectable()
+export class CareerChatService {
+  constructor(
+    private readonly ai: AiService,
+    private readonly careers: CareersRepository,
+    private readonly memory: MemoryService,
+  ) {}
+
+  /** Answers the person's message, in a new session without sessionId, remembering what Arandu knows of them. */
+  async answer(
+    userId: string,
+    request: AranduChatRequest,
+  ): Promise<AranduChatReply> {
+    if ('professionSlugs' in request) return this.choose(userId, request);
+    const { professionSlug, sessionId, message } = request;
+    // The career is checked before a session is opened, so a wrong slug stores nothing.
+    const profession = await this.career(professionSlug);
+    const history = sessionId
+      ? await this.memory.history(
+          userId,
+          sessionId,
+          'career',
+          RECENT_MESSAGES - 1,
+          professionSlug,
+        )
+      : [];
+    const id =
+      sessionId ??
+      (await this.memory.openSession(userId, 'career', professionSlug));
+
+    const said: ChatMessage = { role: 'user', content: message };
+    const { reply, sources } = await this.reply(profession, {
+      professionSlug,
+      messages: [...history, said],
+      memory: await this.memory.read(userId),
+    });
+    await this.memory.record(id, [said, { role: 'assistant', content: reply }]);
+    return { sessionId: id, reply, sources, professionSlug };
+  }
+
+  /** O10: Arandu among the recommended careers, answering about the one the person names or points to. */
+  private async choose(
+    userId: string,
+    {
+      professionSlugs,
+      sessionId,
+      message,
+    }: Extract<AranduChatRequest, { professionSlugs: string[] }>,
+  ): Promise<AranduChatReply> {
+    // Every career is checked before a session is opened, so a wrong slug stores nothing.
+    const professions = await Promise.all(
+      professionSlugs.map(async (slug) => ({
+        slug,
+        profession: await this.career(slug),
+      })),
+    );
+    const history = sessionId
+      ? await this.memory.history(
+          userId,
+          sessionId,
+          'choosing',
+          RECENT_MESSAGES - 1,
+        )
+      : [];
+    const id = sessionId ?? (await this.memory.openSession(userId, 'choosing'));
+
+    const said: ChatMessage = { role: 'user', content: message };
+    const { object } = await this.ai.generateObject({
+      label: 'arandu-choosing',
+      // The career comes first, so the model decides what it talks about before it writes.
+      schema: z.object({
+        professionSlug: z
+          .enum(professionSlugs as [string, ...string[]])
+          .nullable(),
+        reply: z.string().min(1),
+      }),
+      instructions: choosingInstructions(
+        professions,
+        await this.memory.read(userId),
+      ),
+      messages: recent([...history, said]),
+    });
+    await this.memory.record(id, [
+      said,
+      { role: 'assistant', content: object.reply },
+    ]);
+    const about = professions.find((p) => p.slug === object.professionSlug);
+    return {
+      sessionId: id,
+      reply: object.reply,
+      sources: about ? sourcesOf(about.profession) : [],
+      professionSlug: about ? about.slug : null,
+    };
+  }
+
+  /** Arandu's reply to the conversation so far. */
+  async chat(input: ChatInput): Promise<{ reply: string; sources: Source[] }> {
+    return this.reply(await this.career(input.professionSlug), input);
+  }
+
+  private async career(slug: string): Promise<ProfessionFirstTerm> {
+    const profession = await this.careers.firstTerm(slug);
+    if (!profession) throw professionNotFound();
+    // No curriculum means nothing real to ground on: Arandu does not talk about it rather than invent it.
+    if (profession.courses.length === 0) throw curriculumNotFound();
+    return profession;
+  }
+
+  private async reply(
+    profession: ProfessionFirstTerm,
+    { messages, memory }: ChatInput,
+  ): Promise<{ reply: string; sources: Source[] }> {
+    const { text } = await this.ai.generateText({
+      label: 'arandu-chat',
+      instructions: careerChatInstructions(profession, memory),
+      messages: recent(messages),
+    });
+    return { reply: text, sources: sourcesOf(profession) };
+  }
+}
+
+/** The last turns only, starting on the person's message; past sessions reach Arandu through the memory's summary. */
+function recent(messages: ChatMessage[]): ChatMessage[] {
+  const last = messages.slice(-RECENT_MESSAGES);
+  if (last[0]?.role === 'assistant') last.shift();
+  return last;
+}
+
+function sourcesOf(profession: ProfessionFirstTerm): Source[] {
+  return [
+    ...new Map(
+      profession.courses.map((c) => [c.source.url, c.source]),
+    ).values(),
+  ];
+}

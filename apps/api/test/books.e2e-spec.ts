@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { AppModule } from './../src/app.module.js';
-import { BooksRepository } from '../src/books/books.repository.js';
+import { AppModule } from '../src/app.module.js';
+import { BooksRepository } from '../src/modules/books/books.repository.js';
 
 // The real AppModule (real AuthGuard and ThrottlerGuard) with dummy variables and a fake repository: nothing here
 // reaches a database.
@@ -63,9 +63,9 @@ describe('Books (e2e)', () => {
     expect(res.headers['cache-control']).toBe('public, max-age=21600');
   });
 
-  it('GET /books/:slug answers 404 and 400 without a token', async () => {
+  it('GET /books/:slug answers 404 and 404 without a token', async () => {
     await request(app.getHttpServer()).get('/books/outro').expect(404);
-    await request(app.getHttpServer()).get('/books/Invalid_Slug').expect(400);
+    await request(app.getHttpServer()).get('/books/Invalid_Slug').expect(404);
   });
 
   it('GET /books/own/:book is public and cached, 404 for an unknown book', async () => {

@@ -25,7 +25,7 @@ const PROPS = [
 
 /** The ledge under the exercise: a prop and Arandu, sitting while the person thinks. */
 function Stage({ turn }: { turn: number }) {
-  const [file, width, height] = PROPS[turn % PROPS.length];
+  const [file, width, height] = PROPS[turn % PROPS.length]!;
   return (
     <div className={p.stage} aria-hidden="true">
       <div className={p.ledge} />

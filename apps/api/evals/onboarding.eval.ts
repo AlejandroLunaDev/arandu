@@ -8,8 +8,8 @@ import type {
 import { AiService, type AiObjectResult } from '@nestjs/ai';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module.js';
-import { OnboardingService } from '../src/onboarding/onboarding.service.js';
-import { RecommendationsService } from '../src/recommendations/recommendations.service.js';
+import { OnboardingService } from '../src/modules/onboarding/onboarding.service.js';
+import { RecommendationsService } from '../src/modules/recommendations/recommendations.service.js';
 import { createJudge, questionMarks } from './judge.js';
 
 /** Each case runs this many times; a case passes only if every run does. */

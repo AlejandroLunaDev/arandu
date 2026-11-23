@@ -373,8 +373,8 @@ function SamplePage({ book }: { book: Book }) {
           <section key={i} className={styles.subject}>
             <h4 className={styles.name}>{subject.name}</h4>
             <p className={`${styles.cap} ${styles.roomy}`}>{subject.institution}</p>
-            {subject.topics.length === 1 && subject.topics[0].length > TOPIC_CHARS ? (
-              <p className={`${styles.topics} ${styles.about}`}>{trimAbout(subject.topics[0])}</p>
+            {subject.topics.length === 1 && subject.topics[0]!.length > TOPIC_CHARS ? (
+              <p className={`${styles.topics} ${styles.about}`}>{trimAbout(subject.topics[0]!)}</p>
             ) : (
               <ul className={styles.topics}>
                 {trimTopics(subject.topics).map((topic, j) => (
@@ -446,7 +446,7 @@ const roomy = (page: StoryPage) =>
   page.facts.reduce<StoryPage[]>(
     (parts, fact, i) => {
       if (i > 0 && chartOf(fact.text)) parts.push({ ...page, facts: [fact] });
-      else parts[parts.length - 1].facts.push(fact);
+      else parts[parts.length - 1]!.facts.push(fact);
       return parts;
     },
     // A page with no paragraphs yet still shows its title.

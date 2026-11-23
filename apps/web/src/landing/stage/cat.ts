@@ -134,10 +134,13 @@ export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
     };
   }
 
+  const head = rig.head;
+  if (!head) throw new Error("arandu.glb has no head bone");
+
   // His mouth: ahead of the head bone and below it, at rest, in metres of the model.
   const mouth = new THREE.Object3D();
-  mouth.position.copy(rig.head.bone.worldToLocal(rig.head.pos.clone().add(MOUTH)));
-  rig.head.bone.add(mouth);
+  mouth.position.copy(head.bone.worldToLocal(head.pos.clone().add(MOUTH)));
+  head.bone.add(mouth);
 
   // The book's pages face +Z in its own frame: turned to -X, toward him.
   const paws = new THREE.Object3D();
@@ -225,7 +228,7 @@ export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
       let pitchTo = 0.08 * Math.sin(time * 0.31);
       if (p.look) {
         root.updateMatrixWorld(true);
-        model.worldToLocal(local.copy(p.look)).sub(rig.head.pos);
+        model.worldToLocal(local.copy(p.look)).sub(head.pos);
         yawTo = clamp(Math.atan2(-local.z, local.x), -1, 1);
         pitchTo = clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), -0.4, 0.5);
       }

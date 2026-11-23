@@ -3,7 +3,7 @@ import { QUESTIONS, type Question } from "./questions.ts";
 
 /** The question Arandu is on: the first topic it has not covered yet, as the API asks them in order. */
 export function nextQuestion(covered: OnboardingTopic[]): Question {
-  return QUESTIONS.find((q) => !covered.includes(q.topic)) ?? QUESTIONS[QUESTIONS.length - 1];
+  return QUESTIONS.find((q) => !covered.includes(q.topic)) ?? QUESTIONS[QUESTIONS.length - 1]!;
 }
 
 /** What Arandu reads as the person's answer: the tapped options, then their own words. */

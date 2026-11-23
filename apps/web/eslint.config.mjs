@@ -6,6 +6,7 @@ import noRawDesignValues from "./lint/no-raw-design-values.mjs";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
   {
     files: ["src/**/*.{js,jsx,mjs,ts,tsx}"],
     plugins: { arandu: { rules: { "no-raw-design-values": noRawDesignValues } } },

@@ -463,7 +463,7 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
   room.seat = row.seat;
   room.walk = walkway(content, row.seat);
   // The books on either side of his stretch, each with a copy that opens, hidden until he reads it.
-  room.reads = [row.left.books[row.left.books.length - 1], row.right.books[0]].map((b) => {
+  room.reads = [row.left.books[row.left.books.length - 1]!, row.right.books[0]!].map((b) => {
     const open = kit.open(b.object);
     open.visible = false;
     content.add(open);

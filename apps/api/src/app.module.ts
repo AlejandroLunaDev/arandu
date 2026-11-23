@@ -9,28 +9,28 @@ import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
-import { AuthGuard } from './auth/auth.guard.js';
-import { AuthModule } from './auth/auth.module.js';
-import { BooksModule } from './books/books.module.js';
-import { CareerChatModule } from './career-chat/career-chat.module.js';
-import { CareersModule } from './careers/careers.module.js';
-import { validateEnv } from './config/env.js';
-import { MemoryModule } from './memory/memory.module.js';
-import { JourneyModule } from './journey/journey.module.js';
-import { OnboardingModule } from './onboarding/onboarding.module.js';
-import { PathsModule } from './paths/paths.module.js';
-import { AccountModule } from './account/account.module.js';
-import { GameModule } from './game/game.module.js';
-import { ProgressModule } from './progress/progress.module.js';
-import { AiModule } from './platform/ai/ai.module.js';
-import { DatabaseModule } from './platform/database/database.module.js';
+import { AuthGuard } from './modules/auth/auth.guard.js';
+import { AuthModule } from './modules/auth/auth.module.js';
+import { BooksModule } from './modules/books/books.module.js';
+import { CareerChatModule } from './modules/career-chat/career-chat.module.js';
+import { CareersModule } from './modules/careers/careers.module.js';
+import { validateEnv } from './core/config/env.js';
+import { MemoryModule } from './modules/memory/memory.module.js';
+import { JourneyModule } from './modules/journey/journey.module.js';
+import { OnboardingModule } from './modules/onboarding/onboarding.module.js';
+import { PathsModule } from './modules/paths/paths.module.js';
+import { AccountModule } from './modules/account/account.module.js';
+import { GameModule } from './modules/game/game.module.js';
+import { ProgressModule } from './modules/progress/progress.module.js';
+import { AiModule } from './core/ai/ai.module.js';
+import { DatabaseModule } from './core/database/database.module.js';
 import {
   AllExceptionsFilter,
   validationFailed,
-} from './platform/http/all-exceptions.filter.js';
-import { RequestLoggerMiddleware } from './platform/http/request-logger.middleware.js';
-import { RateLimitModule } from './platform/rate-limit/rate-limit.module.js';
-import { RecommendationsModule } from './recommendations/recommendations.module.js';
+} from './core/http/all-exceptions.filter.js';
+import { RequestLoggerMiddleware } from './core/http/request-logger.middleware.js';
+import { RateLimitModule } from './core/rate-limit/rate-limit.module.js';
+import { RecommendationsModule } from './modules/recommendations/recommendations.module.js';
 
 @Module({
   imports: [

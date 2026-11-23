@@ -660,5 +660,7 @@ export type AuthErrorCode =
   | "refresh_deadline_passed"
   /** 403, at login and on every request. */
   | "user_banned"
+  /** 503: Supabase could not be reached at sign-in; try again, the person is not signed out. */
+  | "identity_unavailable"
   /** 429 */
   | "too_many_requests";

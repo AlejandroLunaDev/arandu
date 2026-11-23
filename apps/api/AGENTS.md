@@ -31,3 +31,15 @@ When a task depends on how the app behaves in production - an error users hit, a
 
 - The Observe MCP server answers those questions directly: errors with their traces and logs, slow operations, jobs, and what a release changed (`find_regressions`, `diff_release`). It is included on the Pro plan and above. In Claude Code: `claude mcp add observe --transport http https://observe-api.nestjs.com/mcp`, and the client opens a browser to approve. Other clients: https://www.observe.nestjs.com/documentation/mcp
 - Without it, the user can open the request or error in the Observe dashboard and click **Copy agent prompt**, which hands over that page's trace, stack and logs as text.
+
+## This app
+
+- `src/modules/<area>/` holds the business areas (auth, books, paths, progress, game...); `src/core/` holds the
+  infrastructure they share (ai, config, database, http, rate-limit).
+- Errors: throw through the named factories in `<module>.errors.ts`, each with its own `code` (ADR-0006). Never throw a
+  bare Nest exception or a plain message.
+- Path params: `param(schema, notFound)` from `src/core/http/params.ts`, so a malformed id is the resource's 404.
+- A query that must return a row (`insert ... returning`, an aggregate, an upsert) goes through `one()` from
+  `src/core/database/one.ts`; a lookup that may miss checks `undefined` and throws its 404.
+- postgres.js v4 has no `sql.array()`: pass a JS array as is. Specs mock `sql` and do not catch this.
+- Tests are co-located `*.spec.ts`; e2e tests live in `test/`.

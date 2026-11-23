@@ -282,7 +282,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     for (const el of room.letters) el.style.transform = "";
     // The page may still be bringing the motto in when the physics starts: read its places without
     // that motion, where it comes to rest.
-    const line = room.letters[0].closest<HTMLElement>("[data-reveal]");
+    const line = room.letters[0]?.closest<HTMLElement>("[data-reveal]");
     const moving = new DOMMatrixReadOnly(line ? getComputedStyle(line).transform : "none");
     for (const el of room.letters) {
       const r = el.getBoundingClientRect();
@@ -377,8 +377,8 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     bounds.right = (innerWidth - a.left) / room.k;
     floor.setTranslation({ x: 0, y: bounds.bottom - 0.05, z: 0 });
     ceiling.setTranslation({ x: 0, y: bounds.top + 0.05, z: 0 });
-    sides[0].setTranslation({ x: bounds.left - 0.05, y: 0, z: 0 });
-    sides[1].setTranslation({ x: bounds.right + 0.05, y: 0, z: 0 });
+    sides[0]!.setTranslation({ x: bounds.left - 0.05, y: 0, z: 0 });
+    sides[1]!.setTranslation({ x: bounds.right + 0.05, y: 0, z: 0 });
     fall = bounds.bottom - 0.6;
   };
   const layout = () => {
@@ -572,7 +572,7 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
       const first = spans.findIndex((s) => s.max >= lo && s.min <= hi);
       if (first < 0) return null;
       // Props closer together than he is long are one obstacle: he cannot land between them.
-      const block = { ...spans[first] };
+      const block = { ...spans[first]! };
       for (const s of spans.slice(first + 1)) {
         if (dir > 0 ? s.min > block.max + GAP : s.max < block.min - GAP) break;
         block.min = Math.min(block.min, s.min);
