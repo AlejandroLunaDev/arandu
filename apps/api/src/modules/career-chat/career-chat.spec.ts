@@ -79,6 +79,7 @@ describe('POST /arandu/chat', () => {
         },
       ],
       professionSlug: 'direito',
+      chosenCourseId: null,
     });
     expect(memory.createSession).toHaveBeenCalledWith(
       USER_ID,
@@ -223,8 +224,13 @@ describe('POST /arandu/chat among the recommended careers', () => {
     retrievedAt: '2026-11-01T00:00:00.000Z',
   };
 
-  const start = async (object: { professionSlug: string | null }) => {
-    model = fakeModel({ object: { ...object, reply: 'Claro!' } });
+  const start = async (object: {
+    professionSlug: string | null;
+    chosenCourseId?: number | null;
+  }) => {
+    model = fakeModel({
+      object: { chosenCourseId: null, ...object, reply: 'Claro!' },
+    });
     memory = fakeMemoryRepository();
     firstTerm = vi.fn(async (slug: string) =>
       slug === 'arquitetura'
@@ -258,6 +264,7 @@ describe('POST /arandu/chat among the recommended careers', () => {
       reply: 'Claro!',
       sources: [fauSource],
       professionSlug: 'arquitetura',
+      chosenCourseId: null,
     });
     expect(memory.createSession).toHaveBeenCalledWith(
       USER_ID,
@@ -278,6 +285,70 @@ describe('POST /arandu/chat among the recommended careers', () => {
 
     expect(res.body.professionSlug).toBeNull();
     expect(res.body.sources).toEqual([]);
+  });
+
+  const choices = [
+    {
+      courseId: 7,
+      course: 'Arquitetura',
+      institution: 'Mackenzie',
+      city: 'São Paulo',
+    },
+    {
+      courseId: 9,
+      course: 'Arquitetura',
+      institution: 'USP',
+      city: 'São Paulo',
+    },
+  ];
+  const withChoices = { ...body, choices };
+
+  it.each([
+    ['an id that is in choices', 9, 9],
+    ['an id that is not in choices', 99, null],
+    ['no decision', null, null],
+  ])('with choices, the model returning %s gives %s', async (_, got, want) => {
+    await app.close();
+    await start({ professionSlug: 'arquitetura', chosenCourseId: got });
+
+    const res = await post(withChoices).expect(200);
+
+    expect(res.body.chosenCourseId).toBe(want);
+    expect(res.body.reply).toBe('Claro!');
+  });
+
+  it('returns null when the model picks an id but no choices were sent', async () => {
+    await app.close();
+    await start({ professionSlug: 'arquitetura', chosenCourseId: 7 });
+
+    const res = await post().expect(200);
+
+    expect(res.body.chosenCourseId).toBeNull();
+  });
+
+  it('gives the courses on screen to the model', async () => {
+    await post(withChoices).expect(200);
+
+    expect(model.lastCall?.instructions).toContain(
+      '7: Arquitetura, Mackenzie, São Paulo',
+    );
+  });
+
+  it.each([
+    [
+      'more than 12 choices',
+      Array.from({ length: 13 }, (_, i) => ({
+        ...choices[0],
+        courseId: i + 1,
+      })),
+    ],
+    ['duplicate courseIds', [choices[0], choices[0]]],
+  ])('400s validation_failed for %s', async (_, invalid) => {
+    const res = await post({ ...body, choices: invalid }).expect(400);
+
+    expect(res.body.error.code).toBe('validation_failed');
+    expect(memory.createSession).not.toHaveBeenCalled();
+    expect(model.calls).toHaveLength(0);
   });
 
   it('reads the history of a choosing session', async () => {
@@ -339,6 +410,22 @@ describe('career chat prompts', () => {
     expect(prompt).toContain('2. Arquitetura (slug: arquitetura)');
     expect(prompt.indexOf('(slug: direito)')).toBeLessThan(
       prompt.indexOf('(slug: arquitetura)'),
+    );
+  });
+
+  it('lists the courses on screen and the confirmation rule, or says the choice is always null', () => {
+    const professions = [{ slug: 'direito', profession: direito() }];
+    const withChoices = choosingInstructions(professions, undefined, [
+      { courseId: 7, course: 'Direito', institution: 'USP', city: 'São Paulo' },
+      { courseId: 9, course: 'Direito', institution: 'PUC', city: 'Santos' },
+    ]);
+
+    expect(withChoices).toContain('7: Direito, USP, São Paulo');
+    expect(withChoices).toContain('9: Direito, PUC, Santos');
+    expect(withChoices).toContain('short warm confirmation');
+    expect(withChoices).not.toContain('always null');
+    expect(choosingInstructions(professions)).toContain(
+      'chosenCourseId: always null',
     );
   });
 
