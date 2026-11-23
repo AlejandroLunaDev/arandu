@@ -1,6 +1,6 @@
 "use client";
 
-import type { OnboardingAnswer, OnboardingReply } from "@arandu/contracts";
+import type { AranduProfile, OnboardingAnswer, OnboardingReply } from "@arandu/contracts";
 import { useState } from "react";
 import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
@@ -20,6 +20,12 @@ const MAX_PICKS = 10;
 // answers with its quick replies, their own words, or both. Once every topic is covered the
 // answers are saved to the journey (PATCH /me/journey), Arandu shows what it understood (O09), and the
 // recommended careers come by institution (O10, POST /arandu/recommendations).
+/** Whether a profile holds anything the person said. */
+const heard = (p: AranduProfile) =>
+  p.situation !== null ||
+  p.careerIdea !== null ||
+  [p.likedSubjects, p.hardSubjects, p.interests, p.workStyle, p.admired].some((list) => list.length > 0);
+
 export function OnboardingFlow() {
   const [turn, setTurn] = useState<OnboardingReply | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswer[]>([]);
@@ -64,7 +70,9 @@ export function OnboardingFlow() {
         // A correction is one more message in the onboarding's conversation: the reply carries the profile read again.
         onFix={(text) =>
           attempt(async () => {
-            setTurn(await answerOnboarding(turn.sessionId, text));
+            const next = await answerOnboarding(turn.sessionId, text);
+            // A message Arandu lets pass (guardrails) comes back with an empty profile: the one read so far stays.
+            setTurn(heard(next.profile) ? next : { ...next, profile: turn.profile });
             setFixed(true);
           })
         }

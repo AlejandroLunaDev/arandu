@@ -3,6 +3,7 @@
 import { AranduSays, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Composer } from "@/ui/composer";
+import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
@@ -22,6 +23,7 @@ export function CareersChatView({
   courses,
   chat,
   onChat,
+  busy,
   failed,
   onOpen,
   onChoose,
@@ -30,6 +32,7 @@ export function CareersChatView({
   courses: { place: Place; course: PlaceCourse }[];
   chat: CareersChat | null;
   onChat: (chat: CareersChat) => void;
+  busy: boolean;
   failed: boolean;
   onOpen: (courseId: number) => void;
   onChoose: (courseId: number) => void;
@@ -41,7 +44,10 @@ export function CareersChatView({
   const slugs = [...new Set(courses.map(({ course }) => course.profession.slug))].slice(0, 4);
   const ask = (message: string) =>
     talk.attempt(async () => {
-      const choices = courses.slice(0, 12).map(({ place, course }) => toChoice(place, course));
+      // The API takes 12 choices: the career he talks about comes first, so "quero essa" can always reach its courses.
+      const first = chat?.slug;
+      const ordered = first ? [...courses].sort((a, b) => Number(b.course.profession.slug === first) - Number(a.course.profession.slug === first)) : courses;
+      const choices = ordered.slice(0, 12).map(({ place, course }) => toChoice(place, course));
       const { sessionId, reply, professionSlug, chosenCourseId } = await askAboutCareers(slugs, message, chat?.sessionId, choices);
       onChat({ sessionId, reply, slug: professionSlug, chosen: chosenCourseId });
     });
@@ -72,8 +78,13 @@ export function CareersChatView({
       <footer className={styles.foot}>
         {(failed || talk.failed) && (
           <p className={styles.error} role="alert">
-            Não consegui responder agora. Pergunta de novo?
+            {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
           </p>
+        )}
+        {failed && chosen !== null && (
+          <MainButton disabled={busy} onClick={() => onChoose(chosen)}>
+            Tentar de novo
+          </MainButton>
         )}
       </footer>
       <Composer placeholder="Pergunte sobre as carreiras" busy={talk.busy} onSend={ask} />

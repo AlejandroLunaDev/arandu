@@ -20,22 +20,32 @@ type Props = { places: Place[]; busy: boolean; failed: boolean; onChoose: (cours
 // (CareersChatView). Either one chooses. Anything the API leaves null (photo, logo) stays off the card.
 export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
   const { shown, done } = useReveal(SAY);
-  const [view, setView] = useState<{ course: number } | "chat" | null>(null);
+  const [view, setView] = useState<{ course: number; from: "list" | "chat" } | "chat" | null>(null);
   // The chat with Arandu outlives a visit to a course: back from it, the conversation goes on.
   const [chat, setChat] = useState<CareersChat | null>(null);
   const courses = places.flatMap((place) => place.courses.map((course) => ({ place, course })));
 
   const open = typeof view === "object" && view ? courses.find(({ course }) => course.courseId === view.course) : undefined;
   if (open)
-    return <CourseView place={open.place} course={open.course} busy={busy} failed={failed} onChoose={onChoose} onBack={() => setView(chat ? "chat" : null)} />;
+    return (
+      <CourseView
+        place={open.place}
+        course={open.course}
+        busy={busy}
+        failed={failed}
+        onChoose={onChoose}
+        onBack={() => setView(typeof view === "object" && view?.from === "chat" ? "chat" : null)}
+      />
+    );
   if (view === "chat")
     return (
       <CareersChatView
         courses={courses}
         chat={chat}
         onChat={setChat}
+        busy={busy}
         failed={failed}
-        onOpen={(courseId) => setView({ course: courseId })}
+        onOpen={(courseId) => setView({ course: courseId, from: "chat" })}
         onChoose={onChoose}
         onBack={() => setView(null)}
       />
@@ -87,7 +97,7 @@ export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
                   </div>
                   <div className={styles.careers}>
                     {courses.map(({ courseId, course }) => (
-                      <button key={courseId} type="button" className={styles.career} onClick={() => setView({ course: courseId })}>
+                      <button key={courseId} type="button" className={styles.career} onClick={() => setView({ course: courseId, from: "list" })}>
                         {course}
                       </button>
                     ))}

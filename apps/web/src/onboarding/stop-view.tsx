@@ -123,7 +123,7 @@ export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone
             <b>{wallet.novelos}</b>
           </span>
         ) : (
-          <span className={p.first}>primeiro capítulo</span>
+          <span className={p.first}>amostra</span>
         )}
       </header>
 
