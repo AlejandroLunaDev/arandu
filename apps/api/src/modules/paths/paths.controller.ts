@@ -4,6 +4,9 @@ import type {
   CareerPaths,
   ExplainReply,
   ExplainRequest,
+  Lesson,
+  LessonResult,
+  LessonResultRequest,
   StopContent,
   StopResult,
   StopResultRequest,
@@ -18,11 +21,28 @@ import { PathsRepository } from './paths.repository.js';
 import { StopsService } from './stops.service.js';
 import { careerNotFound, stopNotFound } from './paths.errors.js';
 import { id, param, slug, topic } from '../../core/http/params.js';
+import { LESSONS } from './lessons.logic.js';
 
 const stopResult = z
   .object({
     mistakes: z.number().int().min(0).max(100),
     relampagoMistakes: z.number().int().min(0).max(100).nullable().optional(),
+  })
+  .strict();
+
+const lessonIndex = z.coerce.number().int().min(1).max(LESSONS);
+const lessonResult = z
+  .object({
+    missed: z
+      .array(
+        z
+          .object({
+            topic: z.number().int().min(0).max(200),
+            index: z.number().int().min(0).max(99),
+          })
+          .strict(),
+      )
+      .max(50),
   })
   .strict();
 
@@ -82,6 +102,36 @@ export class PathsController {
       body.mistakes,
       // No mistakes means nothing to review: a relâmpago result then is not a real one.
       body.mistakes > 0 ? (body.relampagoMistakes ?? null) : null,
+    );
+  }
+
+  /** P1-P2 (#123): one of the chapter's four lessons, for this person. */
+  @Get('stops/:disciplineId/:topic/lessons/:lesson')
+  lesson(
+    @UserId() userId: string,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, stopNotFound)) lessonNumber: number,
+  ): Promise<Lesson> {
+    return this.stops.lesson(userId, disciplineId, topicIndex, lessonNumber);
+  }
+
+  /** A lesson is done; lesson 4 finishes the chapter (O19). */
+  @Post('stops/:disciplineId/:topic/lessons/:lesson/result')
+  @HttpCode(200)
+  finishLesson(
+    @UserId() userId: string,
+    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
+    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, stopNotFound)) lessonNumber: number,
+    @Body({ schema: lessonResult }) body: LessonResultRequest,
+  ): Promise<LessonResult> {
+    return this.stops.finishLesson(
+      userId,
+      disciplineId,
+      topicIndex,
+      lessonNumber,
+      body.missed,
     );
   }
 

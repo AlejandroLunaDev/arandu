@@ -1,11 +1,12 @@
 import type { Mock } from 'vitest';
 import { AiModelError, AiOutputError, type AiService } from '@nestjs/ai';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { ProgressService } from '../progress/progress.service.js';
 import type { PathsRepository } from './paths.repository.js';
 import { quoteIsOnPage } from './source-check.js';
 import { exercisesOf, type StopDraft, StopsService } from './stops.service.js';
 import { exercisesInstructions } from './stop.prompt.js';
+import { splitLessons } from './lessons.logic.js';
 
 vi.mock('./source-check.js', () => ({ quoteIsOnPage: vi.fn() }));
 
@@ -353,6 +354,10 @@ describe('StopsService', () => {
     stopContent: Fn;
     saveStopContent: Fn;
     finishStop: Fn;
+    lessons: Fn;
+    chapterFinished: Fn;
+    missedElsewhere: Fn;
+    finishLesson: Fn;
   };
   let progress: { achievements: Fn };
   let service: StopsService;
@@ -407,6 +412,15 @@ describe('StopsService', () => {
       finishStop: vi
         .fn()
         .mockResolvedValue({ sabedoria: 15, peixinhos: 5, patinha: true }),
+      lessons: vi.fn().mockResolvedValue([]),
+      chapterFinished: vi.fn().mockResolvedValue(false),
+      missedElsewhere: vi.fn().mockResolvedValue([]),
+      finishLesson: vi.fn().mockResolvedValue({
+        sabedoria: 4,
+        peixinhos: 0,
+        patinha: false,
+        chapterDone: false,
+      }),
     };
     progress = { achievements: vi.fn().mockResolvedValue([]) };
     service = new StopsService(
@@ -927,6 +941,136 @@ describe('StopsService', () => {
     it('does not read achievements for a topic out of range', async () => {
       await expect(service.finish('u', 7, 2, 0)).rejects.toThrow();
       expect(progress.achievements).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('lessons', () => {
+    // Topic 1 has 11 exercises; this person's split is fixed by the seed.
+    const exercises = Array.from({ length: 11 }, (_, i) => ({
+      kind: 'ordene',
+      mode: 'produzir',
+      prompt: `p${i}`,
+      steps: ['a', 'b', 'c'],
+      why: 'w',
+    }));
+    const cards = [{ title: 't', text: 'x', source: {} }];
+    const split = splitLessons(11, 'u:7:1');
+    const at = (n: number) =>
+      split[n - 1]!.map((index) => ({ topic: 1, index }));
+    const done = (...lessons: number[]) =>
+      lessons.map((lesson) => ({
+        lesson,
+        missed: [] as { topic: number; index: number }[],
+      }));
+    const refsOf = (l: { exercises: { topic: number; index: number }[] }) =>
+      l.exercises.map(({ topic, index }) => ({ topic, index }));
+    const stopOf = (topic: number) => ({
+      discipline: { id: 7, name: 'Cálculo' },
+      topic: { index: topic, text: 't', total: 2 },
+      cards,
+      exercises,
+    });
+
+    beforeEach(() => {
+      // The mock type is shaped for the AI calls; the repository takes (disciplineId, topic, text).
+      paths.stopContent.mockImplementation(((_d: number, topic: number) =>
+        Promise.resolve(stopOf(topic))) as never);
+    });
+
+    it('lesson 1 has the cards and its share of the exercises; lessons 2-4 have no cards', async () => {
+      const first = await service.lesson('u', 7, 1, 1);
+      paths.lessons.mockResolvedValue(done(1));
+      const second = await service.lesson('u', 7, 1, 2);
+      paths.lessons.mockResolvedValue(done(1, 2, 3));
+      const review = await service.lesson('u', 7, 1, 4);
+
+      expect(first).toMatchObject({ index: 1, total: 4, cards });
+      expect(refsOf(first)).toEqual(at(1));
+      expect(refsOf(second)).toEqual(at(2));
+      expect(second.cards).toBeNull();
+      expect(review.cards).toBeNull();
+    });
+
+    it('refuses lesson 3 with 409 lesson_locked when only lesson 1 is done', async () => {
+      paths.lessons.mockResolvedValue(done(1));
+
+      const error = await service.lesson('u', 7, 1, 3).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getStatus()).toBe(409);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'lesson_locked',
+      });
+    });
+
+    it('allows lesson 3 once the chapter is finished', async () => {
+      paths.lessons.mockResolvedValue(done(1));
+      paths.chapterFinished.mockResolvedValue(true);
+
+      await expect(service.lesson('u', 7, 1, 3)).resolves.toMatchObject({
+        index: 3,
+      });
+    });
+
+    it('lesson 4 holds the misses from lessons 1-3, once each', async () => {
+      const m1 = at(1)[0]!;
+      const m3 = at(3)[0]!;
+      paths.lessons.mockResolvedValue([
+        { lesson: 1, missed: [m1] },
+        { lesson: 2, missed: [] },
+        { lesson: 3, missed: [m3, m1] },
+      ]);
+
+      expect(refsOf(await service.lesson('u', 7, 1, 4))).toEqual([m1, m3]);
+    });
+
+    it('lesson 4 adds an earlier miss of another chapter of the subject', async () => {
+      paths.lessons.mockResolvedValue(done(1, 2, 3));
+      paths.missedElsewhere.mockResolvedValue([{ topic: 0, index: 0 }]);
+
+      const review = await service.lesson('u', 7, 1, 4);
+
+      expect(refsOf(review).at(-1)).toEqual({ topic: 0, index: 0 });
+    });
+
+    describe('finishLesson', () => {
+      it('drops misses that are not in the lesson, and repeated ones', async () => {
+        const [a, b] = at(2);
+
+        await service.finishLesson('u', 7, 1, 2, [
+          a!,
+          at(1)[0]!,
+          { topic: 0, index: a!.index },
+          b!,
+          a!,
+        ]);
+
+        expect(paths.finishLesson).toHaveBeenCalledWith('u', 7, 1, 2, [a, b]);
+      });
+
+      it('returns the achievements this lesson earned', async () => {
+        progress.achievements
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ code: 'primeira_parada', earnedAt: 'x' }]);
+
+        const result = await service.finishLesson('u', 7, 1, 1, []);
+
+        expect(result.achievements).toEqual(['primeira_parada']);
+      });
+
+      it('skips the second achievements read when no sabedoria was given', async () => {
+        paths.finishLesson.mockResolvedValue({
+          sabedoria: 0,
+          peixinhos: 0,
+          patinha: false,
+          chapterDone: false,
+        });
+
+        const result = await service.finishLesson('u', 7, 1, 1, []);
+
+        expect(result.achievements).toEqual([]);
+        expect(progress.achievements).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

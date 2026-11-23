@@ -19,6 +19,15 @@ export { TIME_ZONE };
 
 type Tx = Sql | TransactionSql;
 
+/**
+ * Everything that gave sabedoria or counts as studying, aliased by the caller: stops finished in one pass and lessons
+ * (#123). League, season, totals and patinhas read this, never stop_results alone.
+ */
+export const sabedoriaRows = (sql: Tx) => sql`(
+  select user_id, sabedoria, completed_at from public.stop_results
+  union all
+  select user_id, sabedoria, completed_at from public.lesson_results)`;
+
 /** The wallet columns every query returns, for toWallet. */
 export const walletColumns = (sql: Tx) =>
   sql`novelos, novelos_at, peixinhos, marcadores, novelos_bought, novelos_bought_on::text as novelos_bought_on`;
@@ -173,9 +182,28 @@ export class ProgressRepository {
         coalesce(sum(sabedoria) filter (
           where completed_at at time zone ${TIME_ZONE} >= date_trunc('week', now() at time zone ${TIME_ZONE})
         ), 0)::int as week
-      from public.stop_results where user_id = ${userId}`,
+      from ${sabedoriaRows(this.sql)} s where user_id = ${userId}`,
     );
     return row;
+  }
+
+  /** When the person studied (a stop or a lesson finished), oldest first: the patinhas. */
+  studyTimes(userId: string): Promise<{ completedAt: Date; day: string }[]> {
+    return this.sql<{ completedAt: Date; day: string }[]>`
+      select completed_at as "completedAt",
+        to_char(completed_at at time zone ${TIME_ZONE}, 'YYYY-MM-DD') as day
+      from ${sabedoriaRows(this.sql)} s where user_id = ${userId} order by completed_at`;
+  }
+
+  /** Lessons done per chapter of a subject, for the circles. */
+  async lessonsDone(
+    userId: string,
+    disciplineId: number,
+  ): Promise<Map<number, number>> {
+    const rows = await this.sql<{ topic: number; n: number }[]>`
+      select topic, count(*)::int as n from public.lesson_results
+      where user_id = ${userId} and discipline_id = ${disciplineId} group by topic`;
+    return new Map(rows.map((r) => [r.topic, r.n]));
   }
 
   /** Today's São Paulo day and the Monday of its week. */

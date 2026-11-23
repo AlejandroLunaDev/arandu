@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import type { Finish } from './progress.logic.js';
 import type { ProgressRepository } from './progress.repository.js';
@@ -39,6 +40,9 @@ describe('ProgressService', () => {
         .fn()
         .mockResolvedValue({ discipline: null, weeklyGoal: null }),
       questionTimes: vi.fn().mockResolvedValue([]),
+      // Study times mirror the finishes unless a test says otherwise.
+      studyTimes: vi.fn((userId: string) => (repo.finishes as Mock)(userId)),
+      lessonsDone: vi.fn().mockResolvedValue(new Map()),
       topicCounts: vi.fn().mockResolvedValue(new Map([[7, 3]])),
       discipline: vi.fn().mockResolvedValue(discipline),
       reflection: vi
@@ -186,6 +190,16 @@ describe('ProgressService', () => {
       const { stops } = await service.book('u', 7);
 
       expect(stops.map((s) => s.state)).toEqual(['current', 'done', 'locked']);
+    });
+
+    it('counts lessons done per stop: 4 when the stop is done, 0 when unknown', async () => {
+      repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
+      repo.lessonsDone!.mockResolvedValue(new Map([[1, 2]]));
+
+      const { stops } = await service.book('u', 7);
+
+      expect(repo.lessonsDone).toHaveBeenCalledWith('u', 7);
+      expect(stops.map((s) => s.lessonsDone)).toEqual([4, 2, 0]);
     });
 
     it('has no current when all are done', async () => {
