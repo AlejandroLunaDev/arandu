@@ -10,13 +10,21 @@ import type {
 import { Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
 import { SQL, type Sql } from '../../core/database/database.module.js';
-import { addDays, MAX_NOVELOS, refill } from '../progress/progress.logic.js';
+import {
+  addDays,
+  dayOf,
+  MAX_NOVELOS,
+  noveloPrice,
+  refill,
+} from '../progress/progress.logic.js';
 import {
   asPerson,
   madeStops,
   ProgressRepository,
   TIME_ZONE,
   toWallet,
+  walletColumns,
+  type WalletRow,
 } from '../progress/progress.repository.js';
 import {
   FREE_TRACK,
@@ -43,7 +51,7 @@ import {
   levelNotReached,
   marcadoresFull,
   notEnoughPeixinhos,
-  novelosFull,
+  novelosNotOut,
   outfitNotOwned,
 } from './game.errors.js';
 import { one } from '../../core/database/one.js';
@@ -392,36 +400,36 @@ export class GameRepository {
     );
   }
 
-  /** The shop takes only peixinhos, which only studying earns. 409 when unaffordable or already full. */
-  buy(userId: string, item: keyof typeof SHOP): Promise<Wallet> {
+  /**
+   * The shop takes only peixinhos, which only studying earns. A novelo is one more, only at 0, priced by the day's
+   * purchases (#124). 409 when unaffordable, with novelos left, or with every page marker held.
+   */
+  buy(userId: string, item: 'novelos' | 'marcador'): Promise<Wallet> {
     return asPerson(
       this.sql.begin(async (tx) => {
         const row = await this.progress.lockWallet(tx, userId);
         const now = new Date();
-        const price = SHOP[item];
-        if (
-          item === 'novelos' &&
-          refill(row.novelos, row.novelos_at, now).novelos >= MAX_NOVELOS
-        )
-          throw novelosFull();
-        if (item === 'marcador' && row.marcadores >= MAX_MARCADORES)
-          throw marcadoresFull();
+        const novelo = item === 'novelos';
+        const price = novelo
+          ? noveloPrice(row.novelos_bought, row.novelos_bought_on, now)
+          : SHOP.marcador;
+        if (novelo && refill(row.novelos, row.novelos_at, now).novelos > 0)
+          throw novelosNotOut();
+        if (!novelo && row.marcadores >= MAX_MARCADORES) throw marcadoresFull();
         if (row.peixinhos < price) throw notEnoughPeixinhos();
+        const today = dayOf(now);
         const updated = one(
-          await tx<
-            {
-              novelos: number;
-              novelos_at: Date;
-              peixinhos: number;
-              marcadores: number;
-            }[]
-          >`
+          await tx<WalletRow[]>`
           update public.wallets set peixinhos = peixinhos - ${price},
-            novelos = case when ${item === 'novelos'} then ${MAX_NOVELOS} else novelos end,
-            novelos_at = case when ${item === 'novelos'} then ${now} else novelos_at end,
-            marcadores = marcadores + ${item === 'marcador' ? 1 : 0},
+            novelos = case when ${novelo} then 1 else novelos end,
+            novelos_at = case when ${novelo} then ${now} else novelos_at end,
+            novelos_bought = case when ${novelo} then
+              (case when novelos_bought_on = ${today}::date then novelos_bought else 0 end) + 1
+              else novelos_bought end,
+            novelos_bought_on = case when ${novelo} then ${today}::date else novelos_bought_on end,
+            marcadores = marcadores + ${novelo ? 0 : 1},
             updated_at = now()
-          where user_id = ${userId} returning novelos, novelos_at, peixinhos, marcadores`,
+          where user_id = ${userId} returning ${walletColumns(tx)}`,
         );
         return toWallet(updated, now);
       }),

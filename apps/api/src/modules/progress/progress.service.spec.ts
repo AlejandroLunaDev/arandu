@@ -13,12 +13,12 @@ const finish = (day: string, topic: number, disciplineId = 7): Finish => ({
 });
 
 const wallet = {
-  novelos: 5,
-  maxNovelos: 5,
+  novelos: 3,
+  maxNovelos: 3,
   nextNoveloAt: null,
   peixinhos: 0,
   marcadores: 0,
-  refillPrice: 100,
+  refillPrice: 15,
 };
 const discipline = { id: 7, name: 'Cálculo', topics: ['a', 'b', 'c'] };
 

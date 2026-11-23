@@ -130,5 +130,6 @@ export function rollCaixa(
   };
 }
 
-export const SHOP = { novelos: 100, marcador: 50 } as const;
+/** The page marker's price; a novelo's is NOVELO_PRICES (progress.logic). */
+export const SHOP = { marcador: 50 } as const;
 export const MAX_MARCADORES = 2;
