@@ -41,12 +41,14 @@ export function TvCard() {
       </p>
       <DownloadButton />
       <p className="sr-only">{MOTTO}</p>
-      <button type="button" className={styles.play} aria-label="Ver vídeo" onClick={() => setPlaying(true)}>
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path fill="currentColor" d="M5 2.8v10.4l8.4-5.2z" />
-        </svg>
-      </button>
-      {playing && (
+      {VIDEO_URL && (
+        <button type="button" className={styles.play} aria-label="Ver vídeo" onClick={() => setPlaying(true)}>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path fill="currentColor" d="M5 2.8v10.4l8.4-5.2z" />
+          </svg>
+        </button>
+      )}
+      {playing && VIDEO_URL && (
         <>
           <iframe
             className={styles.video}
