@@ -634,6 +634,18 @@ export interface BookReflection {
   /** The chapter with the most mistakes; null when none had any. */
   stuck: string | null;
   feeling: BookReflectionRequest | null;
+  /** Arandu's closing, once the book is finished and its feeling sent; null before, or while it cannot be written. */
+  closing: BookClosing | null;
+}
+
+/** Arandu's closing of a finished book: its reading in a few sentences, ending in a decision the person makes. */
+export interface BookClosing {
+  /** Brazilian Portuguese, 2 to 4 sentences, ending with one question. */
+  text: string;
+  /** The way Arandu suggests, never a verdict: the app shows all three and the person picks. */
+  suggestion: "seguir" | "outra_carreira" | "rever_capitulo";
+  /** The chapter (its topic index) to go back to, with "rever_capitulo"; otherwise null. */
+  chapter: number | null;
 }
 
 /** Every error response is `{ error: ApiError }`. Branch on `code`; `message` is for people and never parsed. */

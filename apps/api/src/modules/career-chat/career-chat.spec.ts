@@ -14,6 +14,7 @@ import {
 } from '../careers/careers.repository.js';
 import { SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { CareerChatModule } from './career-chat.module.js';
+import { ProgressRepository } from '../progress/progress.repository.js';
 import {
   careerChatInstructions,
   choosingInstructions,
@@ -52,6 +53,7 @@ describe('POST /arandu/chat', () => {
     app = await createHttpApp([CareerChatModule], model, [
       withMemory(memory),
       [CareersRepository, { firstTerm }],
+      [ProgressRepository, { studied: vi.fn().mockResolvedValue([]) }],
     ]);
   });
 
@@ -140,6 +142,7 @@ describe('POST /arandu/chat', () => {
     app = await createHttpApp([CareerChatModule], model, [
       withMemory(memory),
       [CareersRepository, { firstTerm }],
+      [ProgressRepository, { studied: vi.fn().mockResolvedValue([]) }],
     ]);
 
     const res = await post().expect(200);
@@ -301,6 +304,7 @@ describe('POST /arandu/chat among the recommended careers', () => {
     app = await createHttpApp([CareerChatModule], model, [
       withMemory(memory),
       [CareersRepository, { firstTerm }],
+      [ProgressRepository, { studied: vi.fn().mockResolvedValue([]) }],
     ]);
   };
 
@@ -376,7 +380,12 @@ describe('POST /arandu/chat among the recommended careers', () => {
   it('takes a distance course, which has no city', async () => {
     await app.close();
     await start({ professionSlug: 'arquitetura', chosenCourseId: 11 });
-    const distance = { courseId: 11, course: 'Arquitetura', institution: 'Unip', city: null };
+    const distance = {
+      courseId: 11,
+      course: 'Arquitetura',
+      institution: 'Unip',
+      city: null,
+    };
 
     const res = await post({ ...body, choices: [distance] }).expect(200);
 
@@ -452,6 +461,7 @@ describe('POST /arandu/chat among the recommended careers', () => {
     app = await createHttpApp([CareerChatModule], model, [
       withMemory(memory),
       [CareersRepository, { firstTerm }],
+      [ProgressRepository, { studied: vi.fn().mockResolvedValue([]) }],
     ]);
 
     const res = await post(withChoices).expect(200);
@@ -581,5 +591,43 @@ describe('career chat prompts', () => {
       'The real first-term subjects of this career at São Paulo institutions are listed below, with their sources. When',
     );
     expect(prompt).toContain('What you know, and its limits:');
+  });
+
+  it('both chats know the subjects the person tried, as information, and say nothing without any', () => {
+    const studied = [
+      {
+        name: 'Cálculo',
+        done: 3,
+        made: 6,
+        stuck: 'Limites',
+        feeling: { chips: ['difícil'], text: 'gostei das contas' },
+        suggestion: 'rever_capitulo' as const,
+      },
+      {
+        name: 'Física',
+        done: 1,
+        made: 6,
+        stuck: null,
+        feeling: null,
+        suggestion: null,
+      },
+    ];
+    const line =
+      '- Cálculo: 3 of 6 chapters; hardest: Limites; felt: difícil, gostei das contas; your suggestion when it ended: rever_capitulo\n- Física: 1 of 6 chapters';
+
+    expect(careerChatInstructions(direito(), undefined, studied)).toContain(
+      line,
+    );
+    expect(
+      choosingInstructions(
+        [{ slug: 'direito', profession: direito() }],
+        undefined,
+        [],
+        studied,
+      ),
+    ).toContain(line);
+    expect(careerChatInstructions(direito())).not.toContain(
+      'already tried in the app',
+    );
   });
 });

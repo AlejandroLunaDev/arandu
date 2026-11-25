@@ -1,4 +1,8 @@
-import type { BookReflectionRequest, Wallet } from '@arandu/contracts';
+import type {
+  BookClosing,
+  BookReflectionRequest,
+  Wallet,
+} from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
 import type { TransactionSql } from 'postgres';
 import { PersonGoneError } from '../memory/memory.repository.js';
@@ -43,6 +47,18 @@ export const madeChapters = (sql: Tx) => sql`
       select 1 from public.chapter_contents s
       where s.discipline_id = d.id and s.topic = g.t and s.topic_text = d.topics[g.t + 1])
   ), cardinality(coalesce(d.topics, '{}')))`;
+
+/** A subject the person studied, as Arandu's chats see it. */
+export interface Studied {
+  name: string;
+  /** Chapters finished, of the made ones people can open. */
+  done: number;
+  made: number;
+  /** The chapter with the most mistakes; null when none had any. */
+  stuck: string | null;
+  feeling: BookReflectionRequest | null;
+  suggestion: BookClosing['suggestion'] | null;
+}
 
 export interface WalletRow {
   novelos: number;
@@ -255,9 +271,47 @@ export class ProgressRepository {
       select count(*)::int as questions from public.chapter_questions
       where user_id = ${userId} and discipline_id = ${disciplineId}`,
     );
-    const [feeling] = await this.sql<BookReflectionRequest[]>`
-      select chips, text from public.book_reflections where user_id = ${userId} and discipline_id = ${disciplineId}`;
-    return { chapters, questions, feeling: feeling ?? null };
+    const [row] = await this.sql<
+      (BookReflectionRequest & { closing: BookClosing | null })[]
+    >`
+      select chips, text, closing from public.book_reflections where user_id = ${userId} and discipline_id = ${disciplineId}`;
+    return {
+      chapters,
+      questions,
+      feeling: row ? { chips: row.chips, text: row.text } : null,
+      closing: row?.closing ?? null,
+    };
+  }
+
+  /** Keeps Arandu's first closing of a book: one written at the same time by a second read is dropped. */
+  async saveClosing(
+    userId: string,
+    disciplineId: number,
+    closing: BookClosing,
+  ): Promise<void> {
+    await this.sql`
+      update public.book_reflections set closing = ${this.sql.json(closing as never)}
+      where user_id = ${userId} and discipline_id = ${disciplineId} and closing is null`;
+  }
+
+  /** The subjects the person studied: how far they got, where it was hardest and how it felt, for Arandu's chats. */
+  async studied(userId: string): Promise<Studied[]> {
+    return this.sql<Studied[]>`
+      select d.name, ${madeChapters(this.sql)} as made,
+        (select count(*)::int from public.chapter_results r
+          where r.user_id = ${userId} and r.discipline_id = d.id) as done,
+        (select d.topics[r.topic + 1] from public.chapter_results r
+          where r.user_id = ${userId} and r.discipline_id = d.id and r.mistakes > 0
+          order by r.mistakes desc, r.topic limit 1) as stuck,
+        case when b.user_id is null then null
+          else jsonb_build_object('chips', b.chips, 'text', b.text) end as feeling,
+        b.closing ->> 'suggestion' as suggestion
+      from public.disciplines d
+      left join public.book_reflections b on b.user_id = ${userId} and b.discipline_id = d.id
+      where d.id in (
+        select discipline_id from public.chapter_results where user_id = ${userId}
+        union select discipline_id from public.lesson_results where user_id = ${userId})
+      order by d.name`;
   }
 
   async saveReflection(
