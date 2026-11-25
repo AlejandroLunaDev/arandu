@@ -291,4 +291,18 @@ describe('enoughPieces', () => {
     expect(enoughPieces(piecesOf({ ...draft(), ...two }))).toBe(true);
     expect(enoughPieces(piecesOf(draft({ concepts: [a!] })))).toBe(false);
   });
+
+  it('takes a thin topic whose only applying piece is one case', () => {
+    const thin = draft({
+      classification: [],
+      sequence: [],
+      sentence: [],
+      problems: [],
+      code: [],
+    });
+
+    expect(
+      enoughPieces(piecesOf({ ...thin, cases: thin.cases.slice(0, 1) })),
+    ).toBe(true);
+  });
 });

@@ -264,6 +264,7 @@ export function enoughPieces(pieces: Piece[]): boolean {
     count('conceito') >= 2 &&
     count('afirmacao') >= 3 &&
     count('pergunta') === 1 &&
-    others >= 2
+    // One piece that applies the topic (a case, a classification...) is enough: the composer fills a thin lesson.
+    others >= 1
   );
 }
