@@ -31,6 +31,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"arandu_facts": {
+                  Row: {
+                    "created_at": string,"id": number,"source": string,"text": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: never,"source": string,"text": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: never,"source"?: string,"text"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "arandu_facts_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"arandu_memories": {
                   Row: {
                     "profile": Json | null,"summary": string,"updated_at": string,"user_id": string
@@ -43,7 +63,13 @@ isOneToOne: false
                     "profile"?: Json | null,"summary"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
-                    
+                    {
+      foreignKeyName: "arandu_memories_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"arandu_messages": {
                   Row: {
@@ -67,14 +93,14 @@ isOneToOne: false
                   ]
                 },"arandu_sessions": {
                   Row: {
-                    "id": string,"kind": string,"profession_slug": string | null,"started_at": string,"summarized_at": string | null,"user_id": string
+                    "covered": (string)[],"id": string,"kind": string,"profession_slug": string | null,"started_at": string,"summarized_at": string | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "id"?: string,"kind": string,"profession_slug"?: string | null,"started_at"?: string,"summarized_at"?: string | null,"user_id": string
+                    "covered"?: (string)[],"id"?: string,"kind": string,"profession_slug"?: string | null,"started_at"?: string,"summarized_at"?: string | null,"user_id": string
                   }
                   Update: {
-                    "id"?: string,"kind"?: string,"profession_slug"?: string | null,"started_at"?: string,"summarized_at"?: string | null,"user_id"?: string
+                    "covered"?: (string)[],"id"?: string,"kind"?: string,"profession_slug"?: string | null,"started_at"?: string,"summarized_at"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -83,6 +109,58 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "professions"
       referencedColumns: ["slug"]
+    },{
+      foreignKeyName: "arandu_sessions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"book_reflections": {
+                  Row: {
+                    "chips": (string)[],"discipline_id": number,"text": string | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "chips"?: (string)[],"discipline_id": number,"text"?: string | null,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "chips"?: (string)[],"discipline_id"?: number,"text"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "book_reflections_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "book_reflections_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"caixas": {
+                  Row: {
+                    "contents": Json | null,"created_at": string,"id": number,"opened_at": string | null,"reason": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "contents"?: Json | null,"created_at"?: string,"id"?: never,"opened_at"?: string | null,"reason": string,"user_id": string
+                  }
+                  Update: {
+                    "contents"?: Json | null,"created_at"?: string,"id"?: never,"opened_at"?: string | null,"reason"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "caixas_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
     }
                   ]
                 },"cine_areas": {
@@ -107,14 +185,14 @@ isOneToOne: false
                   ]
                 },"courses": {
                   Row: {
-                    "campus_name": string | null,"campus_source_id": number | null,"city": string,"degree": string | null,"duration_years": number | null,"id": number,"inep_code": number,"institution_id": number,"name": string,"profession_id": number | null,"shift": string | null,"source_id": number
+                    "campus_name": string | null,"campus_source_id": number | null,"city": string | null,"degree": string | null,"duration_years": number | null,"id": number,"inep_code": number,"institution_id": number,"modality": string,"name": string,"profession_id": number | null,"shift": string | null,"source_id": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "campus_name"?: string | null,"campus_source_id"?: number | null,"city": string,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code": number,"institution_id": number,"name": string,"profession_id"?: number | null,"shift"?: string | null,"source_id": number
+                    "campus_name"?: string | null,"campus_source_id"?: number | null,"city"?: string | null,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code": number,"institution_id": number,"modality"?: string,"name": string,"profession_id"?: number | null,"shift"?: string | null,"source_id": number
                   }
                   Update: {
-                    "campus_name"?: string | null,"campus_source_id"?: number | null,"city"?: string,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code"?: number,"institution_id"?: number,"name"?: string,"profession_id"?: number | null,"shift"?: string | null,"source_id"?: number
+                    "campus_name"?: string | null,"campus_source_id"?: number | null,"city"?: string | null,"degree"?: string | null,"duration_years"?: number | null,"id"?: never,"inep_code"?: number,"institution_id"?: number,"modality"?: string,"name"?: string,"profession_id"?: number | null,"shift"?: string | null,"source_id"?: number
                   }
                   Relationships: [
                     {
@@ -177,14 +255,14 @@ isOneToOne: false
                   ]
                 },"disciplines": {
                   Row: {
-                    "bibliography": (string)[] | null,"code": string,"id": number,"institution_id": number,"name": string,"source_id": number,"topics": (string)[] | null
+                    "bibliography": (string)[] | null,"code": string,"id": number,"institution_id": number,"name": string,"program": string | null,"source_id": number,"topics": (string)[] | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "bibliography"?: (string)[] | null,"code": string,"id"?: never,"institution_id": number,"name": string,"source_id": number,"topics"?: (string)[] | null
+                    "bibliography"?: (string)[] | null,"code": string,"id"?: never,"institution_id": number,"name": string,"program"?: string | null,"source_id": number,"topics"?: (string)[] | null
                   }
                   Update: {
-                    "bibliography"?: (string)[] | null,"code"?: string,"id"?: never,"institution_id"?: number,"name"?: string,"source_id"?: number,"topics"?: (string)[] | null
+                    "bibliography"?: (string)[] | null,"code"?: string,"id"?: never,"institution_id"?: number,"name"?: string,"program"?: string | null,"source_id"?: number,"topics"?: (string)[] | null
                   }
                   Relationships: [
                     {
@@ -200,6 +278,20 @@ isOneToOne: false
       referencedRelation: "sources"
       referencedColumns: ["id"]
     }
+                  ]
+                },"game_settings": {
+                  Row: {
+                    "id": boolean,"league_anchor_on": string,"league_period_days": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: boolean,"league_anchor_on": string,"league_period_days": number,"updated_at"?: string
+                  }
+                  Update: {
+                    "id"?: boolean,"league_anchor_on"?: string,"league_period_days"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
                   ]
                 },"institutions": {
                   Row: {
@@ -218,6 +310,110 @@ isOneToOne: false
       columns: ["source_id"]
 isOneToOne: false
       referencedRelation: "sources"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"journeys": {
+                  Row: {
+                    "age": number | null,"answers": Json | null,"course_id": number | null,"discipline_id": number | null,"profession_slug": string | null,"updated_at": string,"user_id": string,"weekly_goal": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "age"?: number | null,"answers"?: Json | null,"course_id"?: number | null,"discipline_id"?: number | null,"profession_slug"?: string | null,"updated_at"?: string,"user_id": string,"weekly_goal"?: number | null
+                  }
+                  Update: {
+                    "age"?: number | null,"answers"?: Json | null,"course_id"?: number | null,"discipline_id"?: number | null,"profession_slug"?: string | null,"updated_at"?: string,"user_id"?: string,"weekly_goal"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "journeys_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "journeys_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "journeys_profession_slug_fkey"
+      columns: ["profession_slug"]
+isOneToOne: false
+      referencedRelation: "professions"
+      referencedColumns: ["slug"]
+    },{
+      foreignKeyName: "journeys_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"lesson_results": {
+                  Row: {
+                    "completed_at": string,"discipline_id": number,"lesson": number,"missed": NonNullable<Json>,"sabedoria": number,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "completed_at"?: string,"discipline_id": number,"lesson": number,"missed"?: NonNullable<Json>,"sabedoria": number,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "completed_at"?: string,"discipline_id"?: number,"lesson"?: number,"missed"?: NonNullable<Json>,"sabedoria"?: number,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "lesson_results_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "lesson_results_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"owned_items": {
+                  Row: {
+                    "created_at": string,"item": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"item": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"item"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "owned_items_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"players": {
+                  Row: {
+                    "league": number,"league_week": string,"nickname": string | null,"promoted_from": number | null,"updated_at": string,"user_id": string,"wearing": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "league"?: number,"league_week": string,"nickname"?: string | null,"promoted_from"?: number | null,"updated_at"?: string,"user_id": string,"wearing"?: string | null
+                  }
+                  Update: {
+                    "league"?: number,"league_week"?: string,"nickname"?: string | null,"promoted_from"?: number | null,"updated_at"?: string,"user_id"?: string,"wearing"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "players_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
       referencedColumns: ["id"]
     }
                   ]
@@ -255,6 +451,66 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"season_claims": {
+                  Row: {
+                    "created_at": string,"level": number,"season": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"level": number,"season": number,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"level"?: number,"season"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "season_claims_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"session_refresh_tokens": {
+                  Row: {
+                    "created_at": string,"expires_at": string,"id": number,"revoked_at": string | null,"session_id": string,"token_hash": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"expires_at": string,"id"?: never,"revoked_at"?: string | null,"session_id": string,"token_hash": string
+                  }
+                  Update: {
+                    "created_at"?: string,"expires_at"?: string,"id"?: never,"revoked_at"?: string | null,"session_id"?: string,"token_hash"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "session_refresh_tokens_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"sessions": {
+                  Row: {
+                    "created_at": string,"expires_at": string,"id": string,"ip": string | null,"last_seen_at": string,"revoked_at": string | null,"revoked_reason": string | null,"user_agent": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"expires_at": string,"id"?: string,"ip"?: string | null,"last_seen_at"?: string,"revoked_at"?: string | null,"revoked_reason"?: string | null,"user_agent"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"expires_at"?: string,"id"?: string,"ip"?: string | null,"last_seen_at"?: string,"revoked_at"?: string | null,"revoked_reason"?: string | null,"user_agent"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sessions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"sources": {
                   Row: {
                     "adapter": string,"created_at": string,"id": number,"label": string,"last_content_hash": string | null,"last_fetched_at": string | null,"refresh_interval": string,"url": string
@@ -267,7 +523,125 @@ isOneToOne: false
                     "adapter"?: string,"created_at"?: string,"id"?: never,"label"?: string,"last_content_hash"?: string | null,"last_fetched_at"?: string | null,"refresh_interval"?: string,"url"?: string
                   }
                   Relationships: [
-
+                    
+                  ]
+                },"stop_cards": {
+                  Row: {
+                    "cards": NonNullable<Json>,"created_at": string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cards": NonNullable<Json>,"created_at"?: string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  Update: {
+                    "cards"?: NonNullable<Json>,"created_at"?: string,"discipline_id"?: number,"topic"?: number,"topic_text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stop_cards_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"stop_contents": {
+                  Row: {
+                    "content": NonNullable<Json>,"created_at": string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "content": NonNullable<Json>,"created_at"?: string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  Update: {
+                    "content"?: NonNullable<Json>,"created_at"?: string,"discipline_id"?: number,"topic"?: number,"topic_text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stop_contents_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"stop_questions": {
+                  Row: {
+                    "answer": string,"created_at": string,"discipline_id": number,"id": number,"question": string,"summarized_at": string | null,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "answer": string,"created_at"?: string,"discipline_id": number,"id"?: never,"question": string,"summarized_at"?: string | null,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "answer"?: string,"created_at"?: string,"discipline_id"?: number,"id"?: never,"question"?: string,"summarized_at"?: string | null,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stop_questions_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stop_questions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"stop_rereads": {
+                  Row: {
+                    "created_at": string,"discipline_id": number,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"discipline_id": number,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"discipline_id"?: number,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stop_rereads_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stop_rereads_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"stop_results": {
+                  Row: {
+                    "completed_at": string,"discipline_id": number,"mistakes": number,"relampago_mistakes": number | null,"sabedoria": number,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "completed_at"?: string,"discipline_id": number,"mistakes": number,"relampago_mistakes"?: number | null,"sabedoria": number,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "completed_at"?: string,"discipline_id"?: number,"mistakes"?: number,"relampago_mistakes"?: number | null,"sabedoria"?: number,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stop_results_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stop_results_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"story_facts": {
                   Row: {
@@ -283,10 +657,10 @@ isOneToOne: false
                   Relationships: [
                     {
       foreignKeyName: "story_facts_book_page_fkey"
-      columns: ["book", "page"]
-      isOneToOne: false
+      columns: ["book","page"]
+isOneToOne: false
       referencedRelation: "story_pages"
-      referencedColumns: ["book", "page"]
+      referencedColumns: ["book","page"]
     }
                   ]
                 },"story_pages": {
@@ -301,7 +675,41 @@ isOneToOne: false
                     "book"?: string,"page"?: number,"title"?: string
                   }
                   Relationships: [
-
+                    
+                  ]
+                },"users": {
+                  Row: {
+                    "avatar_url": string | null,"banned_at": string | null,"created_at": string,"email": string | null,"google_sub": string | null,"id": string,"last_seen_at": string,"name": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "avatar_url"?: string | null,"banned_at"?: string | null,"created_at"?: string,"email"?: string | null,"google_sub"?: string | null,"id"?: string,"last_seen_at"?: string,"name"?: string | null
+                  }
+                  Update: {
+                    "avatar_url"?: string | null,"banned_at"?: string | null,"created_at"?: string,"email"?: string | null,"google_sub"?: string | null,"id"?: string,"last_seen_at"?: string,"name"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"wallets": {
+                  Row: {
+                    "marcadores": number,"novelos": number,"novelos_at": string,"novelos_bought": number,"novelos_bought_on": string | null,"peixinhos": number,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wallets_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: true
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
                   ]
                 }
           }
