@@ -75,8 +75,8 @@ async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
     return (await draft).object;
   } catch (error) {
     if (!(error instanceof AiOutputError)) throw error;
-    // The reason a draft missed its schema is what tells a weak prompt from a weak page.
-    Logger.warn(String(error).slice(0, 500), 'ChaptersService');
+    // Why a draft missed its schema (the message's end, after the draft) tells a weak prompt from a weak page.
+    Logger.warn(String(error).slice(-500), 'ChaptersService');
     return null;
   }
 }
