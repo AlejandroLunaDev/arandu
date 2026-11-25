@@ -46,7 +46,10 @@ import { quoteIn, refusedPage } from './source-check.js';
 export const TOPICS_PER_SEARCH = 6;
 /** Pages a search downloads (a Firecrawl credit each): academic ones, then Wikipedia's, for a block or a lone topic. */
 const BLOCK_PAGES = { academic: 5, wikipedia: 2 };
-const TOPIC_PAGES = { academic: 3, wikipedia: 1 };
+const TOPIC_PAGES = { academic: 5, wikipedia: 2 };
+/** A chapter rests on MIN_CARDS verified cards at least, MAX_CARDS at most: one card's text gives too few concepts. */
+const MIN_CARDS = 3;
+const MAX_CARDS = 5;
 /** Words a search query keeps: a search engine reads a long query badly. */
 const QUERY_WORDS = 30;
 /** The longest quote a card keeps: one sentence, a short citation. */
@@ -57,7 +60,7 @@ const index = z.number().int();
 // `page` is the page's number as listed (1-based); the card's source is that page.
 const card = z.object({ title: text, text, page: index, quote: text });
 
-// No counts in these schemas: a list one card too long would drop every card. A chapter keeps its first 3 verified.
+// No counts in these schemas: a list one card too long would drop every card. A chapter keeps MAX_CARDS verified.
 const cardsDraft = z.object({ cards: z.array(card) });
 // Cards for several topics of a subject from one search; `topic` is the topic's number as listed (1-based).
 const subjectCardsDraft = z.object({
@@ -102,6 +105,16 @@ const pagesPrompt = (pages: Source[]) =>
         `[Page ${i + 1}${p.wikipedia ? ', Wikipedia' : ''}] ${p.title} (${p.url})\n${p.markdown}`,
     )
     .join('\n\n---\n\n');
+
+/** The cards of both lists, each quote once: a second search adds to the cards a topic has. */
+const together = (a: ChapterCard[], b: ChapterCard[]) =>
+  [...a, ...b].filter(
+    (c, i, all) =>
+      all.findIndex(
+        (o) =>
+          o.source.url === c.source.url && o.source.quote === c.source.quote,
+      ) === i,
+  );
 
 /** The cards whose quote is on the page they name, each citing that page. */
 function verified<T extends z.infer<typeof card>>(
@@ -215,6 +228,7 @@ export class ChaptersService {
         discipline.name,
         topic,
         discipline.topics,
+        stored?.cards ?? [],
       ).finally(() => this.pending.delete(key));
       this.pending.set(key, generation);
     }
@@ -366,15 +380,20 @@ export class ChaptersService {
     ].filter((p) => !seen.has(p.url) && seen.add(p.url));
   }
 
-  /** The chapter's cards from a search for its topic alone, keeping only those whose quote is on its page. */
+  /**
+   * The chapter's cards from a search for its topic alone, added to those it `has`, keeping only those whose quote is
+   * on its page. Fewer than MIN_CARDS: unavailable.
+   */
   private async cards(
     name: string,
     topic: number,
     topicText: string,
     total: number,
+    has: ChapterCard[],
   ): Promise<ChapterCard[]> {
     const pages = await this.pages(queryOf(name, [topicText]), TOPIC_PAGES);
     if (!pages.length) throw chapterUnavailable();
+    let kept = has;
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       const object = await orRetry(
         this.ai.generateObject({
@@ -386,26 +405,29 @@ export class ChaptersService {
         }),
       );
       if (!object) continue;
-      const cards = verified(object.cards, pages)
-        .slice(0, 3)
-        .map(({ title, text, source }) => ({ title, text, source }));
-      this.logger.log(
-        `Chapter cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified`,
+      const cards = verified(object.cards, pages).map(
+        ({ title, text, source }) => ({ title, text, source }),
       );
-      if (cards.length) return cards;
+      kept = together(kept, cards);
+      this.logger.log(
+        `Chapter cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified, ${kept.length} in all`,
+      );
+      if (kept.length >= MIN_CARDS) return kept.slice(0, MAX_CARDS);
     }
     throw chapterUnavailable();
   }
 
   /**
-   * The chapter's cards: stored ones, else one search for its block of topics (saving every topic's verified cards), else
-   * a search for this topic alone.
+   * The chapter's cards: stored ones (and those of the chapter being remade, `current`) when they are MIN_CARDS, else one
+   * search for its block of topics (saving every topic's verified cards), and then a search for this topic alone that
+   * adds to what it has, saved for the next remake.
    */
   private async chapterCards(
     id: number,
     name: string,
     topic: number,
     topics: string[],
+    current: ChapterCard[],
   ): Promise<ChapterCard[]> {
     const stored = await this.paths.chapterCards(id, topics);
     // A card stored before its site was refused is dropped; a topic left without cards is made again.
@@ -414,8 +436,11 @@ export class ChaptersService {
       if (kept.length) stored.set(t, kept);
       else stored.delete(t);
     }
-    const mine = stored.get(topic);
-    if (mine) return mine;
+    let mine = together(
+      stored.get(topic) ?? [],
+      current.filter((c) => !refusedPage(c.source.url)),
+    );
+    if (mine.length >= MIN_CARDS) return mine.slice(0, MAX_CARDS);
 
     const start = topic - (topic % TOPICS_PER_SEARCH);
     const whole = topics
@@ -427,13 +452,18 @@ export class ChaptersService {
       const found = await this.blockCards(id, name, block);
       if (found) {
         await this.paths.saveChapterCards(id, found);
-        const cards = found.find((e) => e.topic === topic)?.cards;
-        if (cards) return cards;
+        mine = together(
+          mine,
+          found.find((e) => e.topic === topic)?.cards ?? [],
+        );
+        if (mine.length >= MIN_CARDS) return mine.slice(0, MAX_CARDS);
       }
     }
     const topicText = topics[topic];
     if (topicText === undefined) throw chapterNotFound();
-    return this.cards(name, topic, topicText, topics.length);
+    const cards = await this.cards(name, topic, topicText, topics.length, mine);
+    await this.paths.saveChapterCards(id, [{ topic, topicText, cards }]);
+    return cards;
   }
 
   /**
@@ -460,7 +490,7 @@ export class ChaptersService {
           schema: subjectCardsDraft,
           instructions: subjectCardsInstructions(),
           prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}\n\nPages:\n${pagesPrompt(pages)}`,
-          maxOutputTokens: 900 * block.length,
+          maxOutputTokens: 1500 * block.length,
         }),
       );
       if (!object) return null;
@@ -471,7 +501,7 @@ export class ChaptersService {
           topicText: t.text,
           cards: cards
             .filter((c) => c.draft.topic === i + 1)
-            .slice(0, 3)
+            .slice(0, MAX_CARDS)
             .map(({ title, text, source }) => ({ title, text, source })),
         }))
         .filter((e) => e.cards.length);
@@ -490,11 +520,12 @@ export class ChaptersService {
     name: string,
     topic: number,
     topics: string[],
+    current: ChapterCard[],
   ): Promise<StoredChapter> {
     const topicText = topics[topic];
     if (topicText === undefined) throw chapterNotFound();
     const total = topics.length;
-    const cards = await this.chapterCards(id, name, topic, topics);
+    const cards = await this.chapterCards(id, name, topic, topics, current);
     const facts = JSON.stringify(
       cards.map((c) => ({ title: c.title, text: c.text })),
     );

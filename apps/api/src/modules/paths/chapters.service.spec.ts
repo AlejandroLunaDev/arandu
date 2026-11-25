@@ -34,6 +34,7 @@ const cardsReply = () => ({
   cards: [
     { title: 't1', text: 'x', page: 1, quote: 'q1' },
     { title: 't2', text: 'x', page: 2, quote: 'w1' },
+    { title: 't3', text: 'x', page: 1, quote: 'q-a' },
   ],
 });
 
@@ -254,6 +255,27 @@ describe('ChaptersService', () => {
     expect(paths.saveChapterContent).toHaveBeenCalledWith(chapter);
   });
 
+  it("a remake keeps the chapter's cards and adds a search's, saving them for the topic", async () => {
+    const own = {
+      title: 'own',
+      text: 'x',
+      source: { label: 'l', url: 'https://b.org/1', quote: 'o' },
+    };
+    paths.chapterContent.mockResolvedValue({ cards: [own], exercises: [] });
+
+    const chapter = await service.make(7, 0, true);
+
+    expect(chapter.cards.map((c) => c.title)).toEqual([
+      'own',
+      't1',
+      't2',
+      't3',
+    ]);
+    expect(paths.saveChapterCards).toHaveBeenLastCalledWith(7, [
+      { topic: 0, topicText: 'Limites', cards: chapter.cards },
+    ]);
+  });
+
   describe('sources', () => {
     it("searches the topic's academic pages, then Wikipedia's, and cites the page each quote is on", async () => {
       const chapter = await service.make(7, 0);
@@ -261,13 +283,13 @@ describe('ChaptersService', () => {
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
-        3,
+        5,
         false,
       );
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
-        1,
+        2,
         true,
       );
       expect(promptOf(steps.cards)).toContain(
@@ -279,6 +301,7 @@ describe('ChaptersService', () => {
       expect(chapter.cards).toEqual([
         { title: 't1', text: 'x', source: sourceOf(academic, 'q1') },
         { title: 't2', text: 'x', source: sourceOf(wiki, 'w1') },
+        { title: 't3', text: 'x', source: sourceOf(academic, 'q-a') },
       ]);
     });
 
@@ -291,19 +314,28 @@ describe('ChaptersService', () => {
             { title: 'invented', text: 'x', page: 1, quote: 'não está' },
             { title: 'no page', text: 'x', page: 3, quote: 'q1' },
             { title: 'long', text: 'x', page: 1, quote: LONG },
+            { title: 'b', text: 'x', page: 1, quote: 'q-b' },
+            { title: 'c', text: 'x', page: 1, quote: 'q-c' },
           ],
         }),
       );
 
       const chapter = await service.make(7, 0);
 
-      expect(chapter.cards.map((c) => c.title)).toEqual(['ok']);
+      expect(chapter.cards.map((c) => c.title)).toEqual(['ok', 'b', 'c']);
     });
 
     it('lists a page both searches found once', async () => {
       vi.mocked(searchPages).mockResolvedValue([academic]);
       steps.cards.mockResolvedValue(
-        reply({ cards: [{ title: 't1', text: 'x', page: 1, quote: 'q1' }] }),
+        reply({
+          cards: ['q1', 'q-a', 'q-b'].map((quote) => ({
+            title: quote,
+            text: 'x',
+            page: 1,
+            quote,
+          })),
+        }),
       );
 
       await service.make(7, 0);
@@ -321,7 +353,29 @@ describe('ChaptersService', () => {
       const chapter = await service.make(7, 0);
 
       expect(steps.cards).toHaveBeenCalledTimes(2);
-      expect(chapter.cards).toHaveLength(2);
+      expect(chapter.cards).toHaveLength(3);
+    });
+
+    it("keeps the cards a first attempt verified and adds the retry's, each quote once", async () => {
+      steps.cards
+        .mockResolvedValueOnce(
+          reply({ cards: [{ title: 't1', text: 'x', page: 1, quote: 'q1' }] }),
+        )
+        .mockResolvedValueOnce(reply(cardsReply()));
+
+      const chapter = await service.make(7, 0);
+
+      expect(chapter.cards.map((c) => c.title)).toEqual(['t1', 't2', 't3']);
+    });
+
+    it('503s when fewer than three cards verify after the retry, and writes no pieces', async () => {
+      steps.cards.mockResolvedValue(
+        reply({ cards: cardsReply().cards.slice(0, 2) }),
+      );
+
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(steps.cards).toHaveBeenCalledTimes(2);
+      expect(steps.pieces).not.toHaveBeenCalled();
     });
 
     it('retries the cards after an AiOutputError, then succeeds', async () => {
@@ -365,7 +419,7 @@ describe('ChaptersService', () => {
       await service.make(7, 0);
 
       expect(promptOf(steps.pieces)).toBe(
-        'Subject: Cálculo\nTopic 1 of 2: Limites\n\nCards:\n[{"title":"t1","text":"x"},{"title":"t2","text":"x"}]',
+        'Subject: Cálculo\nTopic 1 of 2: Limites\n\nCards:\n[{"title":"t1","text":"x"},{"title":"t2","text":"x"},{"title":"t3","text":"x"}]',
       );
       const pieces = piecesOf(piecesReply());
       expect(saved()).toMatchObject({
@@ -474,7 +528,7 @@ describe('ChaptersService', () => {
     const stored = (title: string) => ({
       title,
       text: 'x',
-      source: { label: 'l', url: 'https://a.org/s', quote: 'q' },
+      source: { label: 'l', url: 'https://a.org/s', quote: title },
     });
     const titles = (cards: { title: string }[]) => cards.map((c) => c.title);
     const subjectCall = () => steps.subject.mock.calls[0]![0];
@@ -492,8 +546,10 @@ describe('ChaptersService', () => {
       paths.discipline.mockResolvedValue({ id: 7, name: 'Cálculo', topics });
     });
 
-    it('uses the stored cards and makes no search', async () => {
-      paths.chapterCards.mockResolvedValue(new Map([[1, [stored('s1')]]]));
+    it('uses three stored cards and makes no search', async () => {
+      paths.chapterCards.mockResolvedValue(
+        new Map([[1, ['s1', 's2', 's3'].map(stored)]]),
+      );
 
       const chapter = await service.make(7, 1);
 
@@ -501,7 +557,19 @@ describe('ChaptersService', () => {
       expect(searchPages).not.toHaveBeenCalled();
       expect(steps.subject).not.toHaveBeenCalled();
       expect(steps.cards).not.toHaveBeenCalled();
-      expect(titles(chapter.cards)).toEqual(['s1']);
+      expect(titles(chapter.cards)).toEqual(['s1', 's2', 's3']);
+    });
+
+    it("a topic with fewer stored cards searches alone, adds to them and saves the topic's", async () => {
+      paths.chapterCards.mockResolvedValue(new Map([[1, [stored('s1')]]]));
+
+      const chapter = await service.make(7, 1);
+
+      expect(steps.subject).not.toHaveBeenCalled();
+      expect(titles(chapter.cards)).toEqual(['s1', 't1', 't2', 't3']);
+      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
+        { topic: 1, topicText: 'T1', cards: chapter.cards },
+      ]);
     });
 
     it('drops a stored card from a refused site and makes its topic again', async () => {
@@ -523,12 +591,14 @@ describe('ChaptersService', () => {
           ],
         ]),
       );
-      steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'a')] }));
+      steps.subject.mockResolvedValue(
+        reply({ cards: ['a', 'b', 'c'].map((t) => cardOf(2, t)) }),
+      );
 
       const chapter = await service.make(7, 1);
 
       expect(steps.subject).toHaveBeenCalledTimes(1);
-      expect(titles(chapter.cards)).toEqual(['a']);
+      expect(titles(chapter.cards)).toEqual(['a', 'b', 'c']);
     });
 
     it('a block query keeps the first words of every topic, without its numbering', async () => {
@@ -556,7 +626,9 @@ describe('ChaptersService', () => {
 
     it("searches the block once, saves every topic with a verified card and returns this topic's", async () => {
       steps.subject.mockResolvedValue(
-        reply({ cards: [cardOf(2, 'a'), cardOf(3, 'b'), cardOf(3, 'c')] }),
+        reply({
+          cards: [...['a', 'b', 'c'].map((t) => cardOf(2, t)), cardOf(3, 'c1')],
+        }),
       );
 
       const chapter = await service.make(7, 1);
@@ -579,15 +651,17 @@ describe('ChaptersService', () => {
       );
       expect(steps.cards).not.toHaveBeenCalled();
       expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
-        savedEntry(1, 'a'),
-        savedEntry(2, 'b', 'c'),
+        savedEntry(1, 'a', 'b', 'c'),
+        savedEntry(2, 'c1'),
       ]);
-      expect(chapter.cards).toEqual(savedEntry(1, 'a').cards);
+      expect(chapter.cards).toEqual(savedEntry(1, 'a', 'b', 'c').cards);
     });
 
     it('starts topic 7 at its block start 6', async () => {
       // numbers count the listed topics: 2 is T7
-      steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'a')] }));
+      steps.subject.mockResolvedValue(
+        reply({ cards: ['a', 'b', 'c'].map((t) => cardOf(2, t)) }),
+      );
 
       const chapter = await service.make(7, 7);
 
@@ -595,9 +669,9 @@ describe('ChaptersService', () => {
         'Topics:\n1. T6\n2. T7\n3. T8\n4. T9\n5. T10\n6. T11\n',
       );
       expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
-        savedEntry(7, 'a'),
+        savedEntry(7, 'a', 'b', 'c'),
       ]);
-      expect(titles(chapter.cards)).toEqual(['a']);
+      expect(titles(chapter.cards)).toEqual(['a', 'b', 'c']);
     });
 
     it('drops cards with an unverified quote or a topic number outside the block', async () => {
@@ -614,20 +688,23 @@ describe('ChaptersService', () => {
 
       const chapter = await service.make(7, 0);
 
-      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
+      expect(paths.saveChapterCards).toHaveBeenNthCalledWith(1, 7, [
         savedEntry(0, 'good'),
       ]);
-      expect(titles(chapter.cards)).toEqual(['good']);
+      // One card is not enough: the topic's own search adds to it.
+      expect(titles(chapter.cards)).toEqual(['good', 't1', 't2', 't3']);
     });
 
-    it('keeps at most 3 verified cards per topic', async () => {
+    it('keeps at most 5 verified cards per topic', async () => {
       steps.subject.mockResolvedValue(
-        reply({ cards: [1, 2, 3, 4].map((n) => cardOf(1, `c${n}`)) }),
+        reply({
+          cards: ['c1', 'c2', 'c3', 'c4', 'a', 'b'].map((t) => cardOf(1, t)),
+        }),
       );
 
       const chapter = await service.make(7, 0);
 
-      expect(titles(chapter.cards)).toEqual(['c1', 'c2', 'c3']);
+      expect(titles(chapter.cards)).toEqual(['c1', 'c2', 'c3', 'c4', 'a']);
     });
 
     it("falls back to the topic's own search when it got no verified card, keeping the others saved", async () => {
@@ -642,10 +719,10 @@ describe('ChaptersService', () => {
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo T0',
-        3,
+        5,
         false,
       );
-      expect(titles(chapter.cards)).toEqual(['t1', 't2']);
+      expect(titles(chapter.cards)).toEqual(['t1', 't2', 't3']);
     });
 
     it.each([
@@ -659,9 +736,12 @@ describe('ChaptersService', () => {
         const chapter = await service.make(7, 0);
 
         expect(steps.subject).toHaveBeenCalledTimes(1);
-        expect(paths.saveChapterCards).not.toHaveBeenCalled();
+        // Only the topic's own search is saved.
+        expect(paths.saveChapterCards).toHaveBeenCalledExactlyOnceWith(7, [
+          { topic: 0, topicText: 'T0', cards: chapter.cards },
+        ]);
         expect(steps.cards).toHaveBeenCalledTimes(1);
-        expect(chapter.cards).toHaveLength(2);
+        expect(chapter.cards).toHaveLength(3);
       },
     );
 
@@ -672,7 +752,7 @@ describe('ChaptersService', () => {
 
       expect(steps.subject).not.toHaveBeenCalled();
       expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(chapter.cards).toHaveLength(2);
+      expect(chapter.cards).toHaveLength(3);
     });
 
     it('the fallback still retries once, then 503s', async () => {
@@ -698,15 +778,17 @@ describe('ChaptersService', () => {
       const chapter = await service.make(7, 1);
 
       expect(steps.subject).not.toHaveBeenCalled();
-      expect(paths.saveChapterCards).not.toHaveBeenCalled();
       expect(searchPages).toHaveBeenCalledTimes(2);
-      expect(titles(chapter.cards)).toEqual(['t1', 't2']);
+      expect(titles(chapter.cards)).toEqual(['t1', 't2', 't3']);
+      expect(paths.saveChapterCards).toHaveBeenCalledExactlyOnceWith(7, [
+        { topic: 1, topicText: 'T1', cards: chapter.cards },
+      ]);
     });
 
-    it('asks for 900 output tokens per block topic', async () => {
+    it('asks for 1500 output tokens per block topic', async () => {
       await service.make(7, 7);
 
-      expect(subjectCall().maxOutputTokens).toBe(5400);
+      expect(subjectCall().maxOutputTokens).toBe(9000);
     });
   });
 

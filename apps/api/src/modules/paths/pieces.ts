@@ -163,7 +163,7 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
   const out: Piece[] = [];
   const concepts = draft.concepts
     .filter((c, i, all) => all.findIndex((o) => same(o.term, c.term)) === i)
-    .slice(0, 5);
+    .slice(0, 8);
   for (const c of concepts)
     out.push({ type: 'conceito', term: c.term, definition: c.definition });
   for (const s of draft.statements.slice(0, 4))
@@ -242,7 +242,7 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
   return out;
 }
 
-/** Enough pieces for three lessons: 2 concepts, 3 statements, the open question and one more piece of any kind. */
+/** Enough pieces for three lessons: 4 concepts, 3 statements, the open question and one more piece of any kind. */
 export function enoughPieces(pieces: Piece[]): boolean {
   const count = (type: Piece['type']) =>
     pieces.filter((p) => p.type === type).length;
@@ -250,8 +250,7 @@ export function enoughPieces(pieces: Piece[]): boolean {
     (p) => !['conceito', 'afirmacao', 'pergunta'].includes(p.type),
   ).length;
   return (
-    // Two concepts still play: the composer takes wrong options from the subject's other chapters too.
-    count('conceito') >= 2 &&
+    count('conceito') >= 4 &&
     count('afirmacao') >= 3 &&
     count('pergunta') === 1 &&
     // One piece that applies the topic (a case, a classification...) is enough: the composer fills a thin lesson.

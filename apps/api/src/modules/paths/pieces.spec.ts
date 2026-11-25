@@ -40,6 +40,7 @@ const draft = (over: Partial<PiecesDraft> = {}): PiecesDraft => ({
       definition: 'Escolha de parceiros que molda traços.',
     },
     { term: 'Antropoceno', definition: 'Época marcada pela ação humana.' },
+    { term: 'Bipedalismo', definition: 'Andar sobre duas pernas.' },
   ],
   statements: [
     {
@@ -113,6 +114,7 @@ describe('piecesOf', () => {
       'conceito',
       'conceito',
       'conceito',
+      'conceito',
       'afirmacao',
       'afirmacao',
       'afirmacao',
@@ -131,6 +133,7 @@ describe('piecesOf', () => {
   it('keeps every consistent piece, and enoughPieces accepts the set', () => {
     const pieces = piecesOf(draft({ problems: [mean] }));
     expect(pieces.map((p) => p.type)).toEqual([
+      'conceito',
       'conceito',
       'conceito',
       'conceito',
@@ -313,12 +316,13 @@ describe('enoughPieces', () => {
     ).toBe(false);
   });
 
-  it('takes a topic with two concepts as drafted, and refuses one with a single concept', () => {
-    const [a, b] = draft().concepts;
-    const two = basicsDraft.parse({ ...draft(), concepts: [a, b] });
+  it('takes a topic with four concepts as drafted, and refuses one with three', () => {
+    const four = basicsDraft.parse(draft());
 
-    expect(enoughPieces(piecesOf({ ...draft(), ...two }))).toBe(true);
-    expect(enoughPieces(piecesOf(draft({ concepts: [a!] })))).toBe(false);
+    expect(enoughPieces(piecesOf({ ...draft(), ...four }))).toBe(true);
+    expect(
+      enoughPieces(piecesOf(draft({ concepts: draft().concepts.slice(0, 3) }))),
+    ).toBe(false);
   });
 
   it('takes a thin topic whose only applying piece is one case', () => {
