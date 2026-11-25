@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { DownloadButton } from "@/install/download-button";
 import { MOTTO } from "../copy";
 import { VIDEO_URL } from "../links";
 import styles from "./hero.module.css";
@@ -39,7 +38,7 @@ export function TvCard() {
         Um app de <strong className={styles.key}>orientação vocacional</strong> com inteligência artificial, onde quem quer entrar na universidade
         vive uma carreira antes de escolher.
       </p>
-      <DownloadButton />
+      {/* The way into the app (DownloadButton from @/install/download-button) is hidden until the app opens to the public. */}
       <p className="sr-only">{MOTTO}</p>
       {VIDEO_URL && (
         <button type="button" className={styles.play} aria-label="Ver vídeo" onClick={() => setPlaying(true)}>
