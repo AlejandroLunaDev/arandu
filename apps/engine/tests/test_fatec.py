@@ -48,9 +48,10 @@ class LoadMediaTest(unittest.TestCase):
 
 class ParseCurriculumTest(unittest.TestCase):
     def test_reads_the_first_semester_column_only(self):
-        title, subjects = fatec.parse_curriculum(pdf("fatec_ppc.pdf"))
+        title, subjects, ementas = fatec.parse_curriculum(pdf("fatec_ppc.pdf"))
         self.assertIn("Tecnologia em Análise e Desenvolvimento de Sistemas", title)
         self.assertEqual(subjects, [(1, 1, name, None, False) for name in SUBJECTS])
+        self.assertEqual(ementas, [])  # the grid fallback has no ementas
 
     def test_a_name_the_ppc_never_states_again_raises(self):
         with self.assertRaisesRegex(ValueError, "does not state again"):
@@ -61,7 +62,7 @@ class ParseCurriculumTest(unittest.TestCase):
             fatec.parse_curriculum(pdf("fatec_two_subjects.pdf"))
 
     def test_no_semester_header_raises(self):
-        with self.assertRaisesRegex(ValueError, "no 1º semestre column"):
+        with self.assertRaisesRegex(ValueError, "no 1º semestre table nor column"):
             fatec.parse_curriculum(pdf("fatec_no_semester_header.pdf"))
 
     def test_a_placeholder_cell_is_not_a_subject(self):
@@ -69,10 +70,59 @@ class ParseCurriculumTest(unittest.TestCase):
             fatec.parse_curriculum(pdf("fatec_placeholder_subject.pdf"))
 
 
+ROWS = """6.1 Primeiro Semestre
+Sigla Componente Modalidade T P Total
+1 DET-001 Desenho Técnico Presencial 40 40 - - 80
+1º 4 FIS-002 Física Presencial 40 40 - - 80
+Comportamento Organizacional para
+3 ADM-165 Presencial 40 40 - - 80 -
+Ambientes Disruptivos
+Total de aulas do semestre . 320 160 - - 480
+6.1.1 – DET-001 – Desenho Técnico – Oferta Presencial – Total de 80 aulas
+ Ementa
+Representação gráfica de objetos e peças com
+instrumentos e normas de desenho técnico.
+ Metodologias Propostas
+Aulas expositivas.
+6.1.2 – FIS-002 – Física – Oferta Presencial – Total de 80 aulas
+ Ementa
+Grandezas, vetores, cinemática e dinâmica da partícula em uma dimensão.
+ Metodologias Propostas
+"""
+NAMES = ["Desenho Técnico", "Física", "Comportamento Organizacional para Ambientes Disruptivos"]
+
+
+class TextLayoutsTest(unittest.TestCase):
+    def test_template_table_gives_names_and_their_ementas(self):
+        names, end = fatec._table(ROWS)
+        self.assertEqual(names, NAMES)  # includes the wrapped row
+        ementas = fatec._ementas(ROWS, names[:2], end)
+        self.assertEqual([n for n, _ in ementas], NAMES[:2])
+        self.assertTrue(ementas[0][1].startswith("Representação gráfica") and ementas[0][1].endswith("desenho técnico."))
+        self.assertEqual(fatec._lists(ROWS)[0][1], NAMES[:2])  # the blocks name the components too
+
+    def test_matriz_with_rotated_label_and_no_heading(self):
+        text = ("Sigla Componente Aulas T P Total\nR QQC-002 Química Aplicada à Construção Civil 04 40 40 80\n"
+                "º MCA-003 Cálculo I 04 40 40 80\n24 Total do semestre 480\n")
+        self.assertEqual(fatec._table(text)[0], ["Química Aplicada à Construção Civil", "Cálculo I"])
+
+    def test_an_annual_total_is_not_a_semester(self):
+        text = ("6.1 Primeiro Semestre\n1 DET-001 Desenho Técnico Presencial 40 40 - - 80\n"
+                "Total de aulas do anual . 700 260 - - 960 -\n")
+        self.assertEqual(fatec._table(text), ([], 0))
+
+    def test_problem_rejects_cut_stray_and_unrepeated_names(self):
+        whole = fatec._key("Comunicação e Comunicação e 0000 M 0000 M Física Física Cálculo Cálculo Lógica Lógica Zoologia")
+        self.assertIn("not read cleanly", fatec._problem(["Comunicação e", "Física", "Cálculo"], whole))
+        self.assertIn("not read cleanly", fatec._problem(["0000 M", "Física", "Cálculo"], whole))
+        self.assertIn("does not state again", fatec._problem(["Zoologia", "Física", "Cálculo"], whole))
+        self.assertIsNone(fatec._problem(["Lógica", "Física", "Cálculo"], whole))
+
+
 class LoadCurriculumLocalDbTest(unittest.TestCase):
     OLD, NEW = BASE.replace("2026/03", "2024/01") + "PPC.pdf", BASE + "PPC.pdf"
     PARSED = ("Projeto Pedagógico do Curso Superior de Tecnologia em Análise e Desenvolvimento de Sistemas",
-              [(1, 1, name, None, False) for name in SUBJECTS])
+              [(1, 1, name, None, False) for name in SUBJECTS], [])
 
     def setUp(self):
         try:
@@ -107,7 +157,7 @@ class LoadCurriculumLocalDbTest(unittest.TestCase):
 
     def test_a_cover_naming_no_census_course_raises(self):
         with self.assertRaisesRegex(ValueError, "no census course of CO_IES 999001"):
-            fatec.load_curriculum(self.conn, self.ids[self.NEW], ("Tecnologia em Astrologia", self.PARSED[1]))
+            fatec.load_curriculum(self.conn, self.ids[self.NEW], ("Tecnologia em Astrologia", *self.PARSED[1:]))
 
 
 if __name__ == "__main__":

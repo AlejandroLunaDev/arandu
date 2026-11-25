@@ -24,6 +24,28 @@ LEAD = re.compile(r"^(?:[A-Z]\)|R|-|E|–)\s+")  # legend letters the grid print
 END_OF_COLUMN = re.compile(r"(?i)^(aulas:|total|carga|resumo|atividades|legenda|est[aá]gio|tg|trabalho de gradua"
                            r"|disciplinas? optativ|eletiv)")
 NOT_A_NAME = re.compile(r"(?i)[•🢒]|existente|xxx|semestre|^r\s*=|^legenda")
+# The CPS PPC templates list each semester's components in a table: under a '13.1 Primeiro Semestre' or 'Ementário do
+# 1º semestre' heading, or, in a matriz without one, as the first table with a 'Sigla' column. One row per component,
+# its hours last; a code ('ILG001', 'DET-001', 'XXX000' while unassigned) and a modality may come before or after the
+# name, a long name may wrap around its row, and a rotated '1º SEMESTRE' label leaves stray letters at the line starts.
+# The table ends at its 'Total' line. Read as text, it needs no positions.
+FIRST_TERM = re.compile(r"(?im)^\s*(?:\d+(?:\.\d+)+\s+|ement[aá]rio do\s+)?(?:primeiro semestre|1\s*[ºo°]\s*semestre)\s*$")
+TABLE = re.compile(r"(?m)^.*\bSigla\b.*$")
+CODE = r"(?:[A-Z]{2,4}-?\d{3}|0000)"
+HOURS = re.compile(r"(?:\s+(?:\d{1,3}|[-–]+))*\s+\d{1,3}(?:\s+[-–]+)*\s*$")  # at least one figure
+MODALITY = re.compile(r"(?i)\s*\b(?:Presencial|Semipresen\w*|Remota|On-?line|EaD|H[ií]brid\w*)\b.*$")
+STRAY = re.compile(r"^(?:\S{1,2}\s+)+")  # rotated-label letters and row numbers before a code
+END_OF_TABLE = re.compile(r"(?i)^\W*(?:\d+\s+)?tota(?:l|is)\b.*\d")
+NOT_A_SUBJECT = re.compile(r"(?i)^ativ(?:idades)?\.?\s+(?:acad|complementar)")  # hours to fill, not a subject
+# The ementário then opens a block per component with a line naming it: '6.1.2 – JLG019 – Logística Empresarial –
+# Oferta Presencial – Total de 80 aulas', or 'XXX000 – LOGÍSTICA EMPRESARIAL – PRESENCIAL – 80 aulas'. Its name there
+# is never cut, so the blocks of the 1º semestre section name its components when the PPC has them.
+SECOND_TERM = re.compile(r"(?im)^\s*(?:\d+(?:\.\d+)+\s+|ement[aá]rio do\s+)?(?:segundo semestre|2\s*[ºo°]\s*semestre)\s*$")
+BLOCK = re.compile(rf"(?m)^(?:\d+(?:\.\d+)+\s*[–-]\s*)?{CODE}\s*[–-]\s*(.+?)\s*[–-]\s*"
+                   r"(?i:oferta|presencial|semipresen|remot|on-?line|ead|h[ií]brid)(?!.*\.{4})")
+EMENTA = re.compile(r"(?i)^\W*ementa\b\s*:?\s*(.*)$")
+END_OF_EMENTA = re.compile(rf"(?i)^\W*(?:{CODE}\s*[–-]|metodologia|instrumentos de avalia|bibliografia|compet[eê]ncias"
+                           r"|objetivos|refer[eê]ncias|\d+(?:\.\d+)+\s)")
 
 
 def _key(text):
@@ -91,7 +113,8 @@ def _first_semester(pdf):
             pending.append(word["text"])
             text = " ".join(pending)
             if MARK.search(text):
-                name = MARK.split(text)[0].strip(" -–.;,(")
+                # A name broken at a line end ('Ma- temática') is one word again.
+                name = re.sub(r"(?<=[a-zà-ú])- (?=[a-zà-ú])", "", MARK.split(text)[0]).strip(" -–.;,(")
                 name = LEAD.sub("", LEAD.sub("", name).strip(" -–.;,(")).strip(" -–.;,(")
                 if name:
                     names.append(name)
@@ -101,25 +124,128 @@ def _first_semester(pdf):
     return []
 
 
-def parse_curriculum(doc):
-    """Return (title text, subjects): the first pages' text, where the course is named, and the 1º semestre subjects.
+def _fold(text):
+    """Lower case without accents, one character for one, so positions in it are positions in text."""
+    return "".join(unicodedata.normalize("NFKD", c)[0].lower() for c in text)
 
-    The grid is read by position, so a name is kept only when the ementário names it again: a grid whose cells
-    were cut or merged differently fails and is listed for review instead of storing a name the PPC never states.
+
+def _row(line):
+    """A table line's component name: '' when the name wrapped onto the lines around it, None for no row."""
+    hours = HOURS.search(line)
+    if not hours:
+        return None
+    text = line[:hours.start()]
+    if code := re.search(rf"(?<![A-Za-z]){CODE}(?!\d)", text):
+        text = text[code.end():] if code.end() < len(text) and text[code.end():].strip() else STRAY.sub("", text[:code.start()])
+    return MODALITY.sub("", text).strip(" -–")
+
+
+def _table(text):
+    """The 1º semestre component names and where their table ends; [] when no table is found."""
+    for start in (FIRST_TERM, TABLE):
+        if (heading := start.search(text)) and (found := _rows(text, heading))[0]:
+            return found
+    return [], 0
+
+
+def _rows(text, heading):
+    lines = text[heading.end():].splitlines(keepends=True)
+    names, fragments, end = [], [], heading.end()
+    for i, line in enumerate(lines):
+        end += len(line)
+        line = line.strip()
+        if END_OF_TABLE.match(line):
+            if re.search(r"(?i)\banual\b", line):
+                return [], 0  # a year's components, not a semester's
+            return [n for n in names if n and not NOT_A_SUBJECT.match(n)], end
+        name = _row(line)
+        if name is None:
+            if fragment := re.sub(r"^(?:\S\s+)+", "", MODALITY.sub("", line)).strip(" -–") if len(line) > 3 else "":
+                fragments.append(fragment)
+            continue
+        if not name:  # wrapped: the line before the row and the line after it
+            after = next((l.strip() for l in lines[i + 1:i + 2] if _row(l.strip()) is None and len(l.strip()) > 3), "")
+            name = " ".join(filter(None, [fragments[-1] if fragments else "", MODALITY.sub("", after).strip(" -–")]))
+            if after:
+                lines[i + 1] = ""
+        names.append(" ".join(name.split()))
+        fragments = []
+    return [], 0
+
+
+def _lists(text):
+    """The 1º semestre names its table gives and those its ementário blocks give, and where the table ends."""
+    names, end = _table(text)
+    blocks = []
+    if heading := FIRST_TERM.search(text):
+        stop = SECOND_TERM.search(text, heading.end())
+        found = [" ".join(b.split()) for b in BLOCK.findall(text, heading.end(), stop.start() if stop else len(text))]
+        spelled = {_fold(n): n for n in names}  # the table's spelling when it names the same component
+        blocks = [spelled.get(_fold(b)) or (re.sub(r"\b[ivx]+$", str.upper, b.capitalize()) if b.isupper() else b)
+                  for b in dict.fromkeys(found) if not NOT_A_SUBJECT.match(b)]
+    return [names, blocks], end
+
+
+def _ementas(text, names, end):
+    """(name, ementa) for each component whose ementário block, after the table, gives one."""
+    folded, ementas = _fold(text), []
+    for name in names:
+        # After the table, a component's block names it again (in capitals, maybe over two lines); its first
+        # 'Ementa:' after that is its own.
+        found = re.compile(r"\s+".join(map(re.escape, _fold(name).split()))).search(folded, end)
+        lines = text[found.start():].splitlines() if found else []
+        body = None
+        for line in lines[1:]:
+            line = line.strip()
+            if body is None:
+                if ementa := EMENTA.match(line):
+                    body = [ementa[1]]
+                elif re.match(CODE, line):
+                    break  # the next component began: this one has no ementa
+            elif END_OF_EMENTA.match(line):
+                break
+            elif not line.isdigit():  # a page number inside the ementa
+                body.append(line)
+        if body and 30 <= len(ementa := " ".join(" ".join(body).split())) <= 1500:
+            ementas.append((name, ementa))
+    return ementas
+
+
+def _problem(names, whole):
+    """Why a read 1º semestre list cannot be stored, or None."""
+    if not names:
+        return "no 1º semestre table nor column in a matriz grid"
+    if bad := [n for n in names if NOT_A_NAME.search(n) or not 4 <= len(n) <= 90 or not re.match(r"[^\W\d_]", n)
+               or not (re.search(r"[^\W\d_]{5,}", n) or len(re.findall(r"[^\W\d_]{2,}", n)) > 1)
+               or re.search(r"(?i)\s(?:e|de|d[oa]s?|a|o|ao|à|em|para|p/)$", n)]:
+        return f"the 1º semestre was not read cleanly: {bad[:3]}"
+    if not 3 <= len(names) <= 12:
+        return f"{len(names)} subjects in the 1º semestre: the table was not read"
+    if unseen := [n for n in names if whole.count(_key(n)) < 2]:
+        return f"names the PPC does not state again: {unseen[:3]}"
+    return None
+
+
+def parse_curriculum(doc):
+    """Return (title text, subjects, ementas): the first pages' text, the 1º semestre subjects and their ementas.
+
+    The 1º semestre table and the ementário blocks are read first (the longer list that reads cleanly wins), then the
+    matriz grid by position. Either way a name is kept only when the PPC names it again: a list whose cells were cut or
+    merged differently fails and is listed for review instead of storing a name the PPC never states.
     """
     with pdfplumber.open(doc) as pdf:
-        names = _first_semester(pdf)
-        whole = _key(" ".join((page.extract_text() or "") for page in pdf.pages))
+        text = "\n".join((page.extract_text() or "") for page in pdf.pages)
         title = " ".join((page.extract_text() or "") for page in pdf.pages[:3])
-    if not names:
-        raise ValueError("no 1º semestre column in a matriz grid")
-    if bad := [n for n in names if NOT_A_NAME.search(n) or not 4 <= len(n) <= 90]:
-        raise ValueError(f"the 1º semestre column was not read cleanly: {bad[:3]}")
-    if not 3 <= len(names) <= 12:
-        raise ValueError(f"{len(names)} subjects in the 1º semestre column: the grid was not read")
-    if unseen := [n for n in names if whole.count(_key(n)) < 2]:
-        raise ValueError(f"names the PPC does not state again: {unseen[:3]}")
-    return title, [(1, 1, name, None, False) for name in names]
+        whole = _key(text)
+        lists, end = _lists(text)
+        if passing := [names for names in lists if not _problem(names, whole)]:
+            names = max(passing, key=len)
+            ementas = _ementas(text, names, end)
+        else:
+            names, ementas = _first_semester(pdf), []
+            if problem := _problem(names, whole):
+                raise ValueError(next((_problem(n, whole) for n in lists if n), problem))
+    return title, [(1, 1, name, None, False) for name in names], ementas
 
 
 def load_curriculum(conn, source_id, parsed):
@@ -127,16 +253,19 @@ def load_curriculum(conn, source_id, parsed):
 
     A unit may keep older PPCs of the same course online; the newest by upload month is the one staged.
     """
-    title, subjects = parsed
+    title, subjects, ementas = parsed
     url, inep_code = conn.execute(
         """select s.url, d.institution_inep_code from sources s join staging.fatec_documents d on d.source_id = s.id
            where s.id = %s""", (source_id,)).fetchone()
     course = conn.execute(
         """select c.name, c.city from public.courses c join public.institutions i on i.id = c.institution_id
-           where i.inep_code = %s and c.degree = 'tecnologico'
-             and position('tecnologia em ' || staging.name_key(c.name) in staging.name_key(%s)) > 0
-           order by length(c.name) desc limit 1""",
-        (inep_code, title)).fetchone()
+           where i.inep_code = %s and position(staging.loose_key(c.name) in staging.loose_key(%s)) > 0
+           -- the cover's 'Tecnologia em X' first, else the longest census name it carries; loose_key, so 'Mecânica:
+           -- Processos de Soldagem' is the cover's 'Mecânica - Processos de Soldagem'
+           order by position('tecnologia ' || staging.loose_key(c.name) in staging.loose_key(%s)) > 0 desc,
+             length(c.name) desc
+           limit 1""",
+        (inep_code, title, title)).fetchone()
     if course is None:
         raise ValueError(f"the cover names no census course of CO_IES {inep_code}")
     name, city = course
@@ -151,6 +280,8 @@ def load_curriculum(conn, source_id, parsed):
     written = sum(_unstage(conn, other_id) for other_id, _ in staged)
     written += curricula.load_courses(conn, "fatec_curriculum", inep_code, "Fatec, PPC",
                                       [(url, f"Tecnologia em {name}", None, city)])
+    if ementas:  # each ementa is a discipline of this PPC; loading the subjects links them by name
+        return written + curricula.load_described(conn, source_id, (subjects, ementas), inep_code, "https://")
     return written + curricula.load_subjects(conn, source_id, subjects)
 
 

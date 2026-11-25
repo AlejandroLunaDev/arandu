@@ -10,7 +10,7 @@ from engine import curricula
 INEP_CODE = 23147  # Faculdade do Comércio de São Paulo's CO_IES in the INEP census
 ADAPTER = "facsp_curriculum"
 
-COURSE = re.compile(r"ESTRUTURA CURRICULAR DO (CURSO .+?)\s*\n\s*1º\s*-\s*PERÍODO", re.S)
+COURSE = re.compile(r"(?:ESTRUTURA|MATRIZ) CURRICULAR DO (CURSO .+?)\s*\n\s*1º\s*-\s*PERÍODO", re.S)
 TERM = re.compile(r"^(\d+)º\s*-\s*PERÍODO\b")
 # A subject line: its name, then the theory, practice and total hours (the last figure is the total).
 SUBJECT = re.compile(r"^(.+?)\s+(?:\d{1,3}\s+){1,2}(\d{1,3})$")

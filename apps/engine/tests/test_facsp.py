@@ -19,6 +19,11 @@ class ParseCurriculumTest(unittest.TestCase):
         subjects = facsp.parse_curriculum(io.BytesIO(LOGISTICA.read_bytes()))[2]
         self.assertEqual([s for s in subjects if s[4]], [(4, None, "Optativa", 40, True)])
 
+    def test_the_title_may_read_matriz_or_estrutura_curricular(self):
+        for head in ("ESTRUTURA", "MATRIZ"):
+            found = facsp.COURSE.search(f"{head} CURRICULAR DO CURSO SUPERIOR\nDE TECNOLOGIA EM LOGÍSTICA\n1º - PERÍODO")
+            self.assertEqual(" ".join(found[1].split()), "CURSO SUPERIOR DE TECNOLOGIA EM LOGÍSTICA")
+
 
 if __name__ == "__main__":
     unittest.main()
