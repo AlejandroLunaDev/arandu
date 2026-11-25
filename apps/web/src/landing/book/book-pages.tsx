@@ -281,10 +281,12 @@ function OfferingPage({ offering: { institution, course, curriculum }, professio
   // The same small copies the book loaded ahead (BookPages).
   const photoSrc = photo && thumb(photo);
   const logoSrc = logo && thumb(logo);
-  const where = [course.campus.name, course.campus.city]
-    .filter((x) => x !== null)
-    .map(calm)
-    .join(" · ");
+  const where = course.campus
+    ? [course.campus.name, course.campus.city]
+        .filter((x) => x !== null)
+        .map(calm)
+        .join(" · ")
+    : "A distância";
   const kind = [course.degree && DEGREE[course.degree], course.durationYears && `${course.durationYears} anos`].filter(Boolean).join(" · ");
   const firstYear = curriculum?.years.find((y) => y.year === 1)?.subjects ?? [];
   return (

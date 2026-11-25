@@ -77,7 +77,9 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   };
 
   interface CourseOptions {
-    city?: string;
+    /** Null makes a distance course: it has no city (the migration's check ties them together). */
+    city?: string | null;
+    modality?: 'presencial' | 'a_distancia';
     duration?: number;
     campus?: string;
     shift?: string;
@@ -92,9 +94,9 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
   ) => {
     const [row] = await sql<{ id: string }[]>`
       insert into public.courses (inep_code, institution_id, profession_id, name, degree, shift, duration_years,
-        city, campus_name, source_id)
+        city, modality, campus_name, source_id)
       values (${99900000 + ++seq}, ${inst}, ${prof}, ${name}, ${o.degree ?? 'bacharelado'}, ${o.shift ?? null},
-        ${o.duration ?? null}, ${o.city ?? 'Sao Paulo'}, ${o.campus ?? null}, ${base})
+        ${o.duration ?? null}, ${o.city === undefined ? 'Sao Paulo' : o.city}, ${o.modality ?? 'presencial'}, ${o.campus ?? null}, ${base})
       returning id::text`;
     return row!.id;
   };
@@ -283,6 +285,16 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     await course(fiapNoGrade, fiap, base, 'fiap-sp', { city: 'Sao Paulo' });
     await course(fiapNoGrade, fiap, base, 'fiap-campinas', {
       city: 'Campinas',
+    });
+
+    const fiapDistance = await profession(
+      't-fiap-distance',
+      'Test Fiap Distance',
+    );
+    await sampleCourse(fiapDistance);
+    await course(fiapDistance, fiap, base, 'fiap-distance', {
+      city: null,
+      modality: 'a_distancia',
     });
 
     const fiapGrade = await profession('t-fiap-grade', 'Test Fiap Grade');
@@ -789,6 +801,17 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(result?.offerings[1]!.institution.name).toBe('FIAP');
     });
 
+    it('shows a distance course with no campus and its modality, and an in-person one as presencial', async () => {
+      const result = await book('t-fiap-distance');
+
+      expect(names(result)).toEqual(['sample', 'fiap-distance']);
+      expect(result?.offerings[1]!.course).toMatchObject({
+        modality: 'a_distancia',
+        campus: null,
+      });
+      expect(result?.offerings[0]!.course.modality).toBe('presencial');
+    });
+
     it('shows the FIAP course that has a grade, never an empty second FIAP page', async () => {
       const result = await book('t-fiap-grade');
 
@@ -819,6 +842,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
           degree: 'bacharelado',
           shift: null,
           durationYears: 4,
+          modality: 'presencial',
           campus: { name: 'Campus Z', city: 'Sao Paulo' },
           source: {
             label: 'Base',

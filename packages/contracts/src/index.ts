@@ -40,7 +40,9 @@ export interface Course {
     | null;
   shift: "matutino" | "vespertino" | "noturno" | "integral" | null;
   durationYears: number | null;
-  campus: { name: string | null; city: string };
+  modality: "presencial" | "a_distancia";
+  /** Null for a distance course: the census gives it no campus or city. */
+  campus: { name: string | null; city: string } | null;
   source: Source;
 }
 

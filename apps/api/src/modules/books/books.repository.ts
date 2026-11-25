@@ -107,7 +107,9 @@ interface OfferingRow extends InstitutionRow {
   degree: Offering['course']['degree'];
   duration_years: string | null;
   campus_name: string | null;
-  city: string;
+  modality: Offering['course']['modality'];
+  /** Null for a distance course. */
+  city: string | null;
   source_label: string;
   source_url: string;
   retrieved_at: Date;
@@ -176,7 +178,8 @@ export class BooksRepository {
           shift: null,
           durationYears:
             r.duration_years === null ? null : Number(r.duration_years),
-          campus: { name: r.campus_name, city: r.city },
+          modality: r.modality,
+          campus: r.city === null ? null : { name: r.campus_name, city: r.city },
           source: source(r),
         },
         // The owner keeps cut-offs out of the book: it is about the career and its first year, not getting in.
@@ -242,7 +245,7 @@ export class BooksRepository {
       select k.course_id::text as course_id, k.source_id::text as grade_source_id,
         i.name as institution, i.short_name, i.kind, i.logo_url, i.logo_license, i.logo_source_url, i.photo_url,
         i.photo_credit, i.photo_license, i.photo_source_url, c.name as course, c.degree, c.duration_years,
-        c.campus_name, c.city, s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
+        c.modality, c.campus_name, c.city, s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
       from picked k
       join public.courses c on c.id = k.course_id
       join public.institutions i on i.id = c.institution_id
