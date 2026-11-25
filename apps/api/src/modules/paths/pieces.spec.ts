@@ -208,6 +208,8 @@ describe('piecesOf', () => {
       ['a gap with no variable', { statement: 'Notas {a}, {b}, {c} e {d}.' }],
       ['a variable with no gap', { statement: 'Notas {a} e {b}.' }],
       ['a formula that does not parse', { answer: '(a + b + c / 3' }],
+      // A question with a fixed answer (1 for "discreta", 0 for "contínua") is a classification, not a calculation.
+      ['an answer that uses no variable', { answer: '7', exampleAnswer: 7 }],
       [
         'a mistake that always equals the answer',
         { mistakes: [{ formula: '(c + b + a) / 3', why: 'x' }] },

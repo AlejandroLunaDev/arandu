@@ -167,6 +167,8 @@ function problemOk(p: ProblemPiece): boolean {
   try {
     for (const formula of [p.answer, ...p.mistakes.map((m) => m.formula)])
       if (!variablesOf(formula).every((v) => names.includes(v))) return false;
+    // A fixed answer is a classification dressed as a problem: its options would be numbers that mean nothing.
+    if (!variablesOf(p.answer).length) return false;
     const worked = evaluate(p.answer, exampleValues(p));
     const value = typeof worked === 'boolean' ? Number(worked) : worked;
     const f = 10 ** p.decimals;
