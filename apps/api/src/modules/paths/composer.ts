@@ -418,13 +418,17 @@ export function composeLesson(
   return list;
 }
 
-/** The chapter as everyone sees it (GET /chapters/:d/:t, onboarding): lessons 1-3 on one fixed seed. */
+/**
+ * The chapter as everyone sees it (GET /chapters/:d/:t, onboarding): lessons 1-3 on one fixed seed. `others`, the
+ * subject's other chapters, give wrong options as in lessons, so a chapter with two concepts still plays them.
+ */
 export function composeChapter(
   chapter: ChapterPieces,
   seed: string,
+  others: ChapterPieces[] = [],
 ): Exercise[] {
   return [1, 2, 3].flatMap((lesson) =>
-    composeLesson(chapter, [], lesson, seed).map((c) => c.exercise),
+    composeLesson(chapter, others, lesson, seed).map((c) => c.exercise),
   );
 }
 
@@ -432,7 +436,8 @@ const key = (r: PieceRef) => `${r.topic}:${r.index}`;
 
 /**
  * Lesson 4: each piece missed in this chapter, then up to EARLIER_MISSES missed in the subject's earlier chapters,
- * each played in a kind it was not missed in (a problem gets new values). Nothing missed: REVIEW_WHEN_CLEAN pieces of
+ * each played in a kind it was not missed in. A piece with one kind (a case, baskets, steps, a sentence, a problem)
+ * comes back in that kind with new options, or new values for a problem. Nothing missed: REVIEW_WHEN_CLEAN pieces of
  * the chapter, picked by the seed.
  */
 export function composeReview(

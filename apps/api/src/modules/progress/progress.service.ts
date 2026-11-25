@@ -138,11 +138,20 @@ export class ProgressService {
     };
     return {
       ...reading,
-      closing:
-        closing ??
-        (reading.finished && feeling
-          ? await this.close(userId, book, chapters, feeling, questions, worst)
-          : null),
+      // Null while the book is not finished, also when chapters were added after its closing was written.
+      closing: !reading.finished
+        ? null
+        : (closing ??
+          (feeling
+            ? await this.close(
+                userId,
+                book,
+                chapters,
+                feeling,
+                questions,
+                worst,
+              )
+            : null)),
     };
   }
 

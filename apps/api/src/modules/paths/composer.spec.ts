@@ -240,6 +240,24 @@ describe('composeChapter', () => {
     expect(list).toEqual(composeChapter(chapter, '7:2'));
     expect(list.map((e) => e.kind)).toContain('explique_para_o_arandu');
   });
+
+  it("takes wrong options from the subject's other chapters, so a chapter with two concepts plays them", () => {
+    const two: ChapterPieces = {
+      topic: 2,
+      pieces: [
+        ...pieces.filter((p) => p.type === 'conceito').slice(0, 2),
+        ...pieces.filter((p) => p.type !== 'conceito'),
+      ],
+    };
+    const conceptChoices = (others: ChapterPieces[]) =>
+      composeChapter(two, '7:2', others).filter(
+        (e) =>
+          e.kind === 'escolha_uma' && e.prompt.startsWith('A qual conceito'),
+      ).length;
+
+    expect(conceptChoices([])).toBe(0);
+    expect(conceptChoices([other])).toBeGreaterThan(0);
+  });
 });
 
 describe('composeReview', () => {

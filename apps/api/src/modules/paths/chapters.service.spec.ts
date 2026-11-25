@@ -197,19 +197,22 @@ describe('ChaptersService', () => {
       expect(ai.generateObject).not.toHaveBeenCalled();
     });
 
-    it('returns the stored chapter inside the made run without its pieces', async () => {
-      const shown = {
+    it("returns the stored chapter inside the made run without its pieces, composed with the subject's other chapters", async () => {
+      const pieces = piecesOf(piecesReply());
+      const earlier = { topic: 0, pieces };
+      const stored = {
         discipline: { id: 7, name: 'Cálculo' },
         topic: { index: 1, text: 'Derivadas', total: 2 },
         cards: [],
         exercises: [],
       };
-      paths.chapterContent.mockResolvedValue({
-        ...shown,
-        pieces: piecesOf(piecesReply()),
-      });
+      paths.chapterContent.mockResolvedValue({ ...stored, pieces });
+      paths.subjectPieces.mockResolvedValue([earlier, { topic: 1, pieces }]);
 
-      await expect(service.chapter(7, 1)).resolves.toEqual(shown);
+      await expect(service.chapter(7, 1)).resolves.toEqual({
+        ...stored,
+        exercises: composeChapter({ topic: 1, pieces }, '7:1', [earlier]),
+      });
       expect(paths.chapterContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
       expect(ai.generateObject).not.toHaveBeenCalled();
     });

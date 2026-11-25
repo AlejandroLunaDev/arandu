@@ -171,9 +171,20 @@ export class ChaptersService {
     return { chapter, topics: discipline.topics };
   }
 
-  /** The chapter as everyone sees it, without its pieces. */
+  /** The chapter as everyone sees it, without its pieces, its exercises composed with the whole subject's pieces. */
   async chapter(disciplineId: number, topic: number): Promise<ChapterContent> {
-    return shown((await this.opened(disciplineId, topic)).chapter);
+    const { chapter, topics } = await this.opened(disciplineId, topic);
+    if (!chapter.pieces) return shown(chapter);
+    // Stored exercises were composed before the later chapters existed: topic 0 had no other chapter's wrong options.
+    const others = (
+      await this.paths.subjectPieces(disciplineId, topics)
+    ).filter((c) => c.topic !== topic);
+    const exercises = composeChapter(
+      { topic, pieces: chapter.pieces },
+      `${disciplineId}:${topic}`,
+      others,
+    );
+    return shown({ ...chapter, exercises });
   }
 
   /**

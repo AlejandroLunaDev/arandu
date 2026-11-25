@@ -384,6 +384,16 @@ describe('ProgressService', () => {
         expect(ai.generateObject).not.toHaveBeenCalled();
       });
 
+      it('hides a stored closing while the book is not finished, as when chapters were added after it', async () => {
+        reading({
+          feeling,
+          closing: { text: 't', suggestion: 'seguir', chapter: null },
+        });
+        repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
+
+        expect((await service.reflection('u', 7)).closing).toBeNull();
+      });
+
       it('keeps the chapter to go back to, as its topic index', async () => {
         draft({ suggestion: 'rever_capitulo', chapter: 2 });
 
