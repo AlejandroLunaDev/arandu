@@ -1,46 +1,60 @@
 import type {
-  Exercise,
-  Lesson,
-  LessonExercise,
-  LessonResult,
   ChapterCard,
   ChapterContent,
   ChapterResult,
+  Lesson,
+  LessonExercise,
+  LessonResult,
 } from '@arandu/contracts';
 import { AiOutputError, AiService } from '@nestjs/ai';
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
+import type { Env } from '../../core/config/env.js';
 import { ProgressService } from '../progress/progress.service.js';
-import { PathsRepository } from './paths.repository.js';
-import { quoteIsOnPage } from './source-check.js';
 import {
   cardsInstructions,
-  exercisesInstructions,
+  piecesInstructions,
   subjectCardsInstructions,
 } from './chapter.prompt.js';
-import { lessonLocked, chapterNotFound, chapterUnavailable } from './paths.errors.js';
 import {
-  type ExerciseRef,
-  LESSONS,
-  reviewRefs,
-  splitLessons,
-} from './lessons.logic.js';
+  type Composed,
+  composeChapter,
+  composeLesson,
+  composeReview,
+  type PieceRef,
+} from './composer.js';
+import { type Page, searchPages } from './firecrawl.js';
+import { LESSONS } from './lessons.logic.js';
+import {
+  chapterNotFound,
+  chapterUnavailable,
+  lessonLocked,
+} from './paths.errors.js';
+import { PathsRepository } from './paths.repository.js';
+import {
+  enoughPieces,
+  piecesDraft,
+  piecesOf,
+  type StoredChapter,
+} from './pieces.js';
+import { quoteIn } from './source-check.js';
 
-/** Topics whose cards one web search writes: the search is paid once for them, not once per chapter. */
+/** Topics whose cards one search writes: the search is paid once for them, not once per chapter. */
 export const TOPICS_PER_SEARCH = 6;
+/** Pages a search downloads (a Firecrawl credit each): academic ones, then Wikipedia's, for a block or a lone topic. */
+const BLOCK_PAGES = { academic: 5, wikipedia: 2 };
+const TOPIC_PAGES = { academic: 3, wikipedia: 1 };
+/** Words a search query keeps: a search engine reads a long query badly. */
+const QUERY_WORDS = 30;
+/** The longest quote a card keeps: one sentence, a short citation. */
+const QUOTE_CHARS = 300;
 
 const text = z.string().min(1);
 const index = z.number().int();
-const card = z.object({
-  title: text,
-  text,
-  source: z.object({ label: text, url: z.url(), quote: text }),
-});
+// `page` is the page's number as listed (1-based); the card's source is that page.
+const card = z.object({ title: text, text, page: index, quote: text });
 
-const two = z.object({ first: text, second: text });
-
-// A chapter is written in steps: the cards with a web search, then its exercises from the verified cards. Each schema is
-// kept small (and without tuples): the provider's structured output refuses large grammars and `prefixItems`.
 const cardsDraft = z.object({ cards: z.array(card).min(1).max(3) });
 // Cards for several topics of a subject from one search; `topic` is the topic's number as listed (1-based).
 const subjectCardsDraft = z.object({
@@ -50,193 +64,8 @@ const subjectCardsDraft = z.object({
     .max(2 * TOPICS_PER_SEARCH),
 });
 
-// The first chapter of a subject (O15-O18) has the four basic kinds; every other chapter has all of them (R01-R12).
-const basicExercises = z.object({
-  escolhaUma: z.object({
-    prompt: text,
-    options: z.array(text).min(3).max(4),
-    answer: index,
-    why: text,
-  }),
-  unaOsPares: z.object({
-    prompt: text,
-    pairs: z
-      .array(z.object({ term: text, match: text }))
-      .min(3)
-      .max(5),
-    why: text,
-  }),
-  verdadeiroOuFalso: z.object({
-    statements: z
-      .array(z.object({ text, answer: z.boolean(), why: text }))
-      .length(3),
-    why: text,
-  }),
-  completeAFrase: z.object({
-    text,
-    tiles: z.array(text).min(2).max(8),
-    answers: z.array(text).min(1).max(2),
-    why: text,
-  }),
-});
-
-const extraExercises = z.object({
-  monteAFrase: z.object({
-    prompt: text,
-    answer: z.array(text).min(3).max(16),
-    distractors: z.array(text).max(3),
-    why: text,
-  }),
-  escolhaAFraseCerta: z.object({
-    prompt: text,
-    options: z.array(text).min(3).max(4),
-    answer: index,
-    why: text,
-  }),
-  naGrade: z.object({
-    prompt: text,
-    rows: two,
-    columns: two,
-    items: z
-      .array(z.object({ text, row: index, column: index }))
-      .min(4)
-      .max(8),
-    why: text,
-  }),
-  separeNasCestas: z.object({
-    prompt: text,
-    baskets: two,
-    items: z
-      .array(z.object({ text, basket: index }))
-      .min(4)
-      .max(8),
-    why: text,
-  }),
-  toqueNoTrecho: z.object({
-    prompt: text,
-    segments: z.array(text).min(3).max(8),
-    answer: index,
-    why: text,
-  }),
-  ordene: z.object({
-    prompt: text,
-    steps: z.array(text).min(3).max(6),
-    why: text,
-  }),
-  expliqueParaOArandu: z.object({
-    prompt: text,
-    ideas: z.array(text).min(2).max(4),
-    why: text,
-  }),
-});
-
-export type ChapterDraft = z.infer<typeof basicExercises> &
-  Partial<z.infer<typeof extraExercises>>;
-
-const pair = (t: { first: string; second: string }): [string, string] => [
-  t.first,
-  t.second,
-];
-
-const inRange = (i: number, list: unknown[]) => i >= 0 && i < list.length;
-const bit = (i: number): i is 0 | 1 => i === 0 || i === 1;
-// Two choices with the same text leave the person guessing which one is right.
-const distinct = (list: string[]) =>
-  new Set(list.map((s) => s.trim().toLowerCase())).size === list.length;
-const count = (list: string[], s: string) => list.filter((x) => x === s).length;
-
-/** The drafted exercises, in R01-R12 order, without any the model got inconsistent (an answer out of range, a gap
- * without its word or with too few tiles for it, a cell outside the grid, two choices with the same text). */
-export function exercisesOf(draft: ChapterDraft): Exercise[] {
-  const out: Exercise[] = [];
-  const {
-    escolhaUma: eu,
-    unaOsPares: up,
-    verdadeiroOuFalso: vf,
-    completeAFrase: cf,
-  } = draft;
-  if (inRange(eu.answer, eu.options) && distinct(eu.options))
-    out.push({ kind: 'escolha_uma', mode: 'reconhecer', ...eu });
-  if (
-    distinct(up.pairs.map((p) => p.term)) &&
-    distinct(up.pairs.map((p) => p.match))
-  )
-    out.push({
-      kind: 'una_os_pares',
-      mode: 'reconhecer',
-      prompt: up.prompt,
-      pairs: up.pairs.map((p) => [p.term, p.match]),
-      why: up.why,
-    });
-  if (distinct(vf.statements.map((st) => st.text)))
-    out.push({ kind: 'verdadeiro_ou_falso', mode: 'reconhecer', ...vf });
-  if (
-    cf.text.split('___').length - 1 === cf.answers.length &&
-    cf.answers.every((a) => count(cf.tiles, a) >= count(cf.answers, a))
-  )
-    out.push({ kind: 'complete_a_frase', mode: 'reconhecer', ...cf });
-
-  const {
-    monteAFrase: mf,
-    escolhaAFraseCerta: ef,
-    naGrade: ng,
-    separeNasCestas: sc,
-  } = draft;
-  const { toqueNoTrecho: tt, ordene: od, expliqueParaOArandu: ex } = draft;
-  // The answer may repeat a word; a distractor may not be one of its words, or a right tile would count as wrong.
-  if (
-    mf &&
-    distinct([
-      ...new Set(mf.answer.map((w) => w.trim().toLowerCase())),
-      ...mf.distractors,
-    ])
-  )
-    out.push({ kind: 'monte_a_frase', mode: 'produzir', ...mf });
-  if (ef && inRange(ef.answer, ef.options) && distinct(ef.options))
-    out.push({ kind: 'escolha_a_frase_certa', mode: 'reconhecer', ...ef });
-  if (
-    ng &&
-    ng.items.every((i) => bit(i.row) && bit(i.column)) &&
-    distinct(pair(ng.rows)) &&
-    distinct(pair(ng.columns)) &&
-    distinct(ng.items.map((i) => i.text))
-  )
-    out.push({
-      kind: 'na_grade',
-      mode: 'reconhecer',
-      prompt: ng.prompt,
-      rows: pair(ng.rows),
-      columns: pair(ng.columns),
-      items: ng.items.map((i) => ({
-        text: i.text,
-        cell: [i.row as 0 | 1, i.column as 0 | 1],
-      })),
-      why: ng.why,
-    });
-  if (
-    sc &&
-    sc.items.every((i) => bit(i.basket)) &&
-    distinct(pair(sc.baskets)) &&
-    distinct(sc.items.map((i) => i.text))
-  )
-    out.push({
-      kind: 'separe_nas_cestas',
-      mode: 'reconhecer',
-      prompt: sc.prompt,
-      baskets: pair(sc.baskets),
-      items: sc.items.map((i) => ({ text: i.text, basket: i.basket as 0 | 1 })),
-      why: sc.why,
-    });
-  if (tt && inRange(tt.answer, tt.segments) && distinct(tt.segments))
-    out.push({ kind: 'toque_no_trecho', mode: 'reconhecer', ...tt });
-  if (od && distinct(od.steps))
-    out.push({ kind: 'ordene', mode: 'produzir', ...od });
-  if (ex) out.push({ kind: 'explique_para_o_arandu', mode: 'produzir', ...ex });
-  return out;
-}
-
-/** Exercises a chapter needs to be kept: all four on a subject's first chapter, most of them on the others. */
-export const minExercises = (topic: number) => (topic === 0 ? 4 : 8);
+/** A page with where it comes from: the model is told to prefer academic pages over Wikipedia's. */
+type Source = Page & { wikipedia: boolean };
 
 /** The model's object, or null when its answer missed the schema (a list too long, a field left out): retried. */
 async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
@@ -248,52 +77,111 @@ async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
   }
 }
 
-/** Tries to write a chapter with verified sources this many times before giving up. */
+/** Tries to write a chapter's cards, and then its pieces, this many times before giving up. */
 const ATTEMPTS = 2;
 
-/** A chapter of a subject: made once, from a web search, with every card's quote checked on its page; then reused. */
+const queryOf = (name: string, topics: string[]) =>
+  `${name} ${topics.join(' ')}`.split(/\s+/).slice(0, QUERY_WORDS).join(' ');
+
+const pagesPrompt = (pages: Source[]) =>
+  pages
+    .map(
+      (p, i) =>
+        `[Page ${i + 1}${p.wikipedia ? ', Wikipedia' : ''}] ${p.title} (${p.url})\n${p.markdown}`,
+    )
+    .join('\n\n---\n\n');
+
+/** The cards whose quote is on the page they name, each citing that page. */
+function verified<T extends z.infer<typeof card>>(
+  cards: T[],
+  pages: Source[],
+): (ChapterCard & { draft: T })[] {
+  return cards.flatMap((c) => {
+    const page = pages[c.page - 1];
+    if (
+      !page ||
+      c.quote.length > QUOTE_CHARS ||
+      !quoteIn(page.markdown, c.quote)
+    )
+      return [];
+    return [
+      {
+        title: c.title,
+        text: c.text,
+        source: { label: page.title, url: page.url, quote: c.quote },
+        draft: c,
+      },
+    ];
+  });
+}
+
+const shown = ({
+  discipline,
+  topic,
+  cards,
+  exercises,
+}: StoredChapter): ChapterContent => ({ discipline, topic, cards, exercises });
+
+/**
+ * A chapter of a subject: made once from pages Firecrawl found, with every card's quote checked on its page, and its
+ * pieces written from the verified cards; then reused. Its lessons are composed from the pieces, per person.
+ */
 @Injectable()
 export class ChaptersService {
   private readonly logger = new Logger(ChaptersService.name);
-  // Two people opening a new chapter at once share one generation.
-  private readonly pending = new Map<string, Promise<ChapterContent>>();
+  // Two runs making the same chapter at once share one generation.
+  private readonly pending = new Map<string, Promise<StoredChapter>>();
 
   constructor(
     private readonly ai: AiService,
     private readonly paths: PathsRepository,
     private readonly progress: ProgressService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   /**
-   * A chapter people can open: stored and inside its subject's leading run of made chapters (the run paths and books list),
-   * so it is never generated live and a book's run never grows under someone mid-way.
+   * A chapter people can open, as stored: inside its subject's leading run of made chapters (the run paths and books
+   * list), so it is never generated live and a book's run never grows under someone mid-way.
    */
-  async chapter(disciplineId: number, topic: number): Promise<ChapterContent> {
+  private async opened(
+    disciplineId: number,
+    topic: number,
+  ): Promise<{ chapter: StoredChapter; topics: string[] }> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
-    const content =
+    const chapter =
+      discipline &&
       topicText !== undefined &&
       topic < (await this.paths.madeCount(disciplineId))
         ? await this.paths.chapterContent(disciplineId, topic, topicText)
         : null;
-    if (!content) throw chapterNotFound();
-    return content;
+    if (!discipline || !chapter) throw chapterNotFound();
+    return { chapter, topics: discipline.topics };
+  }
+
+  /** The chapter as everyone sees it, without its pieces. */
+  async chapter(disciplineId: number, topic: number): Promise<ChapterContent> {
+    return shown((await this.opened(disciplineId, topic)).chapter);
   }
 
   /**
-   * A chapter's content, made now from a web search when it is not stored yet: for the loading scripts, not for people.
-   * `remake` writes its exercises again over the stored chapter, from its stored cards; the old chapter stays if that fails.
+   * A chapter, made now when it is not stored yet: for the generation script, not for people. `remake` writes its
+   * pieces again over the stored chapter, from its stored cards; the old chapter stays if that fails.
    */
   async make(
     disciplineId: number,
     topic: number,
     remake = false,
-  ): Promise<ChapterContent> {
+  ): Promise<StoredChapter> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
     if (!discipline || topicText === undefined) throw chapterNotFound();
 
-    const stored = await this.paths.chapterContent(disciplineId, topic, topicText);
+    const stored = await this.paths.chapterContent(
+      disciplineId,
+      topic,
+      topicText,
+    );
     if (stored && !remake) return stored;
 
     const key = `${disciplineId}:${topic}`;
@@ -318,7 +206,7 @@ export class ChaptersService {
     relampagoMistakes: number | null = null,
   ): Promise<ChapterResult> {
     // Only a chapter people can open can be finished, so books and their rewards count the same run.
-    await this.chapter(disciplineId, topic);
+    await this.opened(disciplineId, topic);
     const before = new Set(
       (await this.progress.achievements(userId)).map((a) => a.code),
     );
@@ -338,8 +226,8 @@ export class ChaptersService {
   }
 
   /**
-   * One lesson of a chapter for this person (#123): lessons 1-3 split the chapter's exercises in their own fixed order,
-   * lesson 4 reviews what they missed. 409 before the lessons ahead of it are done.
+   * One lesson of a chapter for this person (#123), composed from its pieces: lessons 1-3 recognise, apply and solve;
+   * lesson 4 brings back what they missed in another kind. 409 before the lessons ahead of it are done.
    */
   async lesson(
     userId: string,
@@ -347,47 +235,47 @@ export class ChaptersService {
     topic: number,
     index: number,
   ): Promise<Lesson> {
-    const content = await this.chapter(disciplineId, topic);
+    const { chapter, topics } = await this.opened(disciplineId, topic);
     const done = await this.paths.lessons(userId, disciplineId, topic);
     if (
       index > done.length + 1 &&
       !(await this.paths.chapterFinished(userId, disciplineId, topic))
     )
       throw lessonLocked();
-    const refs = await this.lessonRefs(userId, content, index, done);
-    const exercises: LessonExercise[] = [];
-    for (const ref of refs) {
-      const source =
-        ref.topic === topic
-          ? content
-          : await this.chapter(disciplineId, ref.topic).catch(() => null);
-      const exercise = source?.exercises[ref.index];
-      if (exercise) exercises.push({ ...exercise, ...ref });
-    }
+    const composed = await this.composed(userId, chapter, topics, index, done);
     return {
       index,
       total: LESSONS,
-      cards: index === 1 ? content.cards : null,
-      exercises,
+      cards: index === 1 ? chapter.cards : null,
+      exercises: composed.map((c): LessonExercise => ({
+        ...c.exercise,
+        topic: c.ref.topic,
+        index: c.ref.index,
+      })),
     };
   }
 
-  /** Records a lesson; only the misses that were in it count. Lesson 4 finishes the chapter. */
+  /** Records a lesson; only the misses that were in it count, each with the kind it was missed in. Lesson 4 finishes the chapter. */
   async finishLesson(
     userId: string,
     disciplineId: number,
     topic: number,
     index: number,
-    missed: ExerciseRef[],
+    missed: { topic: number; index: number }[],
   ): Promise<LessonResult> {
-    const content = await this.chapter(disciplineId, topic);
+    const { chapter, topics } = await this.opened(disciplineId, topic);
     const done = await this.paths.lessons(userId, disciplineId, topic);
-    const inLesson = new Set(
-      (await this.lessonRefs(userId, content, index, done)).map(
-        (r) => `${r.topic}:${r.index}`,
-      ),
+    const inLesson = new Map(
+      (await this.composed(userId, chapter, topics, index, done)).map((c) => [
+        `${c.ref.topic}:${c.ref.index}`,
+        c.ref,
+      ]),
     );
-    const kept = missed.filter((r) => inLesson.has(`${r.topic}:${r.index}`));
+    const kept = new Map<string, PieceRef>();
+    for (const r of missed) {
+      const ref = inLesson.get(`${r.topic}:${r.index}`);
+      if (ref) kept.set(`${r.topic}:${r.index}`, ref);
+    }
     const before = new Set(
       (await this.progress.achievements(userId)).map((a) => a.code),
     );
@@ -396,7 +284,7 @@ export class ChaptersService {
       disciplineId,
       topic,
       index,
-      [...new Map(kept.map((r) => [`${r.topic}:${r.index}`, r])).values()],
+      [...kept.values()],
     );
     // Always compared: a practice lesson gives no sabedoria but its study day can still complete semana_de_patinhas.
     const achievements = (await this.progress.achievements(userId))
@@ -405,53 +293,79 @@ export class ChaptersService {
     return { ...result, achievements };
   }
 
-  /** Where a lesson's exercises live, for this person. */
-  private async lessonRefs(
+  /** A lesson's exercises for this person: the same on every call, so its result is checked against what was served. */
+  private async composed(
     userId: string,
-    content: ChapterContent,
+    chapter: StoredChapter,
+    topics: string[],
     index: number,
-    done: { lesson: number; missed: ExerciseRef[] }[],
-  ): Promise<ExerciseRef[]> {
-    const topic = content.topic.index;
-    const seed = `${userId}:${content.discipline.id}:${topic}`;
-    const count = content.exercises.length;
+    done: { lesson: number; missed: PieceRef[] }[],
+  ): Promise<Composed[]> {
+    const disciplineId = chapter.discipline.id;
+    const topic = chapter.topic.index;
+    const seed = `${userId}:${disciplineId}:${topic}`;
+    const own = { topic, pieces: chapter.pieces ?? [] };
+    const subject = await this.paths.subjectPieces(disciplineId, topics);
     if (index < LESSONS)
-      return (splitLessons(count, seed)[index - 1] ?? []).map((i) => ({
-        topic,
-        index: i,
-      }));
-    return reviewRefs(
-      topic,
+      return composeLesson(
+        own,
+        subject.filter((c) => c.topic !== topic),
+        index,
+        seed,
+      );
+    return composeReview(
+      own,
+      subject,
       done.filter((d) => d.lesson < LESSONS).flatMap((d) => d.missed),
-      await this.paths.missedElsewhere(userId, content.discipline.id, topic),
-      count,
+      await this.paths.missedElsewhere(userId, disciplineId, topic),
       seed,
     );
   }
 
-  /** The chapter's cards from a web search, keeping only those whose quote is on its page. */
+  /** Academic pages, then Wikipedia's, for one query; a page both searches found comes once. */
+  private async pages(
+    query: string,
+    count: { academic: number; wikipedia: number },
+  ): Promise<Source[]> {
+    const key = this.config.get('FIRECRAWL_API_KEY', { infer: true });
+    if (!key)
+      throw new Error(
+        'FIRECRAWL_API_KEY is not set: chapters are made only by the generation script',
+      );
+    const [academic, wikipedia] = await Promise.all([
+      searchPages(key, query, count.academic, false),
+      searchPages(key, query, count.wikipedia, true),
+    ]);
+    const seen = new Set<string>();
+    return [
+      ...academic.map((p) => ({ ...p, wikipedia: false })),
+      ...wikipedia.map((p) => ({ ...p, wikipedia: true })),
+    ].filter((p) => !seen.has(p.url) && seen.add(p.url));
+  }
+
+  /** The chapter's cards from a search for its topic alone, keeping only those whose quote is on its page. */
   private async cards(
     name: string,
     topic: number,
     topicText: string,
     total: number,
   ): Promise<ChapterCard[]> {
+    const pages = await this.pages(queryOf(name, [topicText]), TOPIC_PAGES);
+    if (!pages.length) throw chapterUnavailable();
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       const object = await orRetry(
         this.ai.generateObject({
-          model: 'web',
           label: 'arandu-chapter-cards',
           schema: cardsDraft,
           instructions: cardsInstructions(),
-          prompt: `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}`,
+          prompt: `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}\n\nPages:\n${pagesPrompt(pages)}`,
           maxOutputTokens: 2500,
         }),
       );
       if (!object) continue;
-      const checks = await Promise.all(
-        object.cards.map((c) => quoteIsOnPage(c.source.url, c.source.quote)),
+      const cards = verified(object.cards, pages).map(
+        ({ title, text, source }) => ({ title, text, source }),
       );
-      const cards = object.cards.filter((_, i) => checks[i]);
       this.logger.log(
         `Chapter cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified`,
       );
@@ -480,30 +394,13 @@ export class ChaptersService {
       .map((text, i) => ({ index: start + i, text }));
     const block = whole.filter((t) => !stored.has(t.index));
     // A block already searched (some topic of it stored) is not searched again: its uncovered topics search alone.
-    const object =
-      block.length === whole.length
-        ? await this.blockCards(id, name, block)
-        : null;
-    if (object) {
-      const checks = await Promise.all(
-        object.cards.map((c) => quoteIsOnPage(c.source.url, c.source.quote)),
-      );
-      const found = block
-        .map((t, i) => ({
-          topic: t.index,
-          topicText: t.text,
-          cards: object.cards
-            .filter((c, j) => checks[j] && c.topic === i + 1)
-            .slice(0, 3)
-            .map(({ title, text, source }) => ({ title, text, source })),
-        }))
-        .filter((e) => e.cards.length);
-      this.logger.log(
-        `Subject ${id} cards for topics ${start + 1}-${start + block.length}: ${checks.filter(Boolean).length}/${object.cards.length} verified, ${found.length}/${block.length} topics`,
-      );
-      await this.paths.saveChapterCards(id, found);
-      const cards = found.find((e) => e.topic === topic)?.cards;
-      if (cards) return cards;
+    if (block.length === whole.length) {
+      const found = await this.blockCards(id, name, block);
+      if (found) {
+        await this.paths.saveChapterCards(id, found);
+        const cards = found.find((e) => e.topic === topic)?.cards;
+        if (cards) return cards;
+      }
     }
     const topicText = topics[topic];
     if (topicText === undefined) throw chapterNotFound();
@@ -511,8 +408,8 @@ export class ChaptersService {
   }
 
   /**
-   * One web search for a block of topics. Null when its answer missed the schema or the provider failed: the chapter then
-   * falls back to a search for its own topic.
+   * One search for a block of topics, and each topic's verified cards. Null when the search or the provider failed or
+   * the answer missed the schema: the chapter then falls back to a search for its own topic.
    */
   private async blockCards(
     id: number,
@@ -520,16 +417,39 @@ export class ChaptersService {
     block: { index: number; text: string }[],
   ) {
     try {
-      return await orRetry(
+      const pages = await this.pages(
+        queryOf(
+          name,
+          block.map((t) => t.text),
+        ),
+        BLOCK_PAGES,
+      );
+      if (!pages.length) return null;
+      const object = await orRetry(
         this.ai.generateObject({
-          model: 'web',
           label: 'arandu-subject-cards',
           schema: subjectCardsDraft,
           instructions: subjectCardsInstructions(),
-          prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}`,
+          prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}\n\nPages:\n${pagesPrompt(pages)}`,
           maxOutputTokens: 900 * block.length,
         }),
       );
+      if (!object) return null;
+      const cards = verified(object.cards, pages);
+      const found = block
+        .map((t, i) => ({
+          topic: t.index,
+          topicText: t.text,
+          cards: cards
+            .filter((c) => c.draft.topic === i + 1)
+            .slice(0, 3)
+            .map(({ title, text, source }) => ({ title, text, source })),
+        }))
+        .filter((e) => e.cards.length);
+      this.logger.log(
+        `Subject ${id} cards for topics ${block[0]!.index + 1}-${block.at(-1)!.index + 1}: ${cards.length}/${object.cards.length} verified from ${pages.length} pages, ${found.length}/${block.length} topics`,
+      );
+      return found;
     } catch (error) {
       this.logger.warn(`Subject ${id} block search failed: ${String(error)}`);
       return null;
@@ -541,7 +461,7 @@ export class ChaptersService {
     name: string,
     topic: number,
     topics: string[],
-  ): Promise<ChapterContent> {
+  ): Promise<StoredChapter> {
     const topicText = topics[topic];
     if (topicText === undefined) throw chapterNotFound();
     const total = topics.length;
@@ -551,44 +471,32 @@ export class ChaptersService {
     );
     const prompt = `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}\n\nCards:\n${facts}`;
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-      const [basic, extra] = await Promise.all([
-        orRetry(
-          this.ai.generateObject({
-            label: 'arandu-chapter-exercises',
-            schema: basicExercises,
-            instructions: exercisesInstructions('basic'),
-            prompt,
-            maxOutputTokens: 3000,
-          }),
-        ),
-        topic === 0
-          ? null
-          : orRetry(
-              this.ai.generateObject({
-                label: 'arandu-chapter-exercises',
-                schema: extraExercises,
-                instructions: exercisesInstructions('extra'),
-                prompt,
-                maxOutputTokens: 4000,
-              }),
-            ),
-      ]);
-      if (!basic || (topic > 0 && !extra)) {
+      const draft = await orRetry(
+        this.ai.generateObject({
+          label: 'arandu-chapter-pieces',
+          schema: piecesDraft,
+          instructions: piecesInstructions(),
+          prompt,
+          maxOutputTokens: 6000,
+        }),
+      );
+      if (!draft) {
         this.logger.warn(
-          `Chapter ${id}:${topic} exercises attempt ${attempt}: an answer missed its schema`,
+          `Chapter ${id}:${topic} pieces attempt ${attempt}: the answer missed its schema`,
         );
         continue;
       }
-      const exercises = exercisesOf({ ...basic, ...extra });
+      const pieces = piecesOf(draft);
       this.logger.log(
-        `Chapter ${id}:${topic} exercises attempt ${attempt}: ${exercises.length} consistent`,
+        `Chapter ${id}:${topic} pieces attempt ${attempt}: ${pieces.map((p) => p.type).join(', ')}`,
       );
-      if (exercises.length < minExercises(topic)) continue;
-      const content: ChapterContent = {
+      if (!enoughPieces(pieces)) continue;
+      const content: StoredChapter = {
         discipline: { id, name },
         topic: { index: topic, text: topicText, total },
         cards,
-        exercises,
+        exercises: composeChapter({ topic, pieces }, `${id}:${topic}`),
+        pieces,
       };
       await this.paths.saveChapterContent(content);
       return content;

@@ -3,7 +3,6 @@ import type {
   CareerPaths,
   LessonResult,
   ChapterCard,
-  ChapterContent,
   ChapterResult,
 } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
@@ -23,11 +22,9 @@ import {
   TIME_ZONE,
 } from '../progress/progress.repository.js';
 import { one } from '../../core/database/one.js';
-import {
-  type ExerciseRef,
-  LESSON_SABEDORIA,
-  LESSONS,
-} from './lessons.logic.js';
+import type { ChapterPieces, PieceRef } from './composer.js';
+import { LESSON_SABEDORIA, LESSONS } from './lessons.logic.js';
+import type { Piece, StoredChapter } from './pieces.js';
 import { lessonLocked } from './paths.errors.js';
 
 export interface Discipline {
@@ -153,11 +150,26 @@ export class PathsRepository {
     disciplineId: number,
     topic: number,
     topicText: string,
-  ): Promise<ChapterContent | null> {
-    const [row] = await this.sql<{ content: ChapterContent }[]>`
+  ): Promise<StoredChapter | null> {
+    const [row] = await this.sql<{ content: StoredChapter }[]>`
       select content from public.chapter_contents
       where discipline_id = ${disciplineId} and topic = ${topic} and topic_text = ${topicText}`;
     return row?.content ?? null;
+  }
+
+  /** The pieces of every stored chapter of the subject made from its current topic text, in one query. */
+  async subjectPieces(
+    disciplineId: number,
+    topics: string[],
+  ): Promise<ChapterPieces[]> {
+    const rows = await this.sql<
+      { topic: number; topic_text: string; pieces: Piece[] | null }[]
+    >`
+      select topic::int, topic_text, content -> 'pieces' as pieces
+      from public.chapter_contents where discipline_id = ${disciplineId} order by topic`;
+    return rows
+      .filter((r) => topics[r.topic] === r.topic_text)
+      .map((r) => ({ topic: r.topic, pieces: r.pieces ?? [] }));
   }
 
   /** The subject's stored cards by topic, those made from the same topic text. */
@@ -188,7 +200,7 @@ export class PathsRepository {
           set topic_text = excluded.topic_text, cards = excluded.cards, created_at = now()`;
   }
 
-  async saveChapterContent(content: ChapterContent): Promise<void> {
+  async saveChapterContent(content: StoredChapter): Promise<void> {
     await this.sql`
       insert into public.chapter_contents (discipline_id, topic, topic_text, content)
       values (${content.discipline.id}, ${content.topic.index}, ${content.topic.text}, ${this.sql.json(content as never)})
@@ -224,8 +236,8 @@ export class PathsRepository {
     userId: string,
     disciplineId: number,
     topic: number,
-  ): Promise<{ lesson: number; missed: ExerciseRef[] }[]> {
-    return this.sql<{ lesson: number; missed: ExerciseRef[] }[]>`
+  ): Promise<{ lesson: number; missed: PieceRef[] }[]> {
+    return this.sql<{ lesson: number; missed: PieceRef[] }[]>`
       select lesson, missed from public.lesson_results
       where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic} order by lesson`;
   }
@@ -247,8 +259,8 @@ export class PathsRepository {
     userId: string,
     disciplineId: number,
     topic: number,
-  ): Promise<ExerciseRef[]> {
-    const rows = await this.sql<{ missed: ExerciseRef[] }[]>`
+  ): Promise<PieceRef[]> {
+    const rows = await this.sql<{ missed: PieceRef[] }[]>`
       select missed from public.lesson_results
       where user_id = ${userId} and discipline_id = ${disciplineId} and topic <> ${topic} and lesson < ${LESSONS}
         and jsonb_array_length(missed) > 0
@@ -267,7 +279,7 @@ export class PathsRepository {
     disciplineId: number,
     topic: number,
     lesson: number,
-    missed: ExerciseRef[],
+    missed: PieceRef[],
   ): Promise<Omit<LessonResult, 'achievements'>> {
     return asPerson(
       this.sql.begin(async (tx) => {

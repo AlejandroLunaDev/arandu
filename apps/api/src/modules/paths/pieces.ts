@@ -1,3 +1,4 @@
+import type { ChapterContent } from '@arandu/contracts';
 import { z } from 'zod';
 import { CalcError, evaluate, reserved, variablesOf } from './calc.js';
 import { seeded } from './lessons.logic.js';
@@ -40,6 +41,9 @@ export type Piece =
       distractors: string[];
       why: string;
     };
+
+/** A chapter as stored: what everyone sees, and the pieces lessons are built from (never sent to a client). */
+export type StoredChapter = ChapterContent & { pieces?: Piece[] };
 
 const text = z.string().min(1);
 const two = z.object({ first: text, second: text });

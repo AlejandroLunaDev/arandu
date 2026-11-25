@@ -1,331 +1,89 @@
+import type { Lesson, LessonExercise } from '@arandu/contracts';
 import type { Mock } from 'vitest';
 import { AiModelError, AiOutputError, type AiService } from '@nestjs/ai';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
+import type { Env } from '../../core/config/env.js';
 import type { ProgressService } from '../progress/progress.service.js';
+import { ChaptersService } from './chapters.service.js';
+import { composeChapter, composeLesson } from './composer.js';
+import { type Page, searchPages } from './firecrawl.js';
 import type { PathsRepository } from './paths.repository.js';
-import { quoteIsOnPage } from './source-check.js';
-import { exercisesOf, type ChapterDraft, ChaptersService } from './chapters.service.js';
-import { exercisesInstructions } from './chapter.prompt.js';
-import { splitLessons } from './lessons.logic.js';
+import { type PiecesDraft, piecesOf, type StoredChapter } from './pieces.js';
 
-vi.mock('./source-check.js', () => ({ quoteIsOnPage: vi.fn() }));
+vi.mock('./firecrawl.js', () => ({ searchPages: vi.fn() }));
+
+const LONG = 'l'.repeat(301);
+const academic: Page = {
+  url: 'https://a.org/1',
+  title: 'Página acadêmica',
+  markdown: `# Limites\n\nO **limite** descreve q1. Também q-a, q-b, q-c, q-good, q-other, q-zero, q-seven, q-c1, q-c2, q-c3, q-c4. ${LONG}`,
+};
+const wiki: Page = {
+  url: 'https://pt.wikipedia.org/wiki/Limite',
+  title: 'Limite – Wikipédia',
+  markdown: 'Na matemática, w1.',
+};
+const sourceOf = (page: Page, quote: string) => ({
+  label: page.title,
+  url: page.url,
+  quote,
+});
 
 const cardsReply = () => ({
   cards: [
-    {
-      title: 't1',
-      text: 'x',
-      source: { label: 'l', url: 'https://a.org/1', quote: 'q1' },
-    },
-    {
-      title: 't2',
-      text: 'x',
-      source: { label: 'l', url: 'https://a.org/2', quote: 'q2' },
-    },
+    { title: 't1', text: 'x', page: 1, quote: 'q1' },
+    { title: 't2', text: 'x', page: 2, quote: 'w1' },
   ],
 });
 
-const draft = (): ChapterDraft => ({
-  escolhaUma: { prompt: 'p', options: ['a', 'b', 'c'], answer: 1, why: 'w' },
-  unaOsPares: {
-    prompt: 'p',
-    pairs: [
-      { term: 'a', match: '1' },
-      { term: 'b', match: '2' },
-      { term: 'c', match: '3' },
-    ],
-    why: 'w',
-  },
-  verdadeiroOuFalso: {
-    statements: [
-      { text: 'a', answer: true, why: 'w' },
-      { text: 'b', answer: false, why: 'w' },
-      { text: 'c', answer: true, why: 'w' },
-    ],
-    why: 'w',
-  },
-  completeAFrase: {
-    text: 'A ___ e o ___',
-    tiles: ['x', 'y', 'z'],
-    answers: ['x', 'y'],
-    why: 'w',
-  },
-});
-
-const full = (): ChapterDraft => ({
-  ...draft(),
-  monteAFrase: {
-    prompt: 'p',
-    answer: ['a', 'b', 'c'],
-    distractors: ['d'],
-    why: 'w',
-  },
-  escolhaAFraseCerta: {
-    prompt: 'p',
-    options: ['a', 'b', 'c'],
-    answer: 2,
-    why: 'w',
-  },
-  naGrade: {
-    prompt: 'p',
-    rows: { first: 'r0', second: 'r1' },
-    columns: { first: 'c0', second: 'c1' },
-    items: [
-      { text: 'a', row: 0, column: 0 },
-      { text: 'b', row: 0, column: 1 },
-      { text: 'c', row: 1, column: 0 },
-      { text: 'd', row: 1, column: 1 },
-    ],
-    why: 'w',
-  },
-  separeNasCestas: {
-    prompt: 'p',
-    baskets: { first: 'x', second: 'y' },
-    items: [
-      { text: 'a', basket: 0 },
-      { text: 'b', basket: 1 },
-      { text: 'c', basket: 0 },
-      { text: 'd', basket: 1 },
-    ],
-    why: 'w',
-  },
-  toqueNoTrecho: {
-    prompt: 'p',
-    segments: ['a', 'b', 'c'],
-    answer: 1,
-    why: 'w',
-  },
-  ordene: { prompt: 'p', steps: ['a', 'b', 'c'], why: 'w' },
-  expliqueParaOArandu: { prompt: 'p', ideas: ['i1', 'i2'], why: 'w' },
-});
-
-describe('exercisesOf (all kinds)', () => {
-  const kinds = (d: ChapterDraft) => exercisesOf(d).map((e) => e.kind);
-
-  it('keeps all 11 kinds in order, with their mode', () => {
-    const list = exercisesOf(full());
-
-    expect(list.map((e) => e.kind)).toEqual([
-      'escolha_uma',
-      'una_os_pares',
-      'verdadeiro_ou_falso',
-      'complete_a_frase',
-      'monte_a_frase',
-      'escolha_a_frase_certa',
-      'na_grade',
-      'separe_nas_cestas',
-      'toque_no_trecho',
-      'ordene',
-      'explique_para_o_arandu',
-    ]);
-    expect(
-      list.filter((e) => e.mode === 'produzir').map((e) => e.kind),
-    ).toEqual(['monte_a_frase', 'ordene', 'explique_para_o_arandu']);
-    expect(list.every((e) => e.why === 'w')).toBe(true);
-  });
-
-  it('maps grid items to a [row, column] cell', () => {
-    const grid = exercisesOf(full()).find((e) => e.kind === 'na_grade');
-
-    expect(grid?.kind === 'na_grade' && grid.items[1]).toEqual({
-      text: 'b',
-      cell: [0, 1],
-    });
-  });
-
-  it('a draft without the extra kinds keeps just the four', () => {
-    expect(kinds(draft())).toHaveLength(4);
-  });
-
-  it.each([-1, 3])('drops escolha_a_frase_certa with answer %i', (answer) => {
-    const d = full();
-    d.escolhaAFraseCerta!.answer = answer;
-    expect(kinds(d)).not.toContain('escolha_a_frase_certa');
-  });
-
-  it.each([-1, 2])('drops na_grade with an item row %i', (row) => {
-    const d = full();
-    d.naGrade!.items[0]!.row = row;
-    expect(kinds(d)).not.toContain('na_grade');
-  });
-
-  it.each([-1, 2])('drops na_grade with an item column %i', (column) => {
-    const d = full();
-    d.naGrade!.items[0]!.column = column;
-    expect(kinds(d)).not.toContain('na_grade');
-  });
-
-  it.each([-1, 2])('drops separe_nas_cestas with basket %i', (basket) => {
-    const d = full();
-    d.separeNasCestas!.items[0]!.basket = basket;
-    expect(kinds(d)).not.toContain('separe_nas_cestas');
-  });
-
-  it.each([-1, 3])('drops toque_no_trecho with answer %i', (answer) => {
-    const d = full();
-    d.toqueNoTrecho!.answer = answer;
-    expect(kinds(d)).not.toContain('toque_no_trecho');
-  });
-
-  it('dropping one kind keeps the others', () => {
-    const d = full();
-    d.toqueNoTrecho!.answer = 9;
-    expect(kinds(d)).toHaveLength(10);
-  });
-});
-
-describe('exercisesOf', () => {
-  const kinds = (d: ChapterDraft) => exercisesOf(d).map((e) => e.kind);
-
-  it('keeps all four consistent exercises', () => {
-    expect(kinds(draft())).toEqual([
-      'escolha_uma',
-      'una_os_pares',
-      'verdadeiro_ou_falso',
-      'complete_a_frase',
-    ]);
-  });
-
-  it.each([-1, 3, 9])('drops escolha_uma with answer %i', (answer) => {
-    const d = draft();
-    d.escolhaUma.answer = answer;
-    expect(kinds(d)).not.toContain('escolha_uma');
-  });
-
-  it('drops complete_a_frase when gaps and answers differ in count', () => {
-    const d = draft();
-    d.completeAFrase.answers = ['x'];
-    expect(kinds(d)).not.toContain('complete_a_frase');
-  });
-
-  it('drops complete_a_frase when an answer is not in the tiles', () => {
-    const d = draft();
-    d.completeAFrase.answers = ['x', 'nope'];
-    expect(kinds(d)).not.toContain('complete_a_frase');
-  });
-});
-
-describe('exercisesOf (repeated choices)', () => {
-  const kinds = (d: ChapterDraft) => exercisesOf(d).map((e) => e.kind);
-
-  it.each<[string, string, (d: ChapterDraft) => void]>([
-    ['escolha_uma', 'options', (d) => (d.escolhaUma.options[2] = 'a')],
-    [
-      'una_os_pares',
-      'matches',
-      (d) => (d.unaOsPares.pairs[2]!.match = d.unaOsPares.pairs[0]!.match),
-    ],
-    [
-      'una_os_pares',
-      'terms differing only in case and spaces',
-      (d) => {
-        d.unaOsPares.pairs[0]!.term = 'Termo';
-        d.unaOsPares.pairs[1]!.term = ' termo ';
-      },
-    ],
-    [
-      'escolha_a_frase_certa',
-      'options',
-      (d) => (d.escolhaAFraseCerta!.options[0] = 'c'),
-    ],
-    ['na_grade', 'item texts', (d) => (d.naGrade!.items[3]!.text = 'a')],
-    [
-      'separe_nas_cestas',
-      'item texts',
-      (d) => (d.separeNasCestas!.items[2]!.text = 'a'),
-    ],
-    [
-      'toque_no_trecho',
-      'segments',
-      (d) => (d.toqueNoTrecho!.segments[0] = 'b'),
-    ],
-    ['ordene', 'steps', (d) => (d.ordene!.steps[2] = 'A')],
-    [
-      'verdadeiro_ou_falso',
-      'statements',
-      (d) => (d.verdadeiroOuFalso.statements[1]!.text = ' A '),
-    ],
-    [
-      'monte_a_frase',
-      'distractors that is also an answer word',
-      (d) => (d.monteAFrase!.distractors = [' B ']),
-    ],
-    [
-      'monte_a_frase',
-      'distractors',
-      (d) => (d.monteAFrase!.distractors = ['d', 'D ']),
-    ],
-    ['na_grade', 'rows', (d) => (d.naGrade!.rows.second = ' R0')],
-    ['na_grade', 'columns', (d) => (d.naGrade!.columns.second = 'C0 ')],
-    [
-      'separe_nas_cestas',
-      'baskets',
-      (d) => (d.separeNasCestas!.baskets.second = ' X'),
-    ],
-  ])(
-    'drops %s with the same text in two %s, keeping the others',
-    (kind, _, repeat) => {
-      const d = full();
-      repeat(d);
-
-      const list = kinds(d);
-      expect(list).not.toContain(kind);
-      expect(list).toHaveLength(10);
+const piecesReply = (): PiecesDraft => ({
+  concepts: [
+    { term: 'Limite', definition: 'O valor de que uma função se aproxima.' },
+    { term: 'Derivada', definition: 'A taxa de variação instantânea.' },
+    { term: 'Integral', definition: 'A área sob uma curva.' },
+    { term: 'Continuidade', definition: 'Quando o gráfico não tem saltos.' },
+  ],
+  statements: [
+    {
+      right: 'A derivada mede a taxa de variação de uma função',
+      wrong: 'A derivada mede a área sob uma função',
+      why: 'w',
     },
-  );
-});
-
-describe('exercisesOf (monte_a_frase repeated answer word)', () => {
-  it('keeps it when the answer repeats a word and no distractor is an answer word', () => {
-    const d = full();
-    d.monteAFrase!.answer = ['o', 'gato', 'e', 'o', 'cão'];
-    d.monteAFrase!.distractors = ['rato', 'peixe'];
-    expect(exercisesOf(d).map((e) => e.kind)).toContain('monte_a_frase');
-  });
-});
-
-describe('exercisesOf (complete_a_frase tiles)', () => {
-  const kinds = (d: ChapterDraft) => exercisesOf(d).map((e) => e.kind);
-
-  it('drops it when an answer repeats and its tile is there only once', () => {
-    const d = draft();
-    d.completeAFrase.answers = ['quê', 'quê'];
-    d.completeAFrase.tiles = ['quê', 'y', 'z'];
-    expect(kinds(d)).not.toContain('complete_a_frase');
-  });
-
-  it('keeps it when the repeated answer has a tile for each gap', () => {
-    const d = draft();
-    d.completeAFrase.answers = ['quê', 'quê'];
-    d.completeAFrase.tiles = ['quê', 'quê', 'z'];
-    expect(kinds(d)).toContain('complete_a_frase');
-  });
-});
-
-describe('exercisesOf (objects back to contract tuples)', () => {
-  const find = (kind: string) =>
-    exercisesOf(full()).find((e) => e.kind === kind);
-
-  it('una_os_pares: {term, match} becomes [term, match]', () => {
-    expect(find('una_os_pares')).toMatchObject({
-      pairs: [
-        ['a', '1'],
-        ['b', '2'],
-        ['c', '3'],
-      ],
-    });
-  });
-
-  it('na_grade: rows and columns become [first, second]', () => {
-    expect(find('na_grade')).toMatchObject({
-      rows: ['r0', 'r1'],
-      columns: ['c0', 'c1'],
-    });
-  });
-
-  it('separe_nas_cestas: baskets become [first, second]', () => {
-    expect(find('separe_nas_cestas')).toMatchObject({ baskets: ['x', 'y'] });
-  });
+    {
+      right: 'Uma função contínua não tem saltos no gráfico',
+      wrong: 'Uma função contínua tem muitos saltos no gráfico',
+      why: 'w',
+    },
+    {
+      right: 'O limite descreve o valor de que a função se aproxima',
+      wrong: 'O limite descreve o valor de que a função se afasta',
+      why: 'w',
+    },
+  ],
+  classification: [],
+  sequence: [
+    {
+      prompt: 'Ordene os passos.',
+      steps: ['Escrever a função', 'Calcular o limite', 'Interpretar'],
+      why: 'w',
+    },
+  ],
+  sentence: [],
+  question: {
+    prompt: 'O que é um limite?',
+    ideas: ['aproximação', 'valor'],
+    why: 'w',
+  },
+  cases: [
+    {
+      situation: 'Um carro chega cada vez mais perto de um sinal.',
+      term: 'Limite',
+      why: 'w',
+    },
+  ],
+  problems: [],
+  code: [],
 });
 
 describe('ChaptersService', () => {
@@ -334,72 +92,62 @@ describe('ChaptersService', () => {
     name: 'Cálculo',
     topics: ['Limites', 'Derivadas'],
   };
-  type Fn = Mock<
+  type Step = Mock<
     (call: {
-      model?: string;
       label?: string;
-      instructions: string;
+      instructions?: string;
       prompt?: string;
       maxOutputTokens?: number;
     }) => unknown
   >;
-  // One mock per step; `ai.generateObject` routes to it by the call's model / instructions.
-  let steps: { subject: Fn; cards: Fn; basic: Fn; extra: Fn };
-  let ai: { generateObject: Fn };
-  let paths: {
-    discipline: Fn;
-    madeCount: Fn;
-    chapterCards: Fn;
-    saveChapterCards: Fn;
-    chapterContent: Fn;
-    saveChapterContent: Fn;
-    finishChapter: Fn;
-    lessons: Fn;
-    chapterFinished: Fn;
-    missedElsewhere: Fn;
-    finishLesson: Fn;
-  };
+  type Fn = Mock<(...args: never[]) => unknown>;
+  // One mock per model call; `ai.generateObject` routes to it by the call's label.
+  let steps: { subject: Step; cards: Step; pieces: Step };
+  let ai: { generateObject: Step };
+  let paths: Record<
+    | 'discipline'
+    | 'madeCount'
+    | 'chapterCards'
+    | 'saveChapterCards'
+    | 'chapterContent'
+    | 'saveChapterContent'
+    | 'subjectPieces'
+    | 'finishChapter'
+    | 'lessons'
+    | 'chapterFinished'
+    | 'missedElsewhere'
+    | 'finishLesson',
+    Fn
+  >;
   let progress: { achievements: Fn };
+  let config: { get: Mock<() => string | undefined> };
   let service: ChaptersService;
 
-  const basicOf = (d: ChapterDraft) => ({
-    escolhaUma: d.escolhaUma,
-    unaOsPares: d.unaOsPares,
-    verdadeiroOuFalso: d.verdadeiroOuFalso,
-    completeAFrase: d.completeAFrase,
-  });
-  const extraOf = (d: ChapterDraft) => ({
-    monteAFrase: d.monteAFrase,
-    escolhaAFraseCerta: d.escolhaAFraseCerta,
-    naGrade: d.naGrade,
-    separeNasCestas: d.separeNasCestas,
-    toqueNoTrecho: d.toqueNoTrecho,
-    ordene: d.ordene,
-    expliqueParaOArandu: d.expliqueParaOArandu,
-  });
   const reply = (object: unknown) => ({ object });
   const outputError = () => new AiOutputError('bad schema', '{}');
-  const extraPromptOf = () => steps.extra.mock.calls[0]![0].prompt as string;
+  const promptOf = (step: Step) => step.mock.calls[0]![0].prompt!;
+  const saved = () =>
+    paths.saveChapterContent.mock.calls[0]![0] as unknown as StoredChapter;
 
   beforeEach(() => {
-    vi.mocked(quoteIsOnPage).mockReset().mockResolvedValue(true);
+    vi.mocked(searchPages)
+      .mockReset()
+      .mockImplementation(async (_key, _query, _limit, wikipedia) =>
+        wikipedia ? [wiki] : [academic],
+      );
     steps = {
-      // By default the subject search finds nothing, so a chapter falls back to its own search.
+      // By default the block search verifies nothing, so a chapter falls back to its own search.
       subject: vi.fn().mockResolvedValue(reply({ cards: [] })),
       cards: vi.fn().mockResolvedValue(reply(cardsReply())),
-      basic: vi.fn().mockResolvedValue(reply(basicOf(full()))),
-      extra: vi.fn().mockResolvedValue(reply(extraOf(full()))),
+      pieces: vi.fn().mockResolvedValue(reply(piecesReply())),
     };
     ai = {
-      generateObject: vi.fn(
-        (o: { model?: string; label?: string; instructions: string }) =>
-          o.label === 'arandu-subject-cards'
-            ? steps.subject(o)
-            : o.model === 'web'
-              ? steps.cards(o)
-              : o.instructions === exercisesInstructions('basic')
-                ? steps.basic(o)
-                : steps.extra(o),
+      generateObject: vi.fn((o) =>
+        o.label === 'arandu-subject-cards'
+          ? steps.subject(o)
+          : o.label === 'arandu-chapter-cards'
+            ? steps.cards(o)
+            : steps.pieces(o),
       ),
     };
     paths = {
@@ -409,6 +157,7 @@ describe('ChaptersService', () => {
       saveChapterCards: vi.fn().mockResolvedValue(undefined),
       chapterContent: vi.fn().mockResolvedValue(null),
       saveChapterContent: vi.fn().mockResolvedValue(undefined),
+      subjectPieces: vi.fn().mockResolvedValue([]),
       finishChapter: vi
         .fn()
         .mockResolvedValue({ sabedoria: 15, peixinhos: 5, patinha: true }),
@@ -423,10 +172,12 @@ describe('ChaptersService', () => {
       }),
     };
     progress = { achievements: vi.fn().mockResolvedValue([]) };
+    config = { get: vi.fn(() => 'fc-key') };
     service = new ChaptersService(
       ai as unknown as AiService,
       paths as unknown as PathsRepository,
       progress as unknown as ProgressService,
+      config as unknown as ConfigService<Env, true>,
     );
   });
 
@@ -443,11 +194,19 @@ describe('ChaptersService', () => {
       expect(ai.generateObject).not.toHaveBeenCalled();
     });
 
-    it('returns the stored chapter inside the made run without calling the model', async () => {
-      const stored = { cards: [], exercises: [] };
-      paths.chapterContent.mockResolvedValue(stored);
+    it('returns the stored chapter inside the made run without its pieces', async () => {
+      const shown = {
+        discipline: { id: 7, name: 'Cálculo' },
+        topic: { index: 1, text: 'Derivadas', total: 2 },
+        cards: [],
+        exercises: [],
+      };
+      paths.chapterContent.mockResolvedValue({
+        ...shown,
+        pieces: piecesOf(piecesReply()),
+      });
 
-      await expect(service.chapter(7, 1)).resolves.toBe(stored);
+      await expect(service.chapter(7, 1)).resolves.toEqual(shown);
       expect(paths.chapterContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
       expect(ai.generateObject).not.toHaveBeenCalled();
     });
@@ -471,213 +230,186 @@ describe('ChaptersService', () => {
     });
   });
 
-  it('make returns the stored chapter without calling the model', async () => {
+  it('make returns the stored chapter without searching or calling the model', async () => {
     const stored = { cards: [], exercises: [] };
     paths.chapterContent.mockResolvedValue(stored);
 
     await expect(service.make(7, 0)).resolves.toBe(stored);
+    expect(searchPages).not.toHaveBeenCalled();
     expect(ai.generateObject).not.toHaveBeenCalled();
   });
 
-  it('make with remake generates again over a stored chapter', async () => {
+  it('make with remake writes the pieces again over a stored chapter', async () => {
     paths.chapterContent.mockResolvedValue({ cards: [], exercises: [] });
 
     const chapter = await service.make(7, 0, true);
 
-    expect(steps.basic).toHaveBeenCalledTimes(1);
-    expect(paths.saveChapterContent).toHaveBeenCalledWith(chapter);
-    expect(chapter.exercises).toHaveLength(4);
-  });
-
-  it('generates in two steps, saves, and keeps only verified cards', async () => {
-    vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
-
-    const chapter = await service.make(7, 1);
-
-    expect(steps.cards).toHaveBeenCalledTimes(1);
-    expect(steps.cards.mock.calls[0]![0]).toMatchObject({ model: 'web' });
-    expect(steps.basic).toHaveBeenCalledTimes(1);
-    expect(steps.extra).toHaveBeenCalledTimes(1);
-    expect(steps.basic.mock.calls[0]![0].model).toBeUndefined();
-    expect(extraPromptOf()).toBe(steps.basic.mock.calls[0]![0].prompt);
-    expect(chapter.cards.map((c) => c.title)).toEqual(['t2']);
-    expect(chapter.topic).toEqual({ index: 1, text: 'Derivadas', total: 2 });
-    expect(chapter.exercises).toHaveLength(11);
+    expect(steps.pieces).toHaveBeenCalledTimes(1);
     expect(paths.saveChapterContent).toHaveBeenCalledWith(chapter);
   });
 
-  it('writes the exercises from the verified cards only', async () => {
-    vi.mocked(quoteIsOnPage).mockImplementation(async (_u, q) => q === 'q2');
+  describe('sources', () => {
+    it("searches the topic's academic pages, then Wikipedia's, and cites the page each quote is on", async () => {
+      const chapter = await service.make(7, 0);
 
-    await service.make(7, 1);
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo Limites',
+        3,
+        false,
+      );
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo Limites',
+        1,
+        true,
+      );
+      expect(promptOf(steps.cards)).toContain(
+        `[Page 1] Página acadêmica (https://a.org/1)\n${academic.markdown}`,
+      );
+      expect(promptOf(steps.cards)).toContain(
+        '[Page 2, Wikipedia] Limite – Wikipédia (https://pt.wikipedia.org/wiki/Limite)',
+      );
+      expect(chapter.cards).toEqual([
+        { title: 't1', text: 'x', source: sourceOf(academic, 'q1') },
+        { title: 't2', text: 'x', source: sourceOf(wiki, 'w1') },
+      ]);
+    });
 
-    const prompt = extraPromptOf();
-    expect(prompt).toContain('Derivadas');
-    expect(prompt).toContain('"title":"t2"');
-    expect(prompt).not.toContain('t1');
-  });
+    it('drops a card whose quote is not on its page, names a page not given, or is too long', async () => {
+      steps.cards.mockResolvedValue(
+        reply({
+          cards: [
+            { title: 'ok', text: 'x', page: 1, quote: 'O limite descreve q1.' },
+            { title: 'elsewhere', text: 'x', page: 2, quote: 'q1' },
+            { title: 'invented', text: 'x', page: 1, quote: 'não está' },
+            { title: 'no page', text: 'x', page: 3, quote: 'q1' },
+            { title: 'long', text: 'x', page: 1, quote: LONG },
+          ],
+        }),
+      );
 
-  it('on the first topic makes only the basic exercises call', async () => {
-    const chapter = await service.make(7, 0);
+      const chapter = await service.make(7, 0);
 
-    expect(steps.extra).not.toHaveBeenCalled();
-    expect(steps.basic).toHaveBeenCalledTimes(1);
-    expect(chapter.exercises).toHaveLength(4);
-  });
+      expect(chapter.cards.map((c) => c.title)).toEqual(['ok']);
+    });
 
-  it('503s on a later chapter when only the 4 basic exercises come back', async () => {
-    steps.extra.mockResolvedValue(reply({}));
+    it('lists a page both searches found once', async () => {
+      vi.mocked(searchPages).mockResolvedValue([academic]);
+      steps.cards.mockResolvedValue(
+        reply({ cards: [{ title: 't1', text: 'x', page: 1, quote: 'q1' }] }),
+      );
 
-    await expect(service.make(7, 1)).rejects.toMatchObject({ status: 503 });
-    expect(steps.basic).toHaveBeenCalledTimes(2);
-    expect(steps.extra).toHaveBeenCalledTimes(2);
-    expect(paths.saveChapterContent).not.toHaveBeenCalled();
-  });
+      await service.make(7, 0);
 
-  const minus = (n: number) => {
-    const d = full();
-    d.toqueNoTrecho!.answer = 9;
-    d.ordene = undefined;
-    d.expliqueParaOArandu = undefined;
-    if (n >= 8) return d;
-    d.separeNasCestas!.items[0]!.basket = 5;
-    return d;
-  };
+      expect(promptOf(steps.cards)).not.toContain('[Page 2');
+    });
 
-  it('keeps a later chapter with exactly 8 consistent exercises', async () => {
-    steps.extra.mockResolvedValue(reply(extraOf(minus(8))));
+    it('retries the cards once when no card verifies, then succeeds', async () => {
+      steps.cards
+        .mockResolvedValueOnce(
+          reply({ cards: [{ title: 'x', text: 'x', page: 1, quote: 'não' }] }),
+        )
+        .mockResolvedValueOnce(reply(cardsReply()));
 
-    const chapter = await service.make(7, 1);
+      const chapter = await service.make(7, 0);
 
-    expect(chapter.exercises).toHaveLength(8);
-  });
+      expect(steps.cards).toHaveBeenCalledTimes(2);
+      expect(chapter.cards).toHaveLength(2);
+    });
 
-  it('503s on a later chapter with 7 consistent exercises', async () => {
-    steps.extra.mockResolvedValue(reply(extraOf(minus(7))));
+    it('retries the cards after an AiOutputError, then succeeds', async () => {
+      steps.cards
+        .mockRejectedValueOnce(outputError())
+        .mockResolvedValueOnce(reply(cardsReply()));
 
-    await expect(service.make(7, 1)).rejects.toMatchObject({ status: 503 });
-    expect(paths.saveChapterContent).not.toHaveBeenCalled();
-  });
+      await expect(service.make(7, 0)).resolves.toBeDefined();
+      expect(steps.cards).toHaveBeenCalledTimes(2);
+    });
 
-  it('retries the exercises once when they are below the minimum, then succeeds', async () => {
-    steps.extra
-      .mockResolvedValueOnce(reply({}))
-      .mockResolvedValueOnce(reply(extraOf(full())));
+    it('503s when no card ever verifies, and writes no pieces', async () => {
+      steps.cards.mockResolvedValue(
+        reply({ cards: [{ title: 'x', text: 'x', page: 1, quote: 'não' }] }),
+      );
 
-    const chapter = await service.make(7, 1);
-
-    expect(steps.cards).toHaveBeenCalledTimes(1);
-    expect(steps.basic).toHaveBeenCalledTimes(2);
-    expect(chapter.exercises).toHaveLength(11);
-  });
-
-  it('retries the cards once when no card verifies, then succeeds', async () => {
-    vi.mocked(quoteIsOnPage)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(false);
-
-    const chapter = await service.make(7, 0);
-
-    expect(steps.cards).toHaveBeenCalledTimes(2);
-    expect(chapter.cards).toHaveLength(2);
-  });
-
-  it('503s when no card is ever verified, and writes no exercises', async () => {
-    vi.mocked(quoteIsOnPage).mockResolvedValue(false);
-
-    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-    expect(steps.cards).toHaveBeenCalledTimes(2);
-    expect(steps.basic).not.toHaveBeenCalled();
-    expect(paths.saveChapterContent).not.toHaveBeenCalled();
-  });
-
-  it('retries cards after an AiOutputError, then succeeds', async () => {
-    steps.cards
-      .mockRejectedValueOnce(outputError())
-      .mockResolvedValueOnce(reply(cardsReply()));
-
-    const chapter = await service.make(7, 0);
-
-    expect(steps.cards).toHaveBeenCalledTimes(2);
-    expect(chapter.cards).toHaveLength(2);
-  });
-
-  it('503s when the cards miss the schema on every attempt', async () => {
-    steps.cards.mockRejectedValue(outputError());
-
-    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-    expect(steps.cards).toHaveBeenCalledTimes(2);
-  });
-
-  it.each([
-    ['basic', 0],
-    ['extra', 1],
-  ] as const)(
-    'retries after an AiOutputError in the %s exercises, then succeeds',
-    async (which, topic) => {
-      steps[which].mockRejectedValueOnce(outputError());
-
-      const chapter = await service.make(7, topic);
-
-      expect(steps[which]).toHaveBeenCalledTimes(2);
-      expect(chapter.exercises).toHaveLength(topic === 0 ? 4 : 11);
-      expect(paths.saveChapterContent).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it('503s when the exercises miss the schema on every attempt', async () => {
-    steps.basic.mockRejectedValue(outputError());
-
-    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-    expect(steps.basic).toHaveBeenCalledTimes(2);
-    expect(paths.saveChapterContent).not.toHaveBeenCalled();
-  });
-
-  it.each(['cards', 'basic', 'extra'] as const)(
-    'an AiModelError in the %s call propagates without a retry',
-    async (which) => {
-      const error = new AiModelError([]);
-      steps[which].mockRejectedValue(error);
-
-      await expect(service.make(7, 1)).rejects.toBe(error);
-      expect(steps[which]).toHaveBeenCalledTimes(1);
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(steps.cards).toHaveBeenCalledTimes(2);
+      expect(steps.pieces).not.toHaveBeenCalled();
       expect(paths.saveChapterContent).not.toHaveBeenCalled();
-    },
-  );
+    });
 
-  it('503s when even one basic exercise is inconsistent (all 4 are needed)', async () => {
-    const d = basicOf(full());
-    d.escolhaUma.answer = 9;
-    steps.basic.mockResolvedValue(reply(d));
+    it('503s when the searches find no page, without calling the model', async () => {
+      vi.mocked(searchPages).mockResolvedValue([]);
 
-    await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-    expect(paths.saveChapterContent).not.toHaveBeenCalled();
-  });
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(ai.generateObject).not.toHaveBeenCalled();
+    });
 
-  it('saves the tuple shapes of the contract', async () => {
-    const chapter = await service.make(7, 1);
+    it('fails without searching when FIRECRAWL_API_KEY is not set', async () => {
+      config.get.mockReturnValue(undefined);
 
-    expect(chapter.exercises.find((e) => e.kind === 'una_os_pares')).toMatchObject(
-      {
-        pairs: [
-          ['a', '1'],
-          ['b', '2'],
-          ['c', '3'],
-        ],
-      },
-    );
-    expect(chapter.exercises.find((e) => e.kind === 'na_grade')).toMatchObject({
-      rows: ['r0', 'r1'],
-      columns: ['c0', 'c1'],
+      await expect(service.make(7, 0)).rejects.toThrow('FIRECRAWL_API_KEY');
+      expect(searchPages).not.toHaveBeenCalled();
+      expect(paths.saveChapterContent).not.toHaveBeenCalled();
     });
   });
 
-  it('shares one generation between concurrent calls for the same chapter', async () => {
-    const [a, b] = await Promise.all([service.make(7, 0), service.make(7, 0)]);
+  describe('pieces', () => {
+    it('writes them from the verified cards and stores them with the composed exercises', async () => {
+      await service.make(7, 0);
 
-    expect(steps.cards).toHaveBeenCalledTimes(1);
-    expect(steps.basic).toHaveBeenCalledTimes(1);
-    expect(a).toBe(b);
+      expect(promptOf(steps.pieces)).toBe(
+        'Subject: Cálculo\nTopic 1 of 2: Limites\n\nCards:\n[{"title":"t1","text":"x"},{"title":"t2","text":"x"}]',
+      );
+      const pieces = piecesOf(piecesReply());
+      expect(saved()).toMatchObject({
+        discipline: { id: 7, name: 'Cálculo' },
+        topic: { index: 0, text: 'Limites', total: 2 },
+        pieces,
+        exercises: composeChapter({ topic: 0, pieces }, '7:0'),
+      });
+      expect(saved().exercises.at(-1)?.kind).toBe('explique_para_o_arandu');
+    });
+
+    it('retries once when there are not enough consistent pieces, then succeeds', async () => {
+      steps.pieces
+        .mockResolvedValueOnce(
+          reply({ ...piecesReply(), cases: [], sequence: [] }),
+        )
+        .mockResolvedValueOnce(reply(piecesReply()));
+
+      await service.make(7, 0);
+
+      expect(steps.pieces).toHaveBeenCalledTimes(2);
+      expect(paths.saveChapterContent).toHaveBeenCalledTimes(1);
+    });
+
+    it('503s when the pieces are never enough, and saves nothing', async () => {
+      steps.pieces.mockResolvedValue(
+        reply({ ...piecesReply(), cases: [], sequence: [] }),
+      );
+
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(steps.pieces).toHaveBeenCalledTimes(2);
+      expect(paths.saveChapterContent).not.toHaveBeenCalled();
+    });
+
+    it('503s when the pieces miss the schema on every attempt', async () => {
+      steps.pieces.mockRejectedValue(outputError());
+
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(steps.pieces).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one generation between concurrent calls for the same chapter', async () => {
+      const [a, b] = await Promise.all([
+        service.make(7, 0),
+        service.make(7, 0),
+      ]);
+
+      expect(a).toBe(b);
+      expect(steps.pieces).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('subject cards', () => {
@@ -685,11 +417,8 @@ describe('ChaptersService', () => {
     const cardOf = (n: number, title: string) => ({
       title,
       text: 'x',
-      source: {
-        label: 'l',
-        url: `https://a.org/${title}`,
-        quote: `q-${title}`,
-      },
+      page: 1,
+      quote: `q-${title}`,
       topic: n,
     });
     const stored = (title: string) => ({
@@ -702,46 +431,58 @@ describe('ChaptersService', () => {
     const savedEntry = (topic: number, ...cardTitles: string[]) => ({
       topic,
       topicText: `T${topic}`,
-      cards: cardTitles.map((t) => expect.objectContaining({ title: t })),
+      cards: cardTitles.map((t) => ({
+        title: t,
+        text: 'x',
+        source: sourceOf(academic, `q-${t}`),
+      })),
     });
 
     beforeEach(() => {
       paths.discipline.mockResolvedValue({ id: 7, name: 'Cálculo', topics });
     });
 
-    it('uses the stored cards and makes no web call', async () => {
+    it('uses the stored cards and makes no search', async () => {
       paths.chapterCards.mockResolvedValue(new Map([[1, [stored('s1')]]]));
 
       const chapter = await service.make(7, 1);
 
       expect(paths.chapterCards).toHaveBeenCalledWith(7, topics);
+      expect(searchPages).not.toHaveBeenCalled();
       expect(steps.subject).not.toHaveBeenCalled();
       expect(steps.cards).not.toHaveBeenCalled();
-      expect(paths.saveChapterCards).not.toHaveBeenCalled();
       expect(titles(chapter.cards)).toEqual(['s1']);
     });
 
-    it("saves every block topic with a verified card and returns this topic's", async () => {
+    it("searches the block once, saves every topic with a verified card and returns this topic's", async () => {
       steps.subject.mockResolvedValue(
         reply({ cards: [cardOf(2, 'a'), cardOf(3, 'b'), cardOf(3, 'c')] }),
       );
 
       const chapter = await service.make(7, 1);
 
-      expect(subjectCall()).toMatchObject({
-        model: 'web',
-        label: 'arandu-subject-cards',
-      });
-      expect(subjectCall().prompt).toBe(
-        'Subject: Cálculo\nTopics:\n1. T0\n2. T1\n3. T2\n4. T3\n5. T4\n6. T5',
+      expect(searchPages).toHaveBeenCalledTimes(2);
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo T0 T1 T2 T3 T4 T5',
+        5,
+        false,
+      );
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo T0 T1 T2 T3 T4 T5',
+        2,
+        true,
+      );
+      expect(subjectCall().prompt).toContain(
+        'Subject: Cálculo\nTopics:\n1. T0\n2. T1\n3. T2\n4. T3\n5. T4\n6. T5\n\nPages:\n[Page 1] Página acadêmica',
       );
       expect(steps.cards).not.toHaveBeenCalled();
       expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
         savedEntry(1, 'a'),
         savedEntry(2, 'b', 'c'),
       ]);
-      expect(titles(chapter.cards)).toEqual(['a']);
-      expect(chapter.cards[0]).not.toHaveProperty('topic');
+      expect(chapter.cards).toEqual(savedEntry(1, 'a').cards);
     });
 
     it('starts topic 7 at its block start 6', async () => {
@@ -750,17 +491,16 @@ describe('ChaptersService', () => {
 
       const chapter = await service.make(7, 7);
 
-      expect(subjectCall().prompt).toBe(
-        'Subject: Cálculo\nTopics:\n1. T6\n2. T7\n3. T8\n4. T9\n5. T10\n6. T11',
+      expect(subjectCall().prompt).toContain(
+        'Topics:\n1. T6\n2. T7\n3. T8\n4. T9\n5. T10\n6. T11\n',
       );
-      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [savedEntry(7, 'a')]);
+      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
+        savedEntry(7, 'a'),
+      ]);
       expect(titles(chapter.cards)).toEqual(['a']);
     });
 
     it('drops cards with an unverified quote or a topic number outside the block', async () => {
-      vi.mocked(quoteIsOnPage).mockImplementation(
-        async (_u, q) => q !== 'q-bad',
-      );
       steps.subject.mockResolvedValue(
         reply({
           cards: [
@@ -799,17 +539,38 @@ describe('ChaptersService', () => {
         savedEntry(1, 'other'),
       ]);
       expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(steps.cards.mock.calls[0]![0]).toMatchObject({ model: 'web' });
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo T0',
+        3,
+        false,
+      );
       expect(titles(chapter.cards)).toEqual(['t1', 't2']);
     });
 
-    it("falls back to the topic's own search after an AiOutputError", async () => {
-      steps.subject.mockRejectedValue(outputError());
+    it.each([
+      ['an AiOutputError', outputError()],
+      ['a provider error', new AiModelError([])],
+    ])(
+      "falls back to the topic's own search after %s in the block call",
+      async (_, error) => {
+        steps.subject.mockRejectedValue(error);
+
+        const chapter = await service.make(7, 0);
+
+        expect(steps.subject).toHaveBeenCalledTimes(1);
+        expect(paths.saveChapterCards).not.toHaveBeenCalled();
+        expect(steps.cards).toHaveBeenCalledTimes(1);
+        expect(chapter.cards).toHaveLength(2);
+      },
+    );
+
+    it("falls back to the topic's own search when the block search fails", async () => {
+      vi.mocked(searchPages).mockRejectedValueOnce(new Error('HTTP 500'));
 
       const chapter = await service.make(7, 0);
 
-      expect(steps.subject).toHaveBeenCalledTimes(1);
-      expect(paths.saveChapterCards).not.toHaveBeenCalled();
+      expect(steps.subject).not.toHaveBeenCalled();
       expect(steps.cards).toHaveBeenCalledTimes(1);
       expect(chapter.cards).toHaveLength(2);
     });
@@ -819,17 +580,6 @@ describe('ChaptersService', () => {
 
       await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
       expect(steps.cards).toHaveBeenCalledTimes(2);
-    });
-
-    it("a provider error in the subject call falls back to the topic's own search", async () => {
-      steps.subject.mockRejectedValue(new AiModelError([]));
-
-      const chapter = await service.make(7, 0);
-
-      expect(steps.subject).toHaveBeenCalledTimes(1);
-      expect(paths.saveChapterCards).not.toHaveBeenCalled();
-      expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(chapter.cards).toHaveLength(2);
     });
 
     it("an AiModelError from the topic's own search still propagates", async () => {
@@ -842,14 +592,14 @@ describe('ChaptersService', () => {
       expect(paths.saveChapterContent).not.toHaveBeenCalled();
     });
 
-    it('searches the block once: with one of its topics stored, an uncovered topic goes to its own search', async () => {
+    it('with one of its topics stored, the block is not searched again: an uncovered topic searches alone', async () => {
       paths.chapterCards.mockResolvedValue(new Map([[3, [stored('s3')]]]));
 
       const chapter = await service.make(7, 1);
 
       expect(steps.subject).not.toHaveBeenCalled();
       expect(paths.saveChapterCards).not.toHaveBeenCalled();
-      expect(steps.cards).toHaveBeenCalledTimes(1);
+      expect(searchPages).toHaveBeenCalledTimes(2);
       expect(titles(chapter.cards)).toEqual(['t1', 't2']);
     });
 
@@ -945,50 +695,61 @@ describe('ChaptersService', () => {
   });
 
   describe('lessons', () => {
-    // Topic 1 has 11 exercises; this person's split is fixed by the seed.
-    const exercises = Array.from({ length: 11 }, (_, i) => ({
-      kind: 'ordene',
-      mode: 'produzir',
-      prompt: `p${i}`,
-      steps: ['a', 'b', 'c'],
-      why: 'w',
-    }));
-    const cards = [{ title: 't', text: 'x', source: {} }];
-    const split = splitLessons(11, 'u:7:1');
-    const at = (n: number) =>
-      split[n - 1]!.map((index) => ({ topic: 1, index }));
-    const done = (...lessons: number[]) =>
-      lessons.map((lesson) => ({
-        lesson,
-        missed: [] as { topic: number; index: number }[],
-      }));
-    const refsOf = (l: { exercises: { topic: number; index: number }[] }) =>
-      l.exercises.map(({ topic, index }) => ({ topic, index }));
+    const pieces = piecesOf(piecesReply());
+    const cards = [
+      {
+        title: 't',
+        text: 'x',
+        source: { label: 'l', url: 'https://a.org/s', quote: 'q' },
+      },
+    ];
     const chapterOf = (topic: number) => ({
       discipline: { id: 7, name: 'Cálculo' },
-      topic: { index: topic, text: 't', total: 2 },
+      topic: { index: topic, text: discipline.topics[topic], total: 2 },
       cards,
-      exercises,
+      exercises: [],
+      pieces,
     });
+    const refsOf = (l: Lesson) =>
+      l.exercises.map(({ topic, index }) => ({ topic, index }));
+    // Topic 1's lessons for this person: the seed is the person and the chapter.
+    const expected = (n: number) =>
+      composeLesson(
+        { topic: 1, pieces },
+        [{ topic: 0, pieces }],
+        n,
+        'u:7:1',
+      ).map((c) => ({ topic: c.ref.topic, index: c.ref.index }));
+    const missOf = (e: LessonExercise) => ({
+      topic: e.topic,
+      index: e.index,
+      kind: e.kind,
+    });
+    const done = (...lessons: number[]) =>
+      lessons.map((lesson) => ({ lesson, missed: [] }));
 
     beforeEach(() => {
-      // The mock type is shaped for the AI calls; the repository takes (disciplineId, topic, text).
-      paths.chapterContent.mockImplementation(((_d: number, topic: number) =>
-        Promise.resolve(chapterOf(topic))) as never);
+      paths.chapterContent.mockImplementation((_d: number, topic: number) =>
+        Promise.resolve(chapterOf(topic)),
+      );
+      paths.subjectPieces.mockResolvedValue([
+        { topic: 0, pieces },
+        { topic: 1, pieces },
+      ]);
     });
 
-    it('lesson 1 has the cards and its share of the exercises; lessons 2-4 have no cards', async () => {
+    it('lessons 1-3 are composed from the pieces for this person, the same on every call; only lesson 1 has the cards', async () => {
       const first = await service.lesson('u', 7, 1, 1);
+      const again = await service.lesson('u', 7, 1, 1);
       paths.lessons.mockResolvedValue(done(1));
       const second = await service.lesson('u', 7, 1, 2);
-      paths.lessons.mockResolvedValue(done(1, 2, 3));
-      const review = await service.lesson('u', 7, 1, 4);
 
       expect(first).toMatchObject({ index: 1, total: 4, cards });
-      expect(refsOf(first)).toEqual(at(1));
-      expect(refsOf(second)).toEqual(at(2));
+      expect(refsOf(first)).toEqual(expected(1));
+      expect(again).toEqual(first);
+      expect(refsOf(second)).toEqual(expected(2));
       expect(second.cards).toBeNull();
-      expect(review.cards).toBeNull();
+      expect(paths.subjectPieces).toHaveBeenCalledWith(7, discipline.topics);
     });
 
     it('refuses lesson 3 with 409 lesson_locked when only lesson 1 is done', async () => {
@@ -1012,21 +773,36 @@ describe('ChaptersService', () => {
       });
     });
 
-    it('lesson 4 holds the misses from lessons 1-3, once each', async () => {
-      const m1 = at(1)[0]!;
-      const m3 = at(3)[0]!;
+    it('lesson 4 brings back each miss of lessons 1-3 once, in another kind', async () => {
+      const one = (await service.lesson('u', 7, 1, 1)).exercises.find(
+        (e) => e.kind === 'escolha_uma',
+      )!;
+      paths.lessons.mockResolvedValue(done(1));
+      const two = (await service.lesson('u', 7, 1, 2)).exercises.find(
+        (e) => e.kind === 'escolha_a_frase_certa',
+      )!;
       paths.lessons.mockResolvedValue([
-        { lesson: 1, missed: [m1] },
-        { lesson: 2, missed: [] },
-        { lesson: 3, missed: [m3, m1] },
+        { lesson: 1, missed: [missOf(one)] },
+        { lesson: 2, missed: [missOf(two)] },
+        { lesson: 3, missed: [missOf(one)] },
       ]);
 
-      expect(refsOf(await service.lesson('u', 7, 1, 4))).toEqual([m1, m3]);
+      const review = await service.lesson('u', 7, 1, 4);
+
+      expect(refsOf(review)).toEqual([
+        { topic: 1, index: one.index },
+        { topic: 1, index: two.index },
+      ]);
+      expect(review.exercises[0]!.kind).not.toBe('escolha_uma');
+      expect(review.exercises[1]!.kind).not.toBe('escolha_a_frase_certa');
+      expect(review.cards).toBeNull();
     });
 
     it('lesson 4 adds an earlier miss of another chapter of the subject', async () => {
       paths.lessons.mockResolvedValue(done(1, 2, 3));
-      paths.missedElsewhere.mockResolvedValue([{ topic: 0, index: 0 }]);
+      paths.missedElsewhere.mockResolvedValue([
+        { topic: 0, index: 0, kind: 'escolha_uma' },
+      ]);
 
       const review = await service.lesson('u', 7, 1, 4);
 
@@ -1034,24 +810,30 @@ describe('ChaptersService', () => {
     });
 
     describe('finishLesson', () => {
-      it('drops misses that are not in the lesson, and repeated ones', async () => {
-        const [a, b] = at(2);
+      it('keeps only the misses that were in the lesson, once each, with the kind they were missed in', async () => {
+        paths.lessons.mockResolvedValue(done(1));
+        const [a, b] = (await service.lesson('u', 7, 1, 2)).exercises;
 
         await service.finishLesson('u', 7, 1, 2, [
           a!,
-          at(1)[0]!,
           { topic: 0, index: a!.index },
           b!,
           a!,
+          { topic: 1, index: 99 },
         ]);
 
-        expect(paths.finishLesson).toHaveBeenCalledWith('u', 7, 1, 2, [a, b]);
+        expect(paths.finishLesson).toHaveBeenCalledWith('u', 7, 1, 2, [
+          missOf(a!),
+          missOf(b!),
+        ]);
       });
 
       it('returns the achievements this lesson earned', async () => {
         progress.achievements
           .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ code: 'primeiro_capitulo', earnedAt: 'x' }]);
+          .mockResolvedValueOnce([
+            { code: 'primeiro_capitulo', earnedAt: 'x' },
+          ]);
 
         const result = await service.finishLesson('u', 7, 1, 1, []);
 
@@ -1084,7 +866,9 @@ describe('ChaptersService', () => {
         });
         progress.achievements
           .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ code: 'semana_de_patinhas', earnedAt: 'x' }]);
+          .mockResolvedValueOnce([
+            { code: 'semana_de_patinhas', earnedAt: 'x' },
+          ]);
 
         const result = await service.finishLesson('u', 7, 1, 1, []);
 

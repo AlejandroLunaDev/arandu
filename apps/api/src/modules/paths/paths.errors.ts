@@ -18,7 +18,10 @@ export const careerNotFound = () =>
 
 /** Also a chapter the person has not opened yet: a response never reveals what is ahead. */
 export const chapterNotFound = () =>
-  new NotFoundException({ code: 'chapter_not_found', message: 'No such chapter' });
+  new NotFoundException({
+    code: 'chapter_not_found',
+    message: 'No such chapter',
+  });
 
 export const explainNotFound = () =>
   new NotFoundException({

@@ -16,6 +16,8 @@ const env = z.object({
   /** Shared with the web's Next server, the only caller besides the health check and the landing's books. */
   INTERNAL_API_SECRET: z.string().min(32),
   OPENROUTER_API_KEY: z.string().min(1),
+  /** Firecrawl, for the pages chapters are written from: only the generation script uses it, never a request. */
+  FIRECRAWL_API_KEY: z.string().min(1).optional(),
   /** Origins allowed to call the API from a browser, comma-separated (the web app). */
   CORS_ORIGINS: z
     .string()

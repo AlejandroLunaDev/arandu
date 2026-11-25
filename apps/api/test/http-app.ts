@@ -7,6 +7,7 @@ import {
   StandardSchemaValidationPipe,
   type Type,
 } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { MemoryRepository } from '../src/modules/memory/memory.repository.js';
@@ -60,6 +61,7 @@ export async function createHttpApp(
   const builder = Test.createTestingModule({
     imports: [
       AiModule.forRoot({ isGlobal: true, models: { default: model } }),
+      ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
       ...imports,
     ],
     providers: [
