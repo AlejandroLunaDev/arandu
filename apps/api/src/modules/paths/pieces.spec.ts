@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { enoughPieces, piecesOf, type PiecesDraft } from './pieces.js';
+import {
+  basicsDraft,
+  enoughPieces,
+  piecesOf,
+  type PiecesDraft,
+} from './pieces.js';
 
 type Problem = PiecesDraft['problems'][number];
 
@@ -277,5 +282,13 @@ describe('enoughPieces', () => {
         piecesOf(draft({ classification: [], sentence: [], cases: [] })),
       ),
     ).toBe(false);
+  });
+
+  it('takes a topic with two concepts as drafted, and refuses one with a single concept', () => {
+    const [a, b] = draft().concepts;
+    const two = basicsDraft.parse({ ...draft(), concepts: [a, b] });
+
+    expect(enoughPieces(piecesOf({ ...draft(), ...two }))).toBe(true);
+    expect(enoughPieces(piecesOf(draft({ concepts: [a!] })))).toBe(false);
   });
 });

@@ -50,16 +50,11 @@ const two = z.object({ first: text, second: text });
 
 // Kept without tuples or optional fields: the provider's structured output refuses `prefixItems`. All the parts in one
 // schema compile to a grammar every provider refuses as too large (2026-11-25), so they come in two calls.
-// A part a topic has no use for is an empty list.
+// A part a topic has no use for is an empty list. Concepts and statements have no minimum here: a topic with one
+// central term gets fewer, and enoughPieces, not the parse, decides whether the chapter can be played.
 export const basicsDraft = z.object({
-  concepts: z
-    .array(z.object({ term: text, definition: text }))
-    .min(3)
-    .max(5),
-  statements: z
-    .array(z.object({ right: text, wrong: text, why: text }))
-    .min(3)
-    .max(4),
+  concepts: z.array(z.object({ term: text, definition: text })).max(5),
+  statements: z.array(z.object({ right: text, wrong: text, why: text })).max(4),
   classification: z
     .array(
       z.object({
@@ -265,7 +260,8 @@ export function enoughPieces(pieces: Piece[]): boolean {
     (p) => !['conceito', 'afirmacao', 'pergunta'].includes(p.type),
   ).length;
   return (
-    count('conceito') >= 3 &&
+    // Two concepts still play: the composer takes wrong options from the subject's other chapters too.
+    count('conceito') >= 2 &&
     count('afirmacao') >= 3 &&
     count('pergunta') === 1 &&
     others >= 2
