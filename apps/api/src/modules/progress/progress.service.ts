@@ -10,7 +10,7 @@ import { ProgressRepository } from './progress.repository.js';
 import { subjectNotFound } from './progress.errors.js';
 import { LESSONS } from '../paths/lessons.logic.js';
 
-/** The home (S1, K1), each book's path (P1, K3) and the achievements (K4), all derived from the stops finished. */
+/** The home (S1, K1), each book's path (P1, K3) and the achievements (K4), all derived from the chapters finished. */
 @Injectable()
 export class ProgressService {
   constructor(private readonly progress: ProgressRepository) {}
@@ -83,34 +83,34 @@ export class ProgressService {
     };
   }
 
-  /** The stops of a subject: done, the first one not done (current), and the rest locked. */
+  /** The chapters of a subject: done, the first one not done (current), and the rest locked. */
   /** S4: Arandu's reading of a book, never a grade. */
   async reflection(
     userId: string,
     disciplineId: number,
   ): Promise<BookReflection> {
     const book = await this.book(userId, disciplineId);
-    const { stops, questions, feeling } = await this.progress.reflection(
+    const { chapters, questions, feeling } = await this.progress.reflection(
       userId,
       disciplineId,
     );
-    const text = (topic: number) => book.stops[topic]?.text ?? '';
-    const worst = stops.reduce<(typeof stops)[number] | null>(
+    const text = (topic: number) => book.chapters[topic]?.text ?? '';
+    const worst = chapters.reduce<(typeof chapters)[number] | null>(
       (w, s) => (s.mistakes > (w?.mistakes ?? 0) ? s : w),
       null,
     );
     return {
       discipline: book.discipline,
       finished:
-        book.stops.length > 0 && book.stops.every((s) => s.state === 'done'),
+        book.chapters.length > 0 && book.chapters.every((s) => s.state === 'done'),
       // shortcut: an exercise counts as one item and each mistake as one item missed; count statements and pairs
       // one by one if the reflection needs more precision.
       items: {
-        right: stops.reduce((n, s) => n + Math.max(0, s.items - s.mistakes), 0),
-        total: stops.reduce((n, s) => n + s.items, 0),
+        right: chapters.reduce((n, s) => n + Math.max(0, s.items - s.mistakes), 0),
+        total: chapters.reduce((n, s) => n + s.items, 0),
       },
       questions,
-      further: stops.filter((s) => s.mistakes === 0).map((s) => text(s.topic)),
+      further: chapters.filter((s) => s.mistakes === 0).map((s) => text(s.topic)),
       stuck: worst ? text(worst.topic) : null,
       feeling,
     };
@@ -128,7 +128,7 @@ export class ProgressService {
     let currentFound = false;
     return {
       discipline: { id: discipline.id, name: discipline.name },
-      stops: discipline.topics.map((text, index) => {
+      chapters: discipline.topics.map((text, index) => {
         if (done.has(index))
           return { index, text, state: 'done', lessonsDone: LESSONS };
         const lessonsDone = lessons.get(index) ?? 0;

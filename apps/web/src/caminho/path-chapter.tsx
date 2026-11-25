@@ -1,46 +1,46 @@
 "use client";
 
-import type { Home, StopContent, StopResult, Wallet } from "@arandu/contracts";
+import type { Home, ChapterContent, ChapterResult, Wallet } from "@arandu/contracts";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import styles from "@/onboarding/onboarding.module.css";
 import p from "@/onboarding/path.module.css";
-import { StopView } from "@/onboarding/stop-view";
+import { ChapterView } from "@/onboarding/chapter-view";
 import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
-import { finishStop, refillNovelos, rereadStop, spendNovelo } from "./actions";
+import { finishChapter, refillNovelos, rereadChapter, spendNovelo } from "./actions";
 
 const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 
-// P2-P7: a stop of the path. The cards and exercises are the onboarding's (StopView), paid in novelos here; at the end
+// P2-P7: a chapter of the path. The cards and exercises are the onboarding's (ChapterView), paid in novelos here; at the end
 // P7 shows what it gave.
-export function PathStop({ stop, wallet }: { stop: StopContent; wallet: Wallet }) {
+export function PathChapter({ chapter, wallet }: { chapter: ChapterContent; wallet: Wallet }) {
   const router = useRouter();
   const { busy, failed, attempt } = useAttempt();
-  const [done, setDone] = useState<{ result: StopResult; home: Home } | null>(null);
-  const disciplineId = stop.discipline.id;
-  const topic = stop.topic.index;
+  const [done, setDone] = useState<{ result: ChapterResult; home: Home } | null>(null);
+  const disciplineId = chapter.discipline.id;
+  const topic = chapter.topic.index;
   const back = () => router.push("/app/caminho");
 
-  if (done) return <StopDone stop={stop} {...done} onNext={back} />;
+  if (done) return <ChapterDone chapter={chapter} {...done} onNext={back} />;
   return (
-    <StopView
-      stop={stop}
-      caption={`Arandu explica · capítulo ${topic + 1} de ${stop.topic.total}`}
+    <ChapterView
+      chapter={chapter}
+      caption={`Arandu explica · capítulo ${topic + 1} de ${chapter.topic.total}`}
       busy={busy}
       failed={failed}
-      novelos={{ wallet, spend: spendNovelo, reread: () => rereadStop(disciplineId, topic), refill: refillNovelos }}
+      novelos={{ wallet, spend: spendNovelo, reread: () => rereadChapter(disciplineId, topic), refill: refillNovelos }}
       onClose={back}
-      onDone={(mistakes) => attempt(async () => setDone(await finishStop(disciplineId, topic, mistakes)))}
+      onDone={(mistakes) => attempt(async () => setDone(await finishChapter(disciplineId, topic, mistakes)))}
     />
   );
 }
 
-// P7: the stop is done, with what it gave and the week's patinhas.
-function StopDone({ stop, result, home, onNext }: { stop: StopContent; result: StopResult; home: Home; onNext: () => void }) {
-  const sources = new Set(stop.cards.map((card) => card.source.url)).size;
+// P7: the chapter is done, with what it gave and the week's patinhas.
+function ChapterDone({ chapter, result, home, onNext }: { chapter: ChapterContent; result: ChapterResult; home: Home; onNext: () => void }) {
+  const sources = new Set(chapter.cards.map((card) => card.source.url)).size;
   // An achievement surprises him first; then he jumps for joy.
   const [mood, setMood] = useState<"surprised" | "hop">(result.achievements.length > 0 ? "surprised" : "hop");
   useEffect(() => {
@@ -54,10 +54,10 @@ function StopDone({ stop, result, home, onNext }: { stop: StopContent; result: S
         <section className={p.done}>
           <Cat mood={mood} size={190} label="Arandu pulando de alegria" className={p.doneCat} />
           <p className={p.label}>
-            Capítulo {stop.topic.index + 1} de {stop.topic.total}
+            Capítulo {chapter.topic.index + 1} de {chapter.topic.total}
           </p>
           <h1>Capítulo concluído!</h1>
-          <p className={p.meta}>{stop.topic.text}</p>
+          <p className={p.meta}>{chapter.topic.text}</p>
           <div className={p.stats}>
             <div>
               <Image src="/img/props/books.webp" alt="" width={40} height={40} />

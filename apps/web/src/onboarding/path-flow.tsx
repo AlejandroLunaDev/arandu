@@ -1,21 +1,21 @@
 "use client";
 
-import type { CareerPaths, StopContent } from "@arandu/contracts";
+import type { CareerPaths, ChapterContent } from "@arandu/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
-import { getCareerPaths, getStop, isGuest, saveJourney } from "./actions";
+import { getCareerPaths, getChapter, isGuest, saveJourney } from "./actions";
 import { AgeView, DoneView, GoogleView, HowView, RhythmView, SemesterView } from "./path-steps";
 import { type Place, type PlaceCourse, placeName } from "./places";
-import { StopView } from "./stop-view";
+import { ChapterView } from "./chapter-view";
 
-type Step = "semester" | "rhythm" | "how" | "stop" | "done" | "age" | "google";
+type Step = "semester" | "rhythm" | "how" | "chapter" | "done" | "age" | "google";
 
-/** The sample holds the four kinds of a subject's first stop, however many more the stop has (O15-O18). */
-const SAMPLE = new Set<StopContent["exercises"][number]["kind"]>(["escolha_uma", "una_os_pares", "verdadeiro_ou_falso", "complete_a_frase"]);
+/** The sample holds the four kinds of a subject's first chapter, however many more the chapter has (O15-O18). */
+const SAMPLE = new Set<ChapterContent["exercises"][number]["kind"]>(["escolha_uma", "una_os_pares", "verdadeiro_ou_falso", "complete_a_frase"]);
 
-// O11-O21, after the person picked a course at O10: its first semester, the weekly goal, a sample of the first stop
+// O11-O21, after the person picked a course at O10: its first semester, the weekly goal, a sample of the first chapter
 // (its cards and basic exercises), its end, the age and Google. Each choice is saved to the journey as it is made;
 // the sample is not: inside the app, chapter 1 starts from zero as a full round.
 export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place: Place; onBack: () => void }) {
@@ -23,7 +23,7 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
   const [step, setStep] = useState<Step>("semester");
   const [paths, setPaths] = useState<CareerPaths | null>(null);
   const [goal, setGoal] = useState<3 | 5 | 7 | null>(null);
-  const [stop, setStop] = useState<StopContent | null>(null);
+  const [chapter, setChapter] = useState<ChapterContent | null>(null);
   const [lost, setLost] = useState(false);
   const { busy, failed, attempt } = useAttempt();
 
@@ -37,13 +37,13 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
   const name = placeName(place.institution);
   const next = { busy, failed };
 
-  // The first stop comes while the person picks the goal and reads how the game works (O12-O13): "Continuar" at O13
+  // The first chapter comes while the person picks the goal and reads how the game works (O12-O13): "Continuar" at O13
   // opens it at once instead of waiting for it.
   const firstId = first?.disciplineId;
   useEffect(() => {
     // A failed prefetch is not an error yet: "Continuar" asks again.
     if (firstId !== undefined)
-      getStop(firstId, 0).then((s) => setStop({ ...s, exercises: s.exercises.filter((e) => SAMPLE.has(e.kind)) }), () => undefined);
+      getChapter(firstId, 0).then((s) => setChapter({ ...s, exercises: s.exercises.filter((e) => SAMPLE.has(e.kind)) }), () => undefined);
   }, [firstId]);
 
   if (!path || !first)
@@ -96,19 +96,19 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
         onBack={() => setStep("rhythm")}
         onNext={() =>
           attempt(async () => {
-            if (!stop) setStop(await getStop(first.disciplineId, 0));
-            setStep("stop");
+            if (!chapter) setChapter(await getChapter(first.disciplineId, 0));
+            setStep("chapter");
           })
         }
       />
     );
 
-  if (step === "stop" && stop)
+  if (step === "chapter" && chapter)
     return (
-      <StopView
+      <ChapterView
         {...next}
-        stop={stop}
-        caption={`${course.course} · ${name} · ${stop.discipline.name}`}
+        chapter={chapter}
+        caption={`${course.course} · ${name} · ${chapter.discipline.name}`}
         onClose={() => setStep("how")}
         onDone={() => setStep("done")}
       />

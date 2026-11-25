@@ -16,21 +16,21 @@ export const careerNotFound = () =>
     message: 'No such career',
   });
 
-/** Also a stop the person has not opened yet: a response never reveals what is ahead. */
-export const stopNotFound = () =>
-  new NotFoundException({ code: 'stop_not_found', message: 'No such stop' });
+/** Also a chapter the person has not opened yet: a response never reveals what is ahead. */
+export const chapterNotFound = () =>
+  new NotFoundException({ code: 'chapter_not_found', message: 'No such chapter' });
 
 export const explainNotFound = () =>
   new NotFoundException({
     code: 'explain_not_found',
-    message: 'This stop has no "Explique para o Arandu"',
+    message: 'This chapter has no "Explique para o Arandu"',
   });
 
-export const stopUnavailable = () =>
+export const chapterUnavailable = () =>
   new ServiceUnavailableException({
-    code: 'stop_unavailable',
+    code: 'chapter_unavailable',
     message:
-      'Arandu could not prepare this stop with checked sources; try again later',
+      'Arandu could not prepare this chapter with checked sources; try again later',
   });
 
 export const aranduUnavailable = () =>

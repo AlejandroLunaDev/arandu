@@ -39,6 +39,11 @@ that cannot be read from the code live here; each app has its own `AGENTS.md`.
 - TypeScript is strict everywhere, with `noUncheckedIndexedAccess`; `any` and unused disable directives are lint
   errors.
 
+## Data model
+
+- The career is the unit of content (ADR-0008): one first-semester subject list and one content per career for the
+  whole app. Institutions are display only. Read ADR-0008 before any engine, linking or fetching work.
+
 ## Database
 
 - Every schema change is a new file in `supabase/migrations`, applied with `supabase db push` from the root before the

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { Exercise } from "@arandu/contracts";
-import { afterAnswer, sentenceRight, shuffled } from "./stop.ts";
+import { afterAnswer, sentenceRight, shuffled } from "./chapter.ts";
 
 describe("afterAnswer", () => {
   it("drops the first on a right answer", () => assert.deepEqual(afterAnswer([0, 1, 2], true), [1, 2]));

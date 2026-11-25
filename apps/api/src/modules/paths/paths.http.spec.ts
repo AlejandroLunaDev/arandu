@@ -26,9 +26,9 @@ describe('paths and journey routes', () => {
     chapterFinished: vi.fn(),
     finishLesson: vi.fn(),
     madeCount: vi.fn(),
-    stopContent: vi.fn(),
-    saveStopContent: vi.fn(),
-    finishStop: vi.fn(),
+    chapterContent: vi.fn(),
+    saveChapterContent: vi.fn(),
+    finishChapter: vi.fn(),
     saveQuestion: vi.fn(),
   };
 
@@ -45,7 +45,7 @@ describe('paths and journey routes', () => {
     progress.topicCounts.mockResolvedValue(new Map());
     progress.questionTimes.mockResolvedValue([]);
     progress.studyTimes.mockResolvedValue([]);
-    paths.finishStop.mockResolvedValue({
+    paths.finishChapter.mockResolvedValue({
       sabedoria: 15,
       peixinhos: 5,
       patinha: true,
@@ -116,8 +116,8 @@ describe('paths and journey routes', () => {
     });
   });
 
-  describe('GET /stops/:disciplineId/:topic', () => {
-    it.each(['/stops/0/0', '/stops/abc/0', '/stops/7/-1', '/stops/7/201'])(
+  describe('GET /chapters/:disciplineId/:topic', () => {
+    it.each(['/chapters/0/0', '/chapters/abc/0', '/chapters/7/-1', '/chapters/7/201'])(
       '404s for %s',
       async (url) => {
         await server().get(url).expect(404);
@@ -127,33 +127,33 @@ describe('paths and journey routes', () => {
     );
 
     it('404s for a topic out of range', async () => {
-      await server().get('/stops/7/2').expect(404);
+      await server().get('/chapters/7/2').expect(404);
     });
   });
 
-  describe('POST /stops/:disciplineId/:topic/result', () => {
+  describe('POST /chapters/:disciplineId/:topic/result', () => {
     beforeEach(() => {
-      paths.stopContent.mockResolvedValue({ cards: [], exercises: [] });
+      paths.chapterContent.mockResolvedValue({ cards: [], exercises: [] });
     });
 
-    it('404s when the stop was never opened (no stored content)', async () => {
-      paths.stopContent.mockResolvedValue(null);
+    it('404s when the chapter was never opened (no stored content)', async () => {
+      paths.chapterContent.mockResolvedValue(null);
 
       await server()
-        .post('/stops/7/1/result')
+        .post('/chapters/7/1/result')
         .send({ mistakes: 0 })
         .expect(404);
 
-      expect(paths.finishStop).not.toHaveBeenCalled();
+      expect(paths.finishChapter).not.toHaveBeenCalled();
     });
 
     it('records the finish for the user', async () => {
       const res = await server()
-        .post('/stops/7/1/result')
+        .post('/chapters/7/1/result')
         .send({ mistakes: 2 })
         .expect(200);
 
-      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2, null);
+      expect(paths.finishChapter).toHaveBeenCalledWith(USER_ID, 7, 1, 2, null);
       expect(res.body.sabedoria).toBe(15);
       expect(res.body.peixinhos).toBe(5);
       expect(res.body.achievements).toEqual([]);
@@ -161,29 +161,29 @@ describe('paths and journey routes', () => {
 
     it('passes relampagoMistakes through', async () => {
       await server()
-        .post('/stops/7/1/result')
+        .post('/chapters/7/1/result')
         .send({ mistakes: 2, relampagoMistakes: 0 })
         .expect(200);
 
-      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2, 0);
+      expect(paths.finishChapter).toHaveBeenCalledWith(USER_ID, 7, 1, 2, 0);
     });
 
     it('drops relampagoMistakes when there were no mistakes to review', async () => {
       await server()
-        .post('/stops/7/1/result')
+        .post('/chapters/7/1/result')
         .send({ mistakes: 0, relampagoMistakes: 0 })
         .expect(200);
 
-      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 0, null);
+      expect(paths.finishChapter).toHaveBeenCalledWith(USER_ID, 7, 1, 0, null);
     });
 
     it('accepts relampagoMistakes null', async () => {
       await server()
-        .post('/stops/7/1/result')
+        .post('/chapters/7/1/result')
         .send({ mistakes: 2, relampagoMistakes: null })
         .expect(200);
 
-      expect(paths.finishStop).toHaveBeenCalledWith(USER_ID, 7, 1, 2, null);
+      expect(paths.finishChapter).toHaveBeenCalledWith(USER_ID, 7, 1, 2, null);
     });
 
     it.each([
@@ -196,31 +196,31 @@ describe('paths and journey routes', () => {
       ['no mistakes', {}],
       ['an extra key', { mistakes: 0, extra: 1 }],
     ])('400s for %s', async (_, body) => {
-      await server().post('/stops/7/1/result').send(body).expect(400);
+      await server().post('/chapters/7/1/result').send(body).expect(400);
 
-      expect(paths.finishStop).not.toHaveBeenCalled();
+      expect(paths.finishChapter).not.toHaveBeenCalled();
     });
 
     it('404s for a topic out of range', async () => {
       await server()
-        .post('/stops/7/2/result')
+        .post('/chapters/7/2/result')
         .send({ mistakes: 0 })
         .expect(404);
 
-      expect(paths.finishStop).not.toHaveBeenCalled();
+      expect(paths.finishChapter).not.toHaveBeenCalled();
     });
   });
 
   describe('lesson routes', () => {
     it.each(['0', '5', 'abc'])('GET lesson %s 404s', async (n) => {
-      await server().get(`/stops/7/1/lessons/${n}`).expect(404);
+      await server().get(`/chapters/7/1/lessons/${n}`).expect(404);
 
       expect(paths.lessons).not.toHaveBeenCalled();
     });
 
     it.each(['0', '5'])('POST lesson %s result 404s', async (n) => {
       await server()
-        .post(`/stops/7/1/lessons/${n}/result`)
+        .post(`/chapters/7/1/lessons/${n}/result`)
         .send({ missed: [] })
         .expect(404);
 
@@ -235,7 +235,7 @@ describe('paths and journey routes', () => {
       ['topic 201', { missed: [{ topic: 201, index: 0 }] }],
       ['51 misses', { missed: Array(51).fill({ topic: 0, index: 0 }) }],
     ])('POST result 400s for %s', async (_, body) => {
-      await server().post('/stops/7/1/lessons/1/result').send(body).expect(400);
+      await server().post('/chapters/7/1/lessons/1/result').send(body).expect(400);
 
       expect(paths.finishLesson).not.toHaveBeenCalled();
     });
@@ -243,7 +243,7 @@ describe('paths and journey routes', () => {
 
   describe('POST lesson result when an earlier lesson is not done', () => {
     it('409s with lesson_locked', async () => {
-      paths.stopContent.mockResolvedValue({
+      paths.chapterContent.mockResolvedValue({
         topic: { index: 1 },
         discipline: { id: 7 },
         cards: [],
@@ -254,7 +254,7 @@ describe('paths and journey routes', () => {
       paths.finishLesson.mockRejectedValue(lessonLocked());
 
       const res = await server()
-        .post('/stops/7/1/lessons/3/result')
+        .post('/chapters/7/1/lessons/3/result')
         .send({ missed: [] })
         .expect(409);
 
@@ -262,7 +262,7 @@ describe('paths and journey routes', () => {
     });
   });
 
-  describe('POST /stops/:disciplineId/:topic/explain and /ask', () => {
+  describe('POST /chapters/:disciplineId/:topic/explain and /ask', () => {
     it.each([
       ['explain', { answer: '' }],
       ['explain', { answer: '   ' }],
@@ -273,28 +273,28 @@ describe('paths and journey routes', () => {
       ['ask', { question: 'a'.repeat(501) }],
       ['ask', { question: 'ok', extra: 1 }],
       ['ask', {}],
-    ])('400s for %s with %j without reading the stop', async (route, body) => {
-      await server().post(`/stops/7/1/${route}`).send(body).expect(400);
+    ])('400s for %s with %j without reading the chapter', async (route, body) => {
+      await server().post(`/chapters/7/1/${route}`).send(body).expect(400);
 
-      expect(paths.stopContent).not.toHaveBeenCalled();
+      expect(paths.chapterContent).not.toHaveBeenCalled();
       expect(paths.saveQuestion).not.toHaveBeenCalled();
     });
 
     it.each(['explain', 'ask'])(
-      '%s 404s when the stop is not open',
+      '%s 404s when the chapter is not open',
       async (route) => {
-        paths.stopContent.mockResolvedValue(null);
+        paths.chapterContent.mockResolvedValue(null);
         const body = route === 'ask' ? { question: 'q' } : { answer: 'a' };
 
-        await server().post(`/stops/7/1/${route}`).send(body).expect(404);
+        await server().post(`/chapters/7/1/${route}`).send(body).expect(404);
       },
     );
 
     it('explain accepts an answer of 1500 characters (limit passes validation)', async () => {
-      paths.stopContent.mockResolvedValue(null);
+      paths.chapterContent.mockResolvedValue(null);
 
       await server()
-        .post('/stops/7/1/explain')
+        .post('/chapters/7/1/explain')
         .send({ answer: 'a'.repeat(1500) })
         .expect(404);
     });

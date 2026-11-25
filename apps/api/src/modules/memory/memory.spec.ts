@@ -72,7 +72,7 @@ describe('Memory', () => {
             kind: 'career',
             startedAt: '2026-11-02T00:00:00.000Z',
             professionSlug: 'direito',
-            stop: null,
+            chapter: null,
             messages: [{ role: 'user', text: 'Oi' }],
           },
         ],
@@ -152,12 +152,12 @@ describe('Memory', () => {
       expect(id).toBe(SESSION_ID);
     });
 
-    it('folds stop questions even with no unsummarized session', async () => {
+    it('folds chapter questions even with no unsummarized session', async () => {
       memory.unsummarized.mockResolvedValue({
         sessionIds: [],
         questionIds: [9],
         transcript:
-          'Questions on stop cards (source stop):\n- (Limites) Por quê?',
+          'Questions on chapter cards (source chapter):\n- (Limites) Por quê?',
       });
 
       await open();
@@ -205,7 +205,7 @@ describe('Memory', () => {
           object: {
             facts: Array.from({ length: 16 }, () => ({
               text: 'a',
-              source: 'stop',
+              source: 'chapter',
             })),
           },
         }),

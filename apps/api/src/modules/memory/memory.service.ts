@@ -20,7 +20,7 @@ const factList = z.object({
     .array(
       z.object({
         text: z.string().trim().min(1).max(300),
-        source: z.enum(['onboarding', 'stop', 'conversation']),
+        source: z.enum(['onboarding', 'chapter', 'conversation']),
       }),
     )
     .max(15),

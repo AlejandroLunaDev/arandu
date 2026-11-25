@@ -50,33 +50,33 @@ export function addDays(day: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** A finished stop, with its São Paulo day. */
+/** A finished chapter, with its São Paulo day. */
 export interface Finish {
   disciplineId: number;
   topic: number;
   mistakes: number;
-  /** Mistakes in the stop's revisão relâmpago; null when it had none. */
+  /** Mistakes in the chapter's revisão relâmpago; null when it had none. */
   relampagoMistakes: number | null;
   completedAt: Date;
   day: string;
 }
 
 /**
- * The achievements earned so far, each with when it was earned, from the stops finished (oldest first) and the number
+ * The achievements earned so far, each with when it was earned, from the chapters finished (oldest first) and the number
  * of topics of each subject, and the times of the person's first questions to Arandu about the cards (oldest first).
  */
 export function achievementsOf(
   finishes: Finish[],
   topicsOf: Map<number, number>,
   questionTimes: Date[] = [],
-  /** Every stop or lesson finished, oldest first: the days studied. */
+  /** Every chapter or lesson finished, oldest first: the days studied. */
   studied: { completedAt: Date; day: string }[] = finishes,
 ): Achievement[] {
   const earned: Achievement[] = [];
   const at = (date: Date) => date.toISOString();
   const [first] = finishes;
   if (first)
-    earned.push({ code: 'primeira_parada', earnedAt: at(first.completedAt) });
+    earned.push({ code: 'primeiro_capitulo', earnedAt: at(first.completedAt) });
 
   const clean = finishes.find((f) => f.mistakes === 0);
   if (clean)
@@ -101,7 +101,7 @@ export function achievementsOf(
     }
   }
 
-  // Every stop of a subject: earned when its last stop is finished.
+  // Every chapter of a subject: earned when its last chapter is finished.
   const done = new Map<number, Set<number>>();
   for (const finish of finishes) {
     const topics = done.get(finish.disciplineId) ?? new Set<number>();

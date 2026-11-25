@@ -7,7 +7,6 @@ const row = (course: number, discipline: number, topics: string[]) => ({
   institution: 'Uni',
   course: 'Course',
   city: 'SP',
-  shift: 'noite',
   discipline_id: discipline,
   code: null,
   subject: `Subject ${discipline}`,
@@ -16,13 +15,13 @@ const row = (course: number, discipline: number, topics: string[]) => ({
   source_url: 'https://example.test',
   retrieved_at: new Date('2026-01-02T03:04:05Z'),
 });
-const stop = (d: number, t: number, text: string) => ({ d, t, text });
+const chapter = (d: number, t: number, text: string) => ({ d, t, text });
 
 function repo(
   rows: ReturnType<typeof row>[],
-  stops: ReturnType<typeof stop>[],
+  chapters: ReturnType<typeof chapter>[],
 ) {
-  const results = [[{ name: 'Prof' }], rows, stops];
+  const results = [[{ name: 'Prof' }], rows, chapters];
   const sql = vi.fn((first: unknown) =>
     Array.isArray(first) && 'raw' in first
       ? Promise.resolve(results.shift())
@@ -36,40 +35,40 @@ const subjects = async (r: PathsRepository) =>
     p.subjects.map((s) => s.topics),
   );
 
-describe('PathsRepository.careerPaths (ready stops only)', () => {
+describe('PathsRepository.careerPaths (ready chapters only)', () => {
   const topics = ['t0', 't1', 't2', 't3'];
 
-  it('keeps only the leading run of stored stops', async () => {
+  it('keeps only the leading run of stored chapters', async () => {
     const r = repo(
       [row(1, 10, topics)],
-      [stop(10, 0, 't0'), stop(10, 1, 't1'), stop(10, 3, 't3')],
+      [chapter(10, 0, 't0'), chapter(10, 1, 't1'), chapter(10, 3, 't3')],
     );
     expect(await subjects(r)).toEqual([[['t0', 't1']]]);
   });
 
-  it('omits a subject whose first stop is missing', async () => {
+  it('omits a subject whose first chapter is missing', async () => {
     const r = repo(
       [row(1, 10, topics), row(1, 11, ['a'])],
-      [stop(10, 1, 't1'), stop(11, 0, 'a')],
+      [chapter(10, 1, 't1'), chapter(11, 0, 'a')],
     );
     expect(await subjects(r)).toEqual([[['a']]]);
   });
 
   it('drops a path whose subjects are all omitted', async () => {
-    const r = repo([row(1, 10, topics), row(2, 11, ['a'])], [stop(11, 0, 'a')]);
+    const r = repo([row(1, 10, topics), row(2, 11, ['a'])], [chapter(11, 0, 'a')]);
     const result = await r.careerPaths('prof');
     expect(result?.paths.map((p) => p.courseId)).toEqual([2]);
   });
 
-  it('does not count a stored stop whose text differs', async () => {
-    const r = repo([row(1, 10, ['new text'])], [stop(10, 0, 'old text')]);
+  it('does not count a stored chapter whose text differs', async () => {
+    const r = repo([row(1, 10, ['new text'])], [chapter(10, 0, 'old text')]);
     expect(await subjects(r)).toEqual([]);
   });
 
   it('keeps every topic when all are stored', async () => {
     const r = repo(
       [row(1, 10, topics)],
-      topics.map((text, t) => stop(10, t, text)),
+      topics.map((text, t) => chapter(10, t, text)),
     );
     expect(await subjects(r)).toEqual([[topics]]);
   });
@@ -85,7 +84,7 @@ function txRepo(answers: Answers) {
     ['as studied', [{ done: 0, finished: false, studied: true }]],
     ['into public.lesson_results', [{}]],
     ['count(distinct', [{ mistakes: 0 }]],
-    ['into public.stop_results', [{}]],
+    ['into public.chapter_results', [{}]],
     ['sum(sabedoria)', [{ earned: 0 }]],
     ['as today', [{ today: 1 }]],
     ['wallets', []],
@@ -181,7 +180,7 @@ describe('PathsRepository.finishLesson', () => {
       patinha: false,
       chapterDone: true,
     });
-    expect(into('stop_results')?.values).toEqual(['u', 7, 1, 2, 1]);
+    expect(into('chapter_results')?.values).toEqual(['u', 7, 1, 2, 1]);
     expect(calls.some((c) => c.sql.includes('update public.wallets'))).toBe(
       true,
     );
@@ -190,13 +189,13 @@ describe('PathsRepository.finishLesson', () => {
   it('passes a null relampago when the chapter had no mistakes', async () => {
     const { repo, into } = txRepo(state(3, false));
     await repo.finishLesson('u', 7, 1, 4, [miss(1)]);
-    expect(into('stop_results')?.values).toEqual(['u', 7, 1, 0, null]);
+    expect(into('chapter_results')?.values).toEqual(['u', 7, 1, 0, null]);
   });
 
   it('gives no peixinhos when the chapter was already stored', async () => {
     const { repo, calls } = txRepo({
       ...state(3, false),
-      'into public.stop_results': [],
+      'into public.chapter_results': [],
     });
     expect(await repo.finishLesson('u', 7, 1, 4, [])).toMatchObject({
       peixinhos: 0,
@@ -208,7 +207,7 @@ describe('PathsRepository.finishLesson', () => {
   });
 });
 
-describe('PathsRepository.finishStop', () => {
+describe('PathsRepository.finishChapter', () => {
   it.each([
     [12, 3],
     [0, 15],
@@ -217,12 +216,12 @@ describe('PathsRepository.finishStop', () => {
     'with %i earned in lessons gives and stores %i sabedoria',
     async (earned, sabedoria) => {
       const { repo, into } = txRepo({ 'sum(sabedoria)': [{ earned }] });
-      expect(await repo.finishStop('u', 7, 1, 2, 1)).toEqual({
+      expect(await repo.finishChapter('u', 7, 1, 2, 1)).toEqual({
         sabedoria,
         peixinhos: 10,
         patinha: true,
       });
-      expect(into('stop_results')?.values).toEqual([
+      expect(into('chapter_results')?.values).toEqual([
         'u',
         7,
         1,
@@ -234,8 +233,8 @@ describe('PathsRepository.finishStop', () => {
   );
 
   it('gives nothing on a replay', async () => {
-    const { repo } = txRepo({ 'into public.stop_results': [] });
-    expect(await repo.finishStop('u', 7, 1, 2)).toEqual({
+    const { repo } = txRepo({ 'into public.chapter_results': [] });
+    expect(await repo.finishChapter('u', 7, 1, 2)).toEqual({
       sabedoria: 0,
       peixinhos: 0,
       patinha: false,

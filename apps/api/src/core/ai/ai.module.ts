@@ -39,7 +39,7 @@ const logger = new Logger('AI');
               pricing: { input: 0.1, output: 0.5 },
             },
             // The same model with OpenRouter's web search on Exa (US$ 0.007 a search, up to 10 results, whatever the
-            // model), only for writing stops' cards from real sources. Anthropic's native search (":online") cost
+            // model), only for writing chapters' cards from real sources. Anthropic's native search (":online") cost
             // several times more. The search is billed on top and not counted in `cost`.
             web: {
               model: openrouter('anthropic/claude-haiku-5.5'),

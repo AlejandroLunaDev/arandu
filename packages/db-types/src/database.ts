@@ -5,33 +5,7 @@ export type Database = {
   
   "public": {
           Tables: {
-            "admission_cutoffs": {
-                  Row: {
-                    "call_number": number | null,"course_id": number,"edition_term": number | null,"edition_year": number,"id": number,"metric": string,"quota_code": string,"quota_label": string,"route": string,"scholarship": string | null,"score": number,"shift": string | null,"source_id": number
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "call_number"?: number | null,"course_id": number,"edition_term"?: number | null,"edition_year": number,"id"?: never,"metric": string,"quota_code": string,"quota_label": string,"route": string,"scholarship"?: string | null,"score": number,"shift"?: string | null,"source_id": number
-                  }
-                  Update: {
-                    "call_number"?: number | null,"course_id"?: number,"edition_term"?: number | null,"edition_year"?: number,"id"?: never,"metric"?: string,"quota_code"?: string,"quota_label"?: string,"route"?: string,"scholarship"?: string | null,"score"?: number,"shift"?: string | null,"source_id"?: number
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "admission_cutoffs_course_id_fkey"
-      columns: ["course_id"]
-isOneToOne: false
-      referencedRelation: "courses"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "admission_cutoffs_source_id_fkey"
-      columns: ["source_id"]
-isOneToOne: false
-      referencedRelation: "sources"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"arandu_facts": {
+            "arandu_facts": {
                   Row: {
                     "created_at": string,"id": number,"source": string,"text": string,"user_id": string
                   }
@@ -163,6 +137,124 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"chapter_cards": {
+                  Row: {
+                    "cards": NonNullable<Json>,"created_at": string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cards": NonNullable<Json>,"created_at"?: string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  Update: {
+                    "cards"?: NonNullable<Json>,"created_at"?: string,"discipline_id"?: number,"topic"?: number,"topic_text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "chapter_cards_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"chapter_contents": {
+                  Row: {
+                    "content": NonNullable<Json>,"created_at": string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "content": NonNullable<Json>,"created_at"?: string,"discipline_id": number,"topic": number,"topic_text": string
+                  }
+                  Update: {
+                    "content"?: NonNullable<Json>,"created_at"?: string,"discipline_id"?: number,"topic"?: number,"topic_text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "chapter_contents_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"chapter_questions": {
+                  Row: {
+                    "answer": string,"created_at": string,"discipline_id": number,"id": number,"question": string,"summarized_at": string | null,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "answer": string,"created_at"?: string,"discipline_id": number,"id"?: never,"question": string,"summarized_at"?: string | null,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "answer"?: string,"created_at"?: string,"discipline_id"?: number,"id"?: never,"question"?: string,"summarized_at"?: string | null,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "chapter_questions_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "chapter_questions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"chapter_rereads": {
+                  Row: {
+                    "created_at": string,"discipline_id": number,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"discipline_id": number,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"discipline_id"?: number,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "chapter_rereads_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "chapter_rereads_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"chapter_results": {
+                  Row: {
+                    "completed_at": string,"discipline_id": number,"mistakes": number,"relampago_mistakes": number | null,"sabedoria": number,"topic": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "completed_at"?: string,"discipline_id": number,"mistakes": number,"relampago_mistakes"?: number | null,"sabedoria": number,"topic": number,"user_id": string
+                  }
+                  Update: {
+                    "completed_at"?: string,"discipline_id"?: number,"mistakes"?: number,"relampago_mistakes"?: number | null,"sabedoria"?: number,"topic"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "chapter_results_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: false
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "chapter_results_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "users"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"cine_areas": {
                   Row: {
                     "code": string,"name": string,"parent_code": string | null
@@ -223,14 +315,14 @@ isOneToOne: false
                   ]
                 },"curriculum_subjects": {
                   Row: {
-                    "course_id": number,"discipline_id": number | null,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"shift": string | null,"source_id": number,"term": number | null,"term_to": number | null,"year": number | null
+                    "course_id": number,"discipline_id": number | null,"hours": number | null,"id": number,"is_elective": boolean | null,"name": string,"shift": string | null,"source_id": number,"subject_key": string | null,"term": number | null,"term_to": number | null,"year": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "course_id": number,"discipline_id"?: number | null,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"shift"?: string | null,"source_id": number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
+                    "course_id": number,"discipline_id"?: number | null,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name": string,"shift"?: string | null,"source_id": number,"subject_key"?: never,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Update: {
-                    "course_id"?: number,"discipline_id"?: number | null,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"shift"?: string | null,"source_id"?: number,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
+                    "course_id"?: number,"discipline_id"?: number | null,"hours"?: number | null,"id"?: never,"is_elective"?: boolean | null,"name"?: string,"shift"?: string | null,"source_id"?: number,"subject_key"?: never,"term"?: number | null,"term_to"?: number | null,"year"?: number | null
                   }
                   Relationships: [
                     {
@@ -255,14 +347,14 @@ isOneToOne: false
                   ]
                 },"disciplines": {
                   Row: {
-                    "bibliography": (string)[] | null,"code": string,"id": number,"institution_id": number,"name": string,"program": string | null,"source_id": number,"topics": (string)[] | null
+                    "bibliography": (string)[] | null,"code": string,"id": number,"institution_id": number,"name": string,"program": string | null,"source_id": number,"subject_key": string | null,"topics": (string)[] | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "bibliography"?: (string)[] | null,"code": string,"id"?: never,"institution_id": number,"name": string,"program"?: string | null,"source_id": number,"topics"?: (string)[] | null
+                    "bibliography"?: (string)[] | null,"code": string,"id"?: never,"institution_id": number,"name": string,"program"?: string | null,"source_id": number,"subject_key"?: never,"topics"?: (string)[] | null
                   }
                   Update: {
-                    "bibliography"?: (string)[] | null,"code"?: string,"id"?: never,"institution_id"?: number,"name"?: string,"program"?: string | null,"source_id"?: number,"topics"?: (string)[] | null
+                    "bibliography"?: (string)[] | null,"code"?: string,"id"?: never,"institution_id"?: number,"name"?: string,"program"?: string | null,"source_id"?: number,"subject_key"?: never,"topics"?: (string)[] | null
                   }
                   Relationships: [
                     {
@@ -525,124 +617,6 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"stop_cards": {
-                  Row: {
-                    "cards": NonNullable<Json>,"created_at": string,"discipline_id": number,"topic": number,"topic_text": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "cards": NonNullable<Json>,"created_at"?: string,"discipline_id": number,"topic": number,"topic_text": string
-                  }
-                  Update: {
-                    "cards"?: NonNullable<Json>,"created_at"?: string,"discipline_id"?: number,"topic"?: number,"topic_text"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "stop_cards_discipline_id_fkey"
-      columns: ["discipline_id"]
-isOneToOne: false
-      referencedRelation: "disciplines"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"stop_contents": {
-                  Row: {
-                    "content": NonNullable<Json>,"created_at": string,"discipline_id": number,"topic": number,"topic_text": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "content": NonNullable<Json>,"created_at"?: string,"discipline_id": number,"topic": number,"topic_text": string
-                  }
-                  Update: {
-                    "content"?: NonNullable<Json>,"created_at"?: string,"discipline_id"?: number,"topic"?: number,"topic_text"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "stop_contents_discipline_id_fkey"
-      columns: ["discipline_id"]
-isOneToOne: false
-      referencedRelation: "disciplines"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"stop_questions": {
-                  Row: {
-                    "answer": string,"created_at": string,"discipline_id": number,"id": number,"question": string,"summarized_at": string | null,"topic": number,"user_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "answer": string,"created_at"?: string,"discipline_id": number,"id"?: never,"question": string,"summarized_at"?: string | null,"topic": number,"user_id": string
-                  }
-                  Update: {
-                    "answer"?: string,"created_at"?: string,"discipline_id"?: number,"id"?: never,"question"?: string,"summarized_at"?: string | null,"topic"?: number,"user_id"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "stop_questions_discipline_id_fkey"
-      columns: ["discipline_id"]
-isOneToOne: false
-      referencedRelation: "disciplines"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "stop_questions_user_id_fkey"
-      columns: ["user_id"]
-isOneToOne: false
-      referencedRelation: "users"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"stop_rereads": {
-                  Row: {
-                    "created_at": string,"discipline_id": number,"topic": number,"user_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"discipline_id": number,"topic": number,"user_id": string
-                  }
-                  Update: {
-                    "created_at"?: string,"discipline_id"?: number,"topic"?: number,"user_id"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "stop_rereads_discipline_id_fkey"
-      columns: ["discipline_id"]
-isOneToOne: false
-      referencedRelation: "disciplines"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "stop_rereads_user_id_fkey"
-      columns: ["user_id"]
-isOneToOne: false
-      referencedRelation: "users"
-      referencedColumns: ["id"]
-    }
-                  ]
-                },"stop_results": {
-                  Row: {
-                    "completed_at": string,"discipline_id": number,"mistakes": number,"relampago_mistakes": number | null,"sabedoria": number,"topic": number,"user_id": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "completed_at"?: string,"discipline_id": number,"mistakes": number,"relampago_mistakes"?: number | null,"sabedoria": number,"topic": number,"user_id": string
-                  }
-                  Update: {
-                    "completed_at"?: string,"discipline_id"?: number,"mistakes"?: number,"relampago_mistakes"?: number | null,"sabedoria"?: number,"topic"?: number,"user_id"?: string
-                  }
-                  Relationships: [
-                    {
-      foreignKeyName: "stop_results_discipline_id_fkey"
-      columns: ["discipline_id"]
-isOneToOne: false
-      referencedRelation: "disciplines"
-      referencedColumns: ["id"]
-    },{
-      foreignKeyName: "stop_results_user_id_fkey"
-      columns: ["user_id"]
-isOneToOne: false
-      referencedRelation: "users"
-      referencedColumns: ["id"]
-    }
-                  ]
                 },"story_facts": {
                   Row: {
                     "book": string,"figure": string | null,"id": number,"page": number,"position": number,"source_label": string | null,"source_url": string | null,"text": string,"verified_on": string
@@ -676,6 +650,26 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"subjects": {
+                  Row: {
+                    "discipline_id": number,"key": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "discipline_id": number,"key": string
+                  }
+                  Update: {
+                    "discipline_id"?: number,"key"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "subjects_discipline_id_fkey"
+      columns: ["discipline_id"]
+isOneToOne: true
+      referencedRelation: "disciplines"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"users": {
                   Row: {
@@ -714,10 +708,32 @@ isOneToOne: true
                 }
           }
           Views: {
-            [_ in never]: never
+            "career_grids": {
+                  Row: {
+                    "profession_id": number | null,"source_id": number
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "courses_profession_id_fkey"
+      columns: ["profession_id"]
+isOneToOne: false
+      referencedRelation: "professions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "curriculum_subjects_source_id_fkey"
+      columns: ["source_id"]
+isOneToOne: false
+      referencedRelation: "sources"
+      referencedColumns: ["id"]
+    }
+                  ]
+                }
           }
           Functions: {
-            [_ in never]: never
+            "subject_key":
+{ Args: { "p_name": string }; Returns: string
+                           }
           }
           Enums: {
             [_ in never]: never

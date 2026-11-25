@@ -128,10 +128,10 @@ describe('achievementsOf', () => {
     expect(achievementsOf([], topics)).toEqual([]);
   });
 
-  it('first finish earns primeira_parada at its time, nothing else', () => {
+  it('first finish earns primeiro_capitulo at its time, nothing else', () => {
     const f = finish('2026-03-10');
     expect(achievementsOf([f], topics)).toEqual([
-      { code: 'primeira_parada', earnedAt: f.completedAt.toISOString() },
+      { code: 'primeiro_capitulo', earnedAt: f.completedAt.toISOString() },
     ]);
   });
 
@@ -336,7 +336,7 @@ describe('achievementsOf', () => {
       const list = achievementsOf([f], topics, asked(10));
       expect(codes(list)).toEqual([
         'curiosidade_de_gato',
-        'primeira_parada',
+        'primeiro_capitulo',
         'relampago',
       ]);
     });
@@ -350,7 +350,7 @@ describe('achievementsOf', () => {
     const times = list.map((a) => a.earnedAt);
     expect(times).toEqual([...times].sort());
     expect(codes(list)).toEqual([
-      'primeira_parada',
+      'primeiro_capitulo',
       'nenhum_novelo_perdido',
       'primeiro_livro',
     ]);

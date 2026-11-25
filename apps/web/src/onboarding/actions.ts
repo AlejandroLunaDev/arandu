@@ -10,11 +10,11 @@ import type {
   Me,
   OnboardingReply,
   Recommendations,
-  StopContent,
+  ChapterContent,
 } from "@arandu/contracts";
 import { api } from "@/app-shell/api";
 import { ensureGuest } from "@/auth/sign-in";
-import { careerPaths, stopContent } from "./catalog";
+import { careerPaths, chapterContent } from "./catalog";
 
 // The onboarding's calls (O01-O21), run on this server in the person's session. Each is a public endpoint: the API
 // validates every body, and what ends up in a URL is checked here first.
@@ -56,9 +56,9 @@ export async function getCareerPaths(slug: string): Promise<CareerPaths> {
   return careerPaths(slug);
 }
 
-export async function getStop(disciplineId: number, topic: number): Promise<StopContent> {
-  if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a stop");
-  return stopContent(disciplineId, topic);
+export async function getChapter(disciplineId: number, topic: number): Promise<ChapterContent> {
+  if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a chapter");
+  return chapterContent(disciplineId, topic);
 }
 
 /** O20: whether the person still has to link Google (O21), or already came in with it. */

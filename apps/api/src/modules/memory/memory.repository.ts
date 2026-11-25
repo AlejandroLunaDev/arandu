@@ -87,21 +87,21 @@ export class MemoryRepository {
       }[]
     >`
       select discipline_id::int as "disciplineId", topic, question, answer, created_at as "createdAt"
-      from public.stop_questions where user_id = ${userId}
+      from public.chapter_questions where user_id = ${userId}
       order by created_at desc limit ${CONVERSATIONS_LISTED}`;
     const conversations: Conversations['conversations'] = [
       ...sessions.map((s) => ({
         kind: s.kind,
         startedAt: s.startedAt.toISOString(),
         professionSlug: s.professionSlug,
-        stop: null,
+        chapter: null,
         messages: s.messages,
       })),
       ...questions.map((q) => ({
         kind: 'card' as const,
         startedAt: q.createdAt.toISOString(),
         professionSlug: null,
-        stop: { disciplineId: q.disciplineId, topic: q.topic },
+        chapter: { disciplineId: q.disciplineId, topic: q.topic },
         messages: [
           { role: 'user' as const, text: q.question },
           { role: 'assistant' as const, text: q.answer },
@@ -229,11 +229,11 @@ export class MemoryRepository {
       { id: number; topic_text: string; question: string }[]
     >`
       select q.id::int, coalesce(d.topics[q.topic + 1], d.name) as topic_text, q.question
-      from public.stop_questions q join public.disciplines d on d.id = q.discipline_id
+      from public.chapter_questions q join public.disciplines d on d.id = q.discipline_id
       where q.user_id = ${userId} and q.summarized_at is null
       order by q.id desc limit ${QUESTIONS_SUMMARIZED}`;
     const asked = questions.length
-      ? `\n\nQuestions on stop cards (source stop):\n${questions
+      ? `\n\nQuestions on chapter cards (source chapter):\n${questions
           .map((q) => `- (${q.topic_text}) ${q.question}`)
           .join('\n')}`
       : '';
@@ -299,7 +299,7 @@ export class MemoryRepository {
         const questions = questionIds.length
           ? (
               await tx`
-                select 1 from public.stop_questions
+                select 1 from public.chapter_questions
                 where user_id = ${userId} and summarized_at is null and id in ${tx(questionIds)} for update`
             ).length
           : 0;
@@ -329,7 +329,7 @@ export class MemoryRepository {
         if (sessionIds.length)
           await tx`update public.arandu_sessions set summarized_at = now() where id in ${tx(sessionIds)}`;
         if (questionIds.length)
-          await tx`update public.stop_questions set summarized_at = now() where id in ${tx(questionIds)}`;
+          await tx`update public.chapter_questions set summarized_at = now() where id in ${tx(questionIds)}`;
         return true;
       }),
     );
@@ -343,7 +343,7 @@ export class MemoryRepository {
       await tx`delete from public.arandu_sessions where user_id = ${userId}`;
       await tx`delete from public.arandu_memories where user_id = ${userId}`;
       // Card questions already in the facts would come back on the next fold: keep them, but never fold them again.
-      await tx`update public.stop_questions set summarized_at = coalesce(summarized_at, now()) where user_id = ${userId}`;
+      await tx`update public.chapter_questions set summarized_at = coalesce(summarized_at, now()) where user_id = ${userId}`;
     });
   }
 }

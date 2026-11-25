@@ -1,6 +1,6 @@
 "use client";
 
-import type { Exercise, StopContent, Wallet } from "@arandu/contracts";
+import type { Exercise, ChapterContent, Wallet } from "@arandu/contracts";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { OutOfNovelos } from "@/caminho/out-of-novelos";
@@ -9,7 +9,7 @@ import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import styles from "./onboarding.module.css";
 import p from "./path.module.css";
-import { afterAnswer, sentenceRight, shuffled } from "./stop";
+import { afterAnswer, sentenceRight, shuffled } from "./chapter";
 
 type Of<K extends Exercise["kind"]> = Extract<Exercise, { kind: K }>;
 /** An exercise reports once it is over: whether it was right, and how many mistakes it took. */
@@ -43,21 +43,21 @@ const KIND: Partial<Record<Exercise["kind"], string>> = {
   ordene: "ordene",
 };
 
-/** Off the onboarding a stop is paid in novelos: a wrong answer spends one (P5), and with none left it waits (P6). */
+/** Off the onboarding a chapter is paid in novelos: a wrong answer spends one (P5), and with none left it waits (P6). */
 export type Novelos = {
   wallet: Wallet;
   spend: () => Promise<Wallet>;
-  /** null: the API refused (this stop already gave its novelo, or there are not enough peixinhos). */
+  /** null: the API refused (this chapter already gave its novelo, or there are not enough peixinhos). */
   reread: () => Promise<Wallet | null>;
   refill: () => Promise<Wallet | null>;
 };
 
-// O14-O18: the stop's cards, then its exercises. A missed exercise comes back at the end until it is right; in the
-// first stop mistakes spend no novelo. Every word on screen comes from the stop (GET /stops/:disciplineId/:topic).
-// shortcut: the onboarding's first stops hold only the first four kinds (measured: all 125 of them) and P4 adds
+// O14-O18: the chapter's cards, then its exercises. A missed exercise comes back at the end until it is right; in the
+// first chapter mistakes spend no novelo. Every word on screen comes from the chapter (GET /chapters/:disciplineId/:topic).
+// shortcut: the onboarding's first chapters hold only the first four kinds (measured: all 125 of them) and P4 adds
 // ordene; the other six are skipped as right until the R01-R12 screens are built.
 type Props = {
-  stop: StopContent;
+  chapter: ChapterContent;
   caption: string;
   busy: boolean;
   failed: boolean;
@@ -66,9 +66,9 @@ type Props = {
   onDone: (mistakes: number) => void;
 };
 
-export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone }: Props) {
+export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, onDone }: Props) {
   const [card, setCard] = useState(0);
-  const [queue, setQueue] = useState(() => stop.exercises.map((_, i) => i));
+  const [queue, setQueue] = useState(() => chapter.exercises.map((_, i) => i));
   const [attempt, setAttempt] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [sheet, setSheet] = useState<{ right: boolean; title: string } | null>(null);
@@ -76,11 +76,11 @@ export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone
   const [ended, setEnded] = useState(false);
   const [wallet, setWallet] = useState(novelos?.wallet ?? null);
 
-  const inCards = card < stop.cards.length;
-  const total = stop.exercises.length;
+  const inCards = card < chapter.cards.length;
+  const total = chapter.exercises.length;
   const left = new Set(queue).size;
   const current = queue[0];
-  const exercise = current === undefined ? undefined : stop.exercises[current];
+  const exercise = current === undefined ? undefined : chapter.exercises[current];
 
   const finish: Done = (right, more, title) => {
     setMistakes(mistakes + more);
@@ -91,7 +91,7 @@ export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone
       novelos.spend().then(setWallet, () => {});
     }
   };
-  // The API takes up to 100 mistakes a stop.
+  // The API takes up to 100 mistakes a chapter.
   const save = () => onDone(Math.min(mistakes, 100));
   /** `reread`: back to the cards first, then on with the exercises. */
   const next = (reread = false) => {
@@ -146,12 +146,12 @@ export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone
           }}
         />
       ) : inCards ? (
-        <Card card={stop.cards[card]!} caption={caption} onNext={() => setCard(card + 1)} />
+        <Card card={chapter.cards[card]!} caption={caption} onNext={() => setCard(card + 1)} />
       ) : (
         exercise && (
           <>
             <div className={styles.body} inert={sheet !== null || ended}>
-              <div className={p.stop}>
+              <div className={p.chapter}>
                 <p className={p.caption}>
                   {total - left + 1} de {total} · {KIND[exercise.kind] ?? exercise.kind}
                   <span className={p.mode}>{exercise.mode}</span>
@@ -200,12 +200,12 @@ export function StopView({ stop, caption, busy, failed, novelos, onClose, onDone
   );
 }
 
-function Card({ card, caption, onNext }: { card: StopContent["cards"][number]; caption: string; onNext: () => void }) {
+function Card({ card, caption, onNext }: { card: ChapterContent["cards"][number]; caption: string; onNext: () => void }) {
   const url = safeUrl(card.source.url);
   return (
     <>
       <div className={styles.body}>
-        <div className={p.stop}>
+        <div className={p.chapter}>
           <p className={p.caption}>{caption}</p>
           <h1 className={p.title}>{card.title}</h1>
           <div className={p.page}>
@@ -243,7 +243,7 @@ function ExerciseView({ exercise, onDone }: { exercise: Exercise; onDone: Done }
     case "ordene":
       return <Order exercise={exercise} onDone={onDone} />;
     default:
-      // A kind the first stop doesn't hold: skipped as right rather than blocking the stop.
+      // A kind the first chapter doesn't hold: skipped as right rather than blocking the chapter.
       return <MainButton onClick={() => onDone(true, 0)}>Continuar</MainButton>;
   }
 }
@@ -283,7 +283,7 @@ function Choose({ exercise, onDone }: { exercise: Of<"escolha_uma"> | Of<"escolh
 function Pairs({ exercise, onDone }: { exercise: Of<"una_os_pares">; onDone: Done }) {
   const [right] = useState(() => shuffled(exercise.pairs.map((_, i) => i)));
   const [left, setLeft] = useState<number | null>(null);
-  // Matched tiles, by pair index, per column: they can differ, since a stop may repeat a definition.
+  // Matched tiles, by pair index, per column: they can differ, since a chapter may repeat a definition.
   const [doneLeft, setDoneLeft] = useState<number[]>([]);
   const [doneRight, setDoneRight] = useState<number[]>([]);
   const [flash, setFlash] = useState<number | null>(null);

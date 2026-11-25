@@ -2,23 +2,23 @@ import type {
   CareerPath,
   CareerPaths,
   LessonResult,
-  StopCard,
-  StopContent,
-  StopResult,
+  ChapterCard,
+  ChapterContent,
+  ChapterResult,
 } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../../core/database/database.module.js';
 
-/** Sabedoria a stop finished in one pass gives (demo value); in lessons it comes LESSON_SABEDORIA at a time. */
-export const STOP_SABEDORIA = 15;
+/** Sabedoria a chapter finished in one pass gives (demo value); in lessons it comes LESSON_SABEDORIA at a time. */
+export const CHAPTER_SABEDORIA = 15;
 
-/** Peixinhos a finished stop or chapter gives (demo value). */
-export const STOP_PEIXINHOS = 10;
+/** Peixinhos a finished chapter gives (demo value). */
+export const CHAPTER_PEIXINHOS = 10;
 
 import {
   asPerson,
-  madeStops,
+  madeChapters,
   sabedoriaRows,
   TIME_ZONE,
 } from '../progress/progress.repository.js';
@@ -41,7 +41,6 @@ interface PathRow {
   institution: string;
   course: string;
   city: string;
-  shift: string | null;
   discipline_id: number;
   code: string | null;
   subject: string;
@@ -51,33 +50,37 @@ interface PathRow {
   retrieved_at: Date;
 }
 
-/** The paths a career can be lived through, their stops, and the stops each person finished. */
+/** The paths a career can be lived through, their chapters, and the chapters each person finished. */
 @Injectable()
 export class PathsRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
-  /** Each course's first-semester subjects with their made stops; null when no profession has that slug. */
+  /** Each course of the career with the career's first-semester subjects and their made chapters; null for no slug. */
   async careerPaths(slug: string): Promise<CareerPaths | null> {
     const [profession] = await this.sql<{ name: string }[]>`
       select name from public.professions where slug = ${slug}`;
     if (!profession) return null;
 
-    // First semester: term 1, or year 1 when the source states no term (FIAP).
+    // One content per career (ADR-0008): every course of the career is lived through the first semester of the
+    // career's grid (term 1, or year 1 when the source states no term), whichever institution published it. A subject
+    // is played from the one discipline its name is taught from; its code is shown only at its own institution.
     const rows = await this.sql<PathRow[]>`
       select c.id::int as course_id, coalesce(i.short_name, i.name) as institution, c.name as course, c.city,
-        cs.shift, d.id::int as discipline_id, d.code, d.name as subject, d.topics,
-        s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
+        d.id::int as discipline_id, case when d.institution_id = c.institution_id then d.code end as code,
+        d.name as subject, d.topics, s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
       from public.professions p
+      join public.career_grids g on g.profession_id = p.id
+      join public.sources s on s.id = g.source_id
       join public.courses c on c.profession_id = p.id
       join public.institutions i on i.id = c.institution_id
-      join public.curriculum_subjects cs on cs.course_id = c.id
-      join public.disciplines d on d.id = cs.discipline_id
-      join public.sources s on s.id = cs.source_id
-      where p.slug = ${slug} and (cs.term = 1 or (cs.term is null and cs.year = 1)) and cardinality(d.topics) > 0
-        and s.last_fetched_at is not null
-      order by institution, c.city, c.id, cs.shift, d.name`;
+      join public.disciplines d on d.id in (
+        select su.discipline_id from public.curriculum_subjects cs
+        join public.subjects su on su.key = cs.subject_key
+        where cs.source_id = g.source_id and (cs.term = 1 or (cs.term is null and cs.year = 1)))
+      where p.slug = ${slug} and cardinality(d.topics) > 0
+      order by institution, c.city, c.id, d.name`;
 
-    // A subject lists only its leading stops that are already made, so opening one never waits on a live generation;
+    // A subject lists only its leading chapters that are already made, so opening one never waits on a live generation;
     // a subject with none, and a path with no such subject, are left out.
     const ids = [...new Set(rows.map((r) => r.discipline_id))];
     const made = new Set(
@@ -85,7 +88,7 @@ export class PathsRepository {
         ? (
             await this.sql<{ d: number; t: number; text: string }[]>`
               select discipline_id::int as d, topic::int as t, topic_text as text
-              from public.stop_contents where discipline_id in ${this.sql(ids)}`
+              from public.chapter_contents where discipline_id in ${this.sql(ids)}`
           ).map((s) => `${s.d}:${s.t}:${s.text}`)
         : [],
     );
@@ -96,19 +99,19 @@ export class PathsRepository {
       return gap < 0 ? row.topics : row.topics.slice(0, gap);
     };
 
-    const paths = new Map<string, CareerPath>();
+    const paths = new Map<number, CareerPath>();
     for (const row of rows) {
       const topics = ready(row);
       if (!topics.length) continue;
-      const key = `${row.course_id} ${row.shift}`;
-      let path = paths.get(key);
+      let path = paths.get(row.course_id);
       if (!path) {
         path = {
           courseId: row.course_id,
           institution: row.institution,
           course: row.course,
           city: row.city,
-          shift: row.shift,
+          // The career's grid is shared by all its courses, and the census states no shift.
+          shift: null,
           subjects: [],
           source: {
             label: row.source_label,
@@ -116,7 +119,7 @@ export class PathsRepository {
             retrievedAt: row.retrieved_at.toISOString(),
           },
         };
-        paths.set(key, path);
+        paths.set(row.course_id, path);
       }
       if (!path.subjects.some((s) => s.disciplineId === row.discipline_id))
         path.subjects.push({
@@ -132,10 +135,10 @@ export class PathsRepository {
     };
   }
 
-  /** How many leading stops of the subject are made: the run people can open and finish (0 for no subject). */
+  /** How many leading chapters of the subject are made: the run people can open and finish (0 for no subject). */
   async madeCount(disciplineId: number): Promise<number> {
     const [row] = await this.sql<{ n: number }[]>`
-      select ${madeStops(this.sql)} as n from public.disciplines d where d.id = ${disciplineId}`;
+      select ${madeChapters(this.sql)} as n from public.disciplines d where d.id = ${disciplineId}`;
     return row?.n ?? 0;
   }
 
@@ -145,27 +148,27 @@ export class PathsRepository {
     return row ?? null;
   }
 
-  /** The stop's stored content, when it was made from this same topic text. */
-  async stopContent(
+  /** The chapter's stored content, when it was made from this same topic text. */
+  async chapterContent(
     disciplineId: number,
     topic: number,
     topicText: string,
-  ): Promise<StopContent | null> {
-    const [row] = await this.sql<{ content: StopContent }[]>`
-      select content from public.stop_contents
+  ): Promise<ChapterContent | null> {
+    const [row] = await this.sql<{ content: ChapterContent }[]>`
+      select content from public.chapter_contents
       where discipline_id = ${disciplineId} and topic = ${topic} and topic_text = ${topicText}`;
     return row?.content ?? null;
   }
 
   /** The subject's stored cards by topic, those made from the same topic text. */
-  async stopCards(
+  async chapterCards(
     disciplineId: number,
     topics: string[],
-  ): Promise<Map<number, StopCard[]>> {
+  ): Promise<Map<number, ChapterCard[]>> {
     const rows = await this.sql<
-      { topic: number; topic_text: string; cards: StopCard[] }[]
+      { topic: number; topic_text: string; cards: ChapterCard[] }[]
     >`
-      select topic::int, topic_text, cards from public.stop_cards where discipline_id = ${disciplineId}`;
+      select topic::int, topic_text, cards from public.chapter_cards where discipline_id = ${disciplineId}`;
     return new Map(
       rows
         .filter((r) => topics[r.topic] === r.topic_text)
@@ -173,27 +176,27 @@ export class PathsRepository {
     );
   }
 
-  async saveStopCards(
+  async saveChapterCards(
     disciplineId: number,
-    entries: { topic: number; topicText: string; cards: StopCard[] }[],
+    entries: { topic: number; topicText: string; cards: ChapterCard[] }[],
   ): Promise<void> {
     for (const e of entries)
       await this.sql`
-        insert into public.stop_cards (discipline_id, topic, topic_text, cards)
+        insert into public.chapter_cards (discipline_id, topic, topic_text, cards)
         values (${disciplineId}, ${e.topic}, ${e.topicText}, ${this.sql.json(e.cards as never)})
         on conflict (discipline_id, topic) do update
           set topic_text = excluded.topic_text, cards = excluded.cards, created_at = now()`;
   }
 
-  async saveStopContent(content: StopContent): Promise<void> {
+  async saveChapterContent(content: ChapterContent): Promise<void> {
     await this.sql`
-      insert into public.stop_contents (discipline_id, topic, topic_text, content)
+      insert into public.chapter_contents (discipline_id, topic, topic_text, content)
       values (${content.discipline.id}, ${content.topic.index}, ${content.topic.text}, ${this.sql.json(content as never)})
       on conflict (discipline_id, topic) do update
         set topic_text = excluded.topic_text, content = excluded.content, created_at = now()`;
   }
 
-  /** T1: a question about a stop's cards and Arandu's answer, kept for "Suas conversas". */
+  /** T1: a question about a chapter's cards and Arandu's answer, kept for "Suas conversas". */
   async saveQuestion(
     userId: string,
     disciplineId: number,
@@ -203,7 +206,7 @@ export class PathsRepository {
   ): Promise<void> {
     try {
       await this.sql`
-        insert into public.stop_questions (user_id, discipline_id, topic, question, answer)
+        insert into public.chapter_questions (user_id, discipline_id, topic, question, answer)
         values (${userId}, ${disciplineId}, ${topic}, ${question}, ${answer.slice(0, 4000)})`;
     } catch (error) {
       const { code, constraint_name } = error as {
@@ -234,7 +237,7 @@ export class PathsRepository {
     topic: number,
   ): Promise<boolean> {
     const [row] = await this.sql`
-      select 1 from public.stop_results
+      select 1 from public.chapter_results
       where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}`;
     return row !== undefined;
   }
@@ -256,7 +259,7 @@ export class PathsRepository {
   /**
    * Records a finished lesson, in order: 409 `lesson_locked` while an earlier one is not done (none once the chapter
    * was finished the old way). The first finish gives LESSON_SABEDORIA, none once the chapter is finished; lesson 4
-   * also finishes the chapter, with its peixinhos. The patinha is the day's first lesson or stop. Achievements are added
+   * also finishes the chapter, with its peixinhos. The patinha is the day's first lesson or chapter. Achievements are added
    * by the caller.
    */
   async finishLesson(
@@ -274,7 +277,7 @@ export class PathsRepository {
           select
             (select count(*)::int from public.lesson_results
               where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}) as done,
-            exists (select 1 from public.stop_results
+            exists (select 1 from public.chapter_results
               where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}) as finished,
             exists (select 1 from ${sabedoriaRows(tx)} s
               where s.user_id = ${userId}
@@ -306,15 +309,15 @@ export class PathsRepository {
           );
           const relampago = mistakes > 0 ? Math.min(missed.length, 100) : null;
           const chapter = await tx`
-            insert into public.stop_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
+            insert into public.chapter_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
             values (${userId}, ${disciplineId}, ${topic}, ${Math.min(mistakes, 100)}, ${relampago}, 0)
             on conflict do nothing returning 1`;
           if (chapter.length) {
             await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
             await tx`
-              update public.wallets set peixinhos = peixinhos + ${STOP_PEIXINHOS}, updated_at = now()
+              update public.wallets set peixinhos = peixinhos + ${CHAPTER_PEIXINHOS}, updated_at = now()
               where user_id = ${userId}`;
-            peixinhos = STOP_PEIXINHOS;
+            peixinhos = CHAPTER_PEIXINHOS;
           }
         }
         return {
@@ -327,14 +330,14 @@ export class PathsRepository {
     );
   }
 
-  /** Records a finished stop. Only the first finish counts: a replay gives nothing. Achievements are added by the caller. */
-  async finishStop(
+  /** Records a finished chapter. Only the first finish counts: a replay gives nothing. Achievements are added by the caller. */
+  async finishChapter(
     userId: string,
     disciplineId: number,
     topic: number,
     mistakes: number,
     relampagoMistakes: number | null = null,
-  ): Promise<Omit<StopResult, 'achievements'>> {
+  ): Promise<Omit<ChapterResult, 'achievements'>> {
     try {
       return await this.sql.begin(async (tx) => {
         // One finish at a time per person, so two at once cannot both be "the first" of the day.
@@ -345,9 +348,9 @@ export class PathsRepository {
           select coalesce(sum(sabedoria), 0)::int as earned from public.lesson_results
           where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}`,
         );
-        const sabedoria = Math.max(0, STOP_SABEDORIA - earned);
+        const sabedoria = Math.max(0, CHAPTER_SABEDORIA - earned);
         const inserted = await tx`
-          insert into public.stop_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
+          insert into public.chapter_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
           values (${userId}, ${disciplineId}, ${topic}, ${mistakes}, ${relampagoMistakes}, ${sabedoria})
           on conflict do nothing returning 1`;
         if (!inserted.length)
@@ -355,7 +358,7 @@ export class PathsRepository {
 
         await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
         await tx`
-          update public.wallets set peixinhos = peixinhos + ${STOP_PEIXINHOS}, updated_at = now()
+          update public.wallets set peixinhos = peixinhos + ${CHAPTER_PEIXINHOS}, updated_at = now()
           where user_id = ${userId}`;
         const { today } = one(
           await tx<{ today: number }[]>`
@@ -365,7 +368,7 @@ export class PathsRepository {
         );
         return {
           sabedoria,
-          peixinhos: STOP_PEIXINHOS,
+          peixinhos: CHAPTER_PEIXINHOS,
           patinha: today === 1,
         };
       });

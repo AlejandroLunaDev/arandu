@@ -3,9 +3,9 @@ import type {
   Lesson,
   LessonExercise,
   LessonResult,
-  StopCard,
-  StopContent,
-  StopResult,
+  ChapterCard,
+  ChapterContent,
+  ChapterResult,
 } from '@arandu/contracts';
 import { AiOutputError, AiService } from '@nestjs/ai';
 import { Injectable, Logger } from '@nestjs/common';
@@ -17,8 +17,8 @@ import {
   cardsInstructions,
   exercisesInstructions,
   subjectCardsInstructions,
-} from './stop.prompt.js';
-import { lessonLocked, stopNotFound, stopUnavailable } from './paths.errors.js';
+} from './chapter.prompt.js';
+import { lessonLocked, chapterNotFound, chapterUnavailable } from './paths.errors.js';
 import {
   type ExerciseRef,
   LESSONS,
@@ -26,7 +26,7 @@ import {
   splitLessons,
 } from './lessons.logic.js';
 
-/** Topics whose cards one web search writes: the search is paid once for them, not once per stop. */
+/** Topics whose cards one web search writes: the search is paid once for them, not once per chapter. */
 export const TOPICS_PER_SEARCH = 6;
 
 const text = z.string().min(1);
@@ -39,7 +39,7 @@ const card = z.object({
 
 const two = z.object({ first: text, second: text });
 
-// A stop is written in steps: the cards with a web search, then its exercises from the verified cards. Each schema is
+// A chapter is written in steps: the cards with a web search, then its exercises from the verified cards. Each schema is
 // kept small (and without tuples): the provider's structured output refuses large grammars and `prefixItems`.
 const cardsDraft = z.object({ cards: z.array(card).min(1).max(3) });
 // Cards for several topics of a subject from one search; `topic` is the topic's number as listed (1-based).
@@ -50,7 +50,7 @@ const subjectCardsDraft = z.object({
     .max(2 * TOPICS_PER_SEARCH),
 });
 
-// The first stop of a subject (O15-O18) has the four basic kinds; every other stop has all of them (R01-R12).
+// The first chapter of a subject (O15-O18) has the four basic kinds; every other chapter has all of them (R01-R12).
 const basicExercises = z.object({
   escolhaUma: z.object({
     prompt: text,
@@ -130,7 +130,7 @@ const extraExercises = z.object({
   }),
 });
 
-export type StopDraft = z.infer<typeof basicExercises> &
+export type ChapterDraft = z.infer<typeof basicExercises> &
   Partial<z.infer<typeof extraExercises>>;
 
 const pair = (t: { first: string; second: string }): [string, string] => [
@@ -147,7 +147,7 @@ const count = (list: string[], s: string) => list.filter((x) => x === s).length;
 
 /** The drafted exercises, in R01-R12 order, without any the model got inconsistent (an answer out of range, a gap
  * without its word or with too few tiles for it, a cell outside the grid, two choices with the same text). */
-export function exercisesOf(draft: StopDraft): Exercise[] {
+export function exercisesOf(draft: ChapterDraft): Exercise[] {
   const out: Exercise[] = [];
   const {
     escolhaUma: eu,
@@ -235,7 +235,7 @@ export function exercisesOf(draft: StopDraft): Exercise[] {
   return out;
 }
 
-/** Exercises a stop needs to be kept: all four on a subject's first stop, most of them on the others. */
+/** Exercises a chapter needs to be kept: all four on a subject's first chapter, most of them on the others. */
 export const minExercises = (topic: number) => (topic === 0 ? 4 : 8);
 
 /** The model's object, or null when its answer missed the schema (a list too long, a field left out): retried. */
@@ -248,15 +248,15 @@ async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
   }
 }
 
-/** Tries to write a stop with verified sources this many times before giving up. */
+/** Tries to write a chapter with verified sources this many times before giving up. */
 const ATTEMPTS = 2;
 
-/** A stop of a subject: made once, from a web search, with every card's quote checked on its page; then reused. */
+/** A chapter of a subject: made once, from a web search, with every card's quote checked on its page; then reused. */
 @Injectable()
-export class StopsService {
-  private readonly logger = new Logger(StopsService.name);
-  // Two people opening a new stop at once share one generation.
-  private readonly pending = new Map<string, Promise<StopContent>>();
+export class ChaptersService {
+  private readonly logger = new Logger(ChaptersService.name);
+  // Two people opening a new chapter at once share one generation.
+  private readonly pending = new Map<string, Promise<ChapterContent>>();
 
   constructor(
     private readonly ai: AiService,
@@ -265,35 +265,35 @@ export class StopsService {
   ) {}
 
   /**
-   * A stop people can open: stored and inside its subject's leading run of made stops (the run paths and books list),
+   * A chapter people can open: stored and inside its subject's leading run of made chapters (the run paths and books list),
    * so it is never generated live and a book's run never grows under someone mid-way.
    */
-  async stop(disciplineId: number, topic: number): Promise<StopContent> {
+  async chapter(disciplineId: number, topic: number): Promise<ChapterContent> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
     const content =
       topicText !== undefined &&
       topic < (await this.paths.madeCount(disciplineId))
-        ? await this.paths.stopContent(disciplineId, topic, topicText)
+        ? await this.paths.chapterContent(disciplineId, topic, topicText)
         : null;
-    if (!content) throw stopNotFound();
+    if (!content) throw chapterNotFound();
     return content;
   }
 
   /**
-   * A stop's content, made now from a web search when it is not stored yet: for the loading scripts, not for people.
-   * `remake` writes its exercises again over the stored stop, from its stored cards; the old stop stays if that fails.
+   * A chapter's content, made now from a web search when it is not stored yet: for the loading scripts, not for people.
+   * `remake` writes its exercises again over the stored chapter, from its stored cards; the old chapter stays if that fails.
    */
   async make(
     disciplineId: number,
     topic: number,
     remake = false,
-  ): Promise<StopContent> {
+  ): Promise<ChapterContent> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
-    if (!discipline || topicText === undefined) throw stopNotFound();
+    if (!discipline || topicText === undefined) throw chapterNotFound();
 
-    const stored = await this.paths.stopContent(disciplineId, topic, topicText);
+    const stored = await this.paths.chapterContent(disciplineId, topic, topicText);
     if (stored && !remake) return stored;
 
     const key = `${disciplineId}:${topic}`;
@@ -316,13 +316,13 @@ export class StopsService {
     topic: number,
     mistakes: number,
     relampagoMistakes: number | null = null,
-  ): Promise<StopResult> {
-    // Only a stop people can open can be finished, so books and their rewards count the same run.
-    await this.stop(disciplineId, topic);
+  ): Promise<ChapterResult> {
+    // Only a chapter people can open can be finished, so books and their rewards count the same run.
+    await this.chapter(disciplineId, topic);
     const before = new Set(
       (await this.progress.achievements(userId)).map((a) => a.code),
     );
-    const result = await this.paths.finishStop(
+    const result = await this.paths.finishChapter(
       userId,
       disciplineId,
       topic,
@@ -338,7 +338,7 @@ export class StopsService {
   }
 
   /**
-   * One lesson of a chapter for this person (#123): lessons 1-3 split the stop's exercises in their own fixed order,
+   * One lesson of a chapter for this person (#123): lessons 1-3 split the chapter's exercises in their own fixed order,
    * lesson 4 reviews what they missed. 409 before the lessons ahead of it are done.
    */
   async lesson(
@@ -347,7 +347,7 @@ export class StopsService {
     topic: number,
     index: number,
   ): Promise<Lesson> {
-    const content = await this.stop(disciplineId, topic);
+    const content = await this.chapter(disciplineId, topic);
     const done = await this.paths.lessons(userId, disciplineId, topic);
     if (
       index > done.length + 1 &&
@@ -360,7 +360,7 @@ export class StopsService {
       const source =
         ref.topic === topic
           ? content
-          : await this.stop(disciplineId, ref.topic).catch(() => null);
+          : await this.chapter(disciplineId, ref.topic).catch(() => null);
       const exercise = source?.exercises[ref.index];
       if (exercise) exercises.push({ ...exercise, ...ref });
     }
@@ -380,7 +380,7 @@ export class StopsService {
     index: number,
     missed: ExerciseRef[],
   ): Promise<LessonResult> {
-    const content = await this.stop(disciplineId, topic);
+    const content = await this.chapter(disciplineId, topic);
     const done = await this.paths.lessons(userId, disciplineId, topic);
     const inLesson = new Set(
       (await this.lessonRefs(userId, content, index, done)).map(
@@ -408,7 +408,7 @@ export class StopsService {
   /** Where a lesson's exercises live, for this person. */
   private async lessonRefs(
     userId: string,
-    content: StopContent,
+    content: ChapterContent,
     index: number,
     done: { lesson: number; missed: ExerciseRef[] }[],
   ): Promise<ExerciseRef[]> {
@@ -429,18 +429,18 @@ export class StopsService {
     );
   }
 
-  /** The stop's cards from a web search, keeping only those whose quote is on its page. */
+  /** The chapter's cards from a web search, keeping only those whose quote is on its page. */
   private async cards(
     name: string,
     topic: number,
     topicText: string,
     total: number,
-  ): Promise<StopCard[]> {
+  ): Promise<ChapterCard[]> {
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       const object = await orRetry(
         this.ai.generateObject({
           model: 'web',
-          label: 'arandu-stop-cards',
+          label: 'arandu-chapter-cards',
           schema: cardsDraft,
           instructions: cardsInstructions(),
           prompt: `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}`,
@@ -453,24 +453,24 @@ export class StopsService {
       );
       const cards = object.cards.filter((_, i) => checks[i]);
       this.logger.log(
-        `Stop cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified`,
+        `Chapter cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified`,
       );
       if (cards.length) return cards;
     }
-    throw stopUnavailable();
+    throw chapterUnavailable();
   }
 
   /**
-   * The stop's cards: stored ones, else one search for its block of topics (saving every topic's verified cards), else
+   * The chapter's cards: stored ones, else one search for its block of topics (saving every topic's verified cards), else
    * a search for this topic alone.
    */
-  private async stopCards(
+  private async chapterCards(
     id: number,
     name: string,
     topic: number,
     topics: string[],
-  ): Promise<StopCard[]> {
-    const stored = await this.paths.stopCards(id, topics);
+  ): Promise<ChapterCard[]> {
+    const stored = await this.paths.chapterCards(id, topics);
     const mine = stored.get(topic);
     if (mine) return mine;
 
@@ -501,17 +501,17 @@ export class StopsService {
       this.logger.log(
         `Subject ${id} cards for topics ${start + 1}-${start + block.length}: ${checks.filter(Boolean).length}/${object.cards.length} verified, ${found.length}/${block.length} topics`,
       );
-      await this.paths.saveStopCards(id, found);
+      await this.paths.saveChapterCards(id, found);
       const cards = found.find((e) => e.topic === topic)?.cards;
       if (cards) return cards;
     }
     const topicText = topics[topic];
-    if (topicText === undefined) throw stopNotFound();
+    if (topicText === undefined) throw chapterNotFound();
     return this.cards(name, topic, topicText, topics.length);
   }
 
   /**
-   * One web search for a block of topics. Null when its answer missed the schema or the provider failed: the stop then
+   * One web search for a block of topics. Null when its answer missed the schema or the provider failed: the chapter then
    * falls back to a search for its own topic.
    */
   private async blockCards(
@@ -541,11 +541,11 @@ export class StopsService {
     name: string,
     topic: number,
     topics: string[],
-  ): Promise<StopContent> {
+  ): Promise<ChapterContent> {
     const topicText = topics[topic];
-    if (topicText === undefined) throw stopNotFound();
+    if (topicText === undefined) throw chapterNotFound();
     const total = topics.length;
-    const cards = await this.stopCards(id, name, topic, topics);
+    const cards = await this.chapterCards(id, name, topic, topics);
     const facts = JSON.stringify(
       cards.map((c) => ({ title: c.title, text: c.text })),
     );
@@ -554,7 +554,7 @@ export class StopsService {
       const [basic, extra] = await Promise.all([
         orRetry(
           this.ai.generateObject({
-            label: 'arandu-stop-exercises',
+            label: 'arandu-chapter-exercises',
             schema: basicExercises,
             instructions: exercisesInstructions('basic'),
             prompt,
@@ -565,7 +565,7 @@ export class StopsService {
           ? null
           : orRetry(
               this.ai.generateObject({
-                label: 'arandu-stop-exercises',
+                label: 'arandu-chapter-exercises',
                 schema: extraExercises,
                 instructions: exercisesInstructions('extra'),
                 prompt,
@@ -575,24 +575,24 @@ export class StopsService {
       ]);
       if (!basic || (topic > 0 && !extra)) {
         this.logger.warn(
-          `Stop ${id}:${topic} exercises attempt ${attempt}: an answer missed its schema`,
+          `Chapter ${id}:${topic} exercises attempt ${attempt}: an answer missed its schema`,
         );
         continue;
       }
       const exercises = exercisesOf({ ...basic, ...extra });
       this.logger.log(
-        `Stop ${id}:${topic} exercises attempt ${attempt}: ${exercises.length} consistent`,
+        `Chapter ${id}:${topic} exercises attempt ${attempt}: ${exercises.length} consistent`,
       );
       if (exercises.length < minExercises(topic)) continue;
-      const content: StopContent = {
+      const content: ChapterContent = {
         discipline: { id, name },
         topic: { index: topic, text: topicText, total },
         cards,
         exercises,
       };
-      await this.paths.saveStopContent(content);
+      await this.paths.saveChapterContent(content);
       return content;
     }
-    throw stopUnavailable();
+    throw chapterUnavailable();
   }
 }

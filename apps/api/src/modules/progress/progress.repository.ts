@@ -20,11 +20,11 @@ export { TIME_ZONE };
 type Tx = Sql | TransactionSql;
 
 /**
- * Everything that gave sabedoria or counts as studying, aliased by the caller: stops finished in one pass and lessons
- * (#123). League, season, totals and patinhas read this, never stop_results alone.
+ * Everything that gave sabedoria or counts as studying, aliased by the caller: chapters finished in one pass and lessons
+ * (#123). League, season, totals and patinhas read this, never chapter_results alone.
  */
 export const sabedoriaRows = (sql: Tx) => sql`(
-  select user_id, sabedoria, completed_at from public.stop_results
+  select user_id, sabedoria, completed_at from public.chapter_results
   union all
   select user_id, sabedoria, completed_at from public.lesson_results)`;
 
@@ -33,14 +33,14 @@ export const walletColumns = (sql: Tx) =>
   sql`novelos, novelos_at, peixinhos, marcadores, novelos_bought, novelos_bought_on::text as novelos_bought_on`;
 
 /**
- * SQL for how many leading topics of the discipline aliased `d` have a stored stop for the same topic text: the stops a
- * book offers (the paths list the same run), so no screen points at a stop that would be generated live.
+ * SQL for how many leading topics of the discipline aliased `d` have a stored chapter for the same topic text: the chapters a
+ * book offers (the paths list the same run), so no screen points at a chapter that would be generated live.
  */
-export const madeStops = (sql: Tx) => sql`
+export const madeChapters = (sql: Tx) => sql`
   coalesce((
     select min(g.t)::int from generate_series(0, cardinality(coalesce(d.topics, '{}')) - 1) g(t)
     where not exists (
-      select 1 from public.stop_contents s
+      select 1 from public.chapter_contents s
       where s.discipline_id = d.id and s.topic = g.t and s.topic_text = d.topics[g.t + 1])
   ), cardinality(coalesce(d.topics, '{}')))`;
 
@@ -81,7 +81,7 @@ export async function asPerson<T>(work: Promise<T>): Promise<T> {
   }
 }
 
-/** Each person's wallet and the stops they finished: the economy and progress of the daily loop. */
+/** Each person's wallet and the chapters they finished: the economy and progress of the daily loop. */
 @Injectable()
 export class ProgressRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
@@ -104,7 +104,7 @@ export class ProgressRepository {
     );
   }
 
-  /** A mistake. Free until the person's first stop is finished; 409 at 0 novelos. */
+  /** A mistake. Free until the person's first chapter is finished; 409 at 0 novelos. */
   spend(userId: string): Promise<Wallet> {
     return asPerson(
       this.sql.begin(async (tx) => {
@@ -112,7 +112,7 @@ export class ProgressRepository {
         const now = new Date();
         const { finished } = one(
           await tx<{ finished: boolean }[]>`
-          select exists (select 1 from public.stop_results where user_id = ${userId}) as finished`,
+          select exists (select 1 from public.chapter_results where user_id = ${userId}) as finished`,
         );
         if (!finished) return toWallet(row, now);
         const { novelos } = refill(row.novelos, row.novelos_at, now);
@@ -128,7 +128,7 @@ export class ProgressRepository {
     );
   }
 
-  /** Re-reading a stop's cards at 0 novelos gives one back, once per stop; 409 otherwise. */
+  /** Re-reading a chapter's cards at 0 novelos gives one back, once per chapter; 409 otherwise. */
   reread(userId: string, disciplineId: number, topic: number): Promise<Wallet> {
     return asPerson(
       this.sql.begin(async (tx) => {
@@ -137,7 +137,7 @@ export class ProgressRepository {
         const { novelos, at } = refill(row.novelos, row.novelos_at, now);
         if (novelos > 0) throw novelosLeft();
         const inserted = await tx`
-          insert into public.stop_rereads (user_id, discipline_id, topic) values (${userId}, ${disciplineId}, ${topic})
+          insert into public.chapter_rereads (user_id, discipline_id, topic) values (${userId}, ${disciplineId}, ${topic})
           on conflict do nothing returning 1`;
         if (!inserted.length) throw rereadUsed();
         const updated = one(
@@ -150,20 +150,20 @@ export class ProgressRepository {
     );
   }
 
-  /** Every stop the person finished, oldest first. */
+  /** Every chapter the person finished, oldest first. */
   // shortcut: reads all of a person's finishes (a demo has tens); keep a running summary if people reach thousands.
   finishes(userId: string): Promise<Finish[]> {
     return this.sql<Finish[]>`
       select discipline_id::int as "disciplineId", topic, mistakes, relampago_mistakes as "relampagoMistakes",
         completed_at as "completedAt",
         to_char(completed_at at time zone ${TIME_ZONE}, 'YYYY-MM-DD') as day
-      from public.stop_results where user_id = ${userId} order by completed_at`;
+      from public.chapter_results where user_id = ${userId} order by completed_at`;
   }
 
   /** When the person asked their first questions about the cards, oldest first: enough for "Curiosidade de gato". */
   async questionTimes(userId: string): Promise<Date[]> {
     const rows = await this.sql<{ created_at: Date }[]>`
-      select created_at from public.stop_questions where user_id = ${userId}
+      select created_at from public.chapter_questions where user_id = ${userId}
       order by created_at limit ${CURIOSITY_QUESTIONS}`;
     return rows.map((r) => r.created_at);
   }
@@ -171,7 +171,7 @@ export class ProgressRepository {
   async topicCounts(disciplineIds: number[]): Promise<Map<number, number>> {
     if (!disciplineIds.length) return new Map();
     const rows = await this.sql<{ id: number; n: number }[]>`
-      select d.id::int, ${madeStops(this.sql)} as n from public.disciplines d where d.id in ${this.sql(disciplineIds)}`;
+      select d.id::int, ${madeChapters(this.sql)} as n from public.disciplines d where d.id in ${this.sql(disciplineIds)}`;
     return new Map(rows.map((r) => [r.id, r.n]));
   }
 
@@ -187,7 +187,7 @@ export class ProgressRepository {
     return row;
   }
 
-  /** When the person studied (a stop or a lesson finished), oldest first: the patinhas. */
+  /** When the person studied (a chapter or a lesson finished), oldest first: the patinhas. */
   studyTimes(userId: string): Promise<{ completedAt: Date; day: string }[]> {
     return this.sql<{ completedAt: Date; day: string }[]>`
       select completed_at as "completedAt",
@@ -229,7 +229,7 @@ export class ProgressRepository {
         topics: string[] | null;
       }[]
     >`
-      select j.weekly_goal, d.id::int, d.name, coalesce(d.topics[1:${madeStops(this.sql)}], '{}') as topics
+      select j.weekly_goal, d.id::int, d.name, coalesce(d.topics[1:${madeChapters(this.sql)}], '{}') as topics
       from public.journeys j left join public.disciplines d on d.id = j.discipline_id
       where j.user_id = ${userId}`;
     return {
@@ -241,23 +241,23 @@ export class ProgressRepository {
     };
   }
 
-  /** S4: each finished stop of a book with its mistakes and how many exercises it has, the questions and the feeling. */
+  /** S4: each finished chapter of a book with its mistakes and how many exercises it has, the questions and the feeling. */
   async reflection(userId: string, disciplineId: number) {
-    const stops = await this.sql<
+    const chapters = await this.sql<
       { topic: number; mistakes: number; items: number }[]
     >`
       select r.topic, r.mistakes, coalesce(jsonb_array_length(c.content -> 'exercises'), 0)::int as items
-      from public.stop_results r
-      left join public.stop_contents c on c.discipline_id = r.discipline_id and c.topic = r.topic
+      from public.chapter_results r
+      left join public.chapter_contents c on c.discipline_id = r.discipline_id and c.topic = r.topic
       where r.user_id = ${userId} and r.discipline_id = ${disciplineId} order by r.topic`;
     const { questions } = one(
       await this.sql<{ questions: number }[]>`
-      select count(*)::int as questions from public.stop_questions
+      select count(*)::int as questions from public.chapter_questions
       where user_id = ${userId} and discipline_id = ${disciplineId}`,
     );
     const [feeling] = await this.sql<BookReflectionRequest[]>`
       select chips, text from public.book_reflections where user_id = ${userId} and discipline_id = ${disciplineId}`;
-    return { stops, questions, feeling: feeling ?? null };
+    return { chapters, questions, feeling: feeling ?? null };
   }
 
   async saveReflection(
@@ -278,7 +278,7 @@ export class ProgressRepository {
     const [row] = await this.sql<
       { id: number; name: string; topics: string[] }[]
     >`
-      select d.id::int, d.name, coalesce(d.topics[1:${madeStops(this.sql)}], '{}') as topics
+      select d.id::int, d.name, coalesce(d.topics[1:${madeChapters(this.sql)}], '{}') as topics
       from public.disciplines d where d.id = ${id}`;
     return row ?? null;
   }

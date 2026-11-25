@@ -46,29 +46,6 @@ export interface Course {
   source: Source;
 }
 
-export interface Cutoff {
-  /** "1-2024" for SISU and ProUni (term-year), "2026" for Fuvest and ENEM-USP. */
-  edition: string;
-  /** phase1_min is Fuvest points out of 90; the others are out of 1000. Never compare across metrics. */
-  metric: "final_cutoff" | "first_call_min" | "phase1_min";
-  /** Set for Fuvest and ENEM-USP lists, which publish one per call. */
-  callNumber: number | null;
-  /** Set for ProUni only. */
-  scholarship: "integral" | "parcial" | null;
-  quota: string;
-  quotaLabel: string;
-  score: number;
-}
-
-export interface AdmissionRoute {
-  route: "sisu" | "prouni" | "fuvest" | "enem_usp";
-  /** Scores of different scales are never compared. A ProUni score is a scholarship cut-off. */
-  scale: "enem" | "fuvest" | "prouni";
-  source: Source;
-  /** Oldest edition first. */
-  cutoffs: Cutoff[];
-}
-
 export interface Curriculum {
   years: { year: number; subjects: string[] }[];
   source: Source;
@@ -77,7 +54,6 @@ export interface Curriculum {
 export interface Offering {
   institution: Institution;
   course: Course;
-  admission: AdmissionRoute[];
   curriculum: Curriculum | null;
 }
 
@@ -96,7 +72,7 @@ export interface Book {
   profession: { slug: string; name: string };
   /** Up to 3 institutions with a photo, one offering each: the sample's own institution first, then FIAP where it
    * offers the profession, then the rest in a neutral order. Each has a real first-year curriculum, except FIAP's,
-   * which is null where its grade is unknown. `admission` is empty: the book does not show cut-offs. */
+   * which is null where its grade is unknown. */
   offerings: Offering[];
   /** 1-2 subjects. */
   sample: SampleSubject[];
@@ -244,12 +220,12 @@ export interface Recommendations {
 /** GET /arandu/memory/conversations (S2): what the person and Arandu said, as text, newest first. */
 export interface Conversations {
   conversations: {
-    /** The onboarding, a talk about a career, one among the recommended careers (O10), or a question on a stop's card (T1). */
+    /** The onboarding, a talk about a career, one among the recommended careers (O10), or a question on a chapter's card (T1). */
     kind: "onboarding" | "career" | "choosing" | "card";
     startedAt: string;
     professionSlug: string | null;
-    /** The stop a card question was about; null for the other kinds. */
-    stop: { disciplineId: number; topic: number } | null;
+    /** The chapter a card question was about; null for the other kinds. */
+    chapter: { disciplineId: number; topic: number } | null;
     /** Oldest first. */
     messages: { role: "user" | "assistant"; text: string }[];
   }[];
@@ -284,12 +260,12 @@ export interface ProfileReadingRequest {
   answers: OnboardingAnswer[];
 }
 
-/** A first-semester subject a path can start with: a book on the shelf, each topic one stop. */
+/** A first-semester subject a path can start with: a book on the shelf, each topic one chapter. */
 export interface PathSubject {
   disciplineId: number;
   code: string | null;
   name: string;
-  /** The official topics, in the source's order; the index is the stop. */
+  /** The official topics, in the source's order; the index is the chapter. */
   topics: string[];
 }
 
@@ -326,8 +302,8 @@ export interface Journey {
 /** PATCH /me/journey: only the fields sent change. */
 export type JourneyUpdate = Partial<Journey>;
 
-/** One card Arandu explains a stop with: every card cites where it comes from. */
-export interface StopCard {
+/** One card Arandu explains a chapter with: every card cites where it comes from. */
+export interface ChapterCard {
   title: string;
   text: string;
   /** `quote` is copied word for word from the page at `url`, and the API checked it is there. */
@@ -338,8 +314,8 @@ export interface StopCard {
 export type ExerciseMode = "reconhecer" | "produzir";
 
 /**
- * The exercises of a stop (R01-R12). Answers come with them: the client checks them and reports the mistakes. "Revisão
- * relâmpago" (R11) is not here: the client replays the items missed in this stop against a timer.
+ * The exercises of a chapter (R01-R12). Answers come with them: the client checks them and reports the mistakes. "Revisão
+ * relâmpago" (R11) is not here: the client replays the items missed in this chapter against a timer.
  */
 export type Exercise = { mode: ExerciseMode; why: string } & (
   | { kind: "escolha_uma"; prompt: string; options: string[]; answer: number }
@@ -391,53 +367,53 @@ export type Exercise = { mode: ExerciseMode; why: string } & (
     }
   /** `steps` in the right order; the client shuffles them. */
   | { kind: "ordene"; prompt: string; steps: string[] }
-  /** A free answer by text or voice, graded by POST /stops/:disciplineId/:topic/explain against `ideas`. */
+  /** A free answer by text or voice, graded by POST /chapters/:disciplineId/:topic/explain against `ideas`. */
   | { kind: "explique_para_o_arandu"; prompt: string; ideas: string[] }
 );
 
-/** GET /stops/:disciplineId/:topic: a stop of a subject, the same for everyone. */
-export interface StopContent {
+/** GET /chapters/:disciplineId/:topic: a chapter of a subject, the same for everyone. */
+export interface ChapterContent {
   discipline: { id: number; name: string };
   topic: { index: number; text: string; total: number };
   /** 1-3. */
-  cards: StopCard[];
+  cards: ChapterCard[];
   exercises: Exercise[];
 }
 
-/** Where an exercise lives: lesson 4 mixes in misses from earlier stops, so /explain goes to `topic`. */
+/** Where an exercise lives: lesson 4 mixes in misses from earlier chapters, so /explain goes to `topic`. */
 export type LessonExercise = Exercise & { topic: number; index: number };
 
 /**
- * GET /stops/:disciplineId/:topic/lessons/:lesson (1-4): one lesson of a chapter, for this person. Lessons 1-3 split the
- * stop's exercises in a random order that stays the same for them; lesson 4 reviews what they missed. 409
+ * GET /chapters/:disciplineId/:topic/lessons/:lesson (1-4): one lesson of a chapter, for this person. Lessons 1-3 split the
+ * chapter's exercises in a random order that stays the same for them; lesson 4 reviews what they missed. 409
  * `lesson_locked` before the lessons ahead of it are done.
  */
 export interface Lesson {
   index: number;
   total: 4;
-  /** The stop's cards, in lesson 1 only; GET /stops/:disciplineId/:topic has them to re-read at any time. */
-  cards: StopCard[] | null;
+  /** The chapter's cards, in lesson 1 only; GET /chapters/:disciplineId/:topic has them to re-read at any time. */
+  cards: ChapterCard[] | null;
   exercises: LessonExercise[];
 }
 
-/** POST /stops/:disciplineId/:topic/lessons/:lesson/result: the exercises missed at least once. */
+/** POST /chapters/:disciplineId/:topic/lessons/:lesson/result: the exercises missed at least once. */
 export interface LessonResultRequest {
   missed: { topic: number; index: number }[];
 }
 
 /** A lesson's rewards (0 on a replay); lesson 4 also finishes the chapter, with its peixinhos. */
-export interface LessonResult extends StopResult {
+export interface LessonResult extends ChapterResult {
   chapterDone: boolean;
 }
 
-/** POST /stops/:disciplineId/:topic/result: how many mistakes the person made before getting every item right. */
-export interface StopResultRequest {
+/** POST /chapters/:disciplineId/:topic/result: how many mistakes the person made before getting every item right. */
+export interface ChapterResultRequest {
   mistakes: number;
-  /** Mistakes in the stop's revisão relâmpago; null when it had none (nothing was missed). */
+  /** Mistakes in the chapter's revisão relâmpago; null when it had none (nothing was missed). */
   relampagoMistakes?: number | null;
 }
 
-/** POST /stops/:disciplineId/:topic/explain: the person's answer to "Explique para o Arandu", typed or spoken. */
+/** POST /chapters/:disciplineId/:topic/explain: the person's answer to "Explique para o Arandu", typed or spoken. */
 export interface ExplainRequest {
   answer: string;
 }
@@ -449,7 +425,7 @@ export interface ExplainReply {
   reply: string;
 }
 
-/** POST /stops/:disciplineId/:topic/ask (T1): a question about the stop's cards. */
+/** POST /chapters/:disciplineId/:topic/ask (T1): a question about the chapter's cards. */
 export interface AskRequest {
   question: string;
 }
@@ -461,19 +437,19 @@ export interface AskReply {
 }
 
 export type AchievementCode =
-  | "primeira_parada"
+  | "primeiro_capitulo"
   | "nenhum_novelo_perdido"
   | "semana_de_patinhas"
   | "primeiro_livro"
   | "relampago"
   | "curiosidade_de_gato";
 
-export interface StopResult {
-  /** Sabedoria this finish gave: 0 when the stop was already finished. */
+export interface ChapterResult {
+  /** Sabedoria this finish gave: 0 when the chapter was already finished. */
   sabedoria: number;
-  /** Peixinhos this finish gave: 0 when the stop was already finished. */
+  /** Peixinhos this finish gave: 0 when the chapter was already finished. */
   peixinhos: number;
-  /** The first stop of the day: a new patinha. */
+  /** The first chapter of the day: a new patinha. */
   patinha: boolean;
   /** Achievements this finish earned. */
   achievements: AchievementCode[];
@@ -506,9 +482,9 @@ export interface Home {
     studied: number;
     goal: 3 | 5 | 7 | null;
   };
-  /** For S3 "Voltou": null before the first stop. */
+  /** For S3 "Voltou": null before the first chapter. */
   lastStudiedOn: string | null;
-  /** The book the person is on and its next stop; null before choosing one. `nextTopic` is null when it is done. */
+  /** The book the person is on and its next chapter; null before choosing one. `nextTopic` is null when it is done. */
   current: {
     disciplineId: number;
     name: string;
@@ -518,10 +494,10 @@ export interface Home {
   achievements: Achievement[];
 }
 
-/** GET /me/books/:disciplineId: the path of stops (P1, K3). */
+/** GET /me/books/:disciplineId: the path of chapters (P1, K3). */
 export interface BookProgress {
   discipline: { id: number; name: string };
-  stops: {
+  chapters: {
     index: number;
     text: string;
     state: "done" | "current" | "locked";
@@ -613,7 +589,7 @@ export interface WardrobeUpdate {
 export interface AranduFact {
   id: number;
   text: string;
-  source: "onboarding" | "stop" | "conversation";
+  source: "onboarding" | "chapter" | "conversation";
   createdAt: string;
 }
 
@@ -626,14 +602,14 @@ export interface BookReflectionRequest {
 /** GET /me/books/:disciplineId/reflection (S4): Arandu's reading of the book, never a grade. */
 export interface BookReflection {
   discipline: { id: number; name: string };
-  /** Every stop of the book is done. */
+  /** Every chapter of the book is done. */
   finished: boolean;
-  /** Exercise items answered right the first time, of all the items in the finished stops. */
+  /** Exercise items answered right the first time, of all the items in the finished chapters. */
   items: { right: number; total: number };
   questions: number;
-  /** Stops finished with no mistake. */
+  /** Chapters finished with no mistake. */
   further: string[];
-  /** The stop with the most mistakes; null when none had any. */
+  /** The chapter with the most mistakes; null when none had any. */
   stuck: string | null;
   feeling: BookReflectionRequest | null;
 }

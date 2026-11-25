@@ -21,11 +21,11 @@ export const novelosLeft = () =>
 export const rereadUsed = () =>
   new ConflictException({
     code: 'reread_used',
-    message: 'This stop already gave its novelo',
+    message: 'This chapter already gave its novelo',
   });
 
-export const stopNotOpen = () =>
+export const chapterNotOpen = () =>
   new ConflictException({
-    code: 'stop_not_open',
-    message: 'This stop is not open yet',
+    code: 'chapter_not_open',
+    message: 'This chapter is not open yet',
   });

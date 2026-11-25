@@ -1,6 +1,7 @@
 # ADR-0004: Profession book contract and first ingestion scope
 
-- Status: accepted; its São Paulo state scope is superseded by ADR-0007
+- Status: accepted; its São Paulo state scope is superseded by ADR-0007; its cut-offs and per-institution ingestion
+  are superseded by ADR-0008
 - Date: 2026-11-17
 - Decided by: Alejandro (owner), with the data squad ingeniero
 

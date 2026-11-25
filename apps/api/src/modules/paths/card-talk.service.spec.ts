@@ -1,11 +1,11 @@
-import type { StopContent } from '@arandu/contracts';
+import type { ChapterContent } from '@arandu/contracts';
 import type { AiService } from '@nestjs/ai';
 import { NotFoundException } from '@nestjs/common';
 import { SAFE_REPLY } from '../arandu/arandu.safety.js';
 import { CardTalkService } from './card-talk.service.js';
 import type { PathsRepository } from './paths.repository.js';
 
-const stop = (withExplain = true): StopContent =>
+const chapter = (withExplain = true): ChapterContent =>
   ({
     topic: { index: 1, text: 'Derivadas', total: 2 },
     cards: [
@@ -40,7 +40,7 @@ const stop = (withExplain = true): StopContent =>
           ]
         : []),
     ],
-  }) as StopContent;
+  }) as ChapterContent;
 
 describe('CardTalkService', () => {
   const discipline = { id: 7, name: 'C', topics: ['Limites', 'Derivadas'] };
@@ -50,7 +50,7 @@ describe('CardTalkService', () => {
   };
   let paths: {
     discipline: ReturnType<typeof vi.fn>;
-    stopContent: ReturnType<typeof vi.fn>;
+    chapterContent: ReturnType<typeof vi.fn>;
     madeCount: ReturnType<typeof vi.fn>;
     saveQuestion: ReturnType<typeof vi.fn>;
   };
@@ -65,7 +65,7 @@ describe('CardTalkService', () => {
     };
     paths = {
       discipline: vi.fn().mockResolvedValue(discipline),
-      stopContent: vi.fn().mockResolvedValue(stop()),
+      chapterContent: vi.fn().mockResolvedValue(chapter()),
       madeCount: vi.fn().mockResolvedValue(2),
       saveQuestion: vi.fn().mockResolvedValue(undefined),
     };
@@ -85,7 +85,7 @@ describe('CardTalkService', () => {
         ],
         reply: 'ok',
       });
-      expect(paths.stopContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
+      expect(paths.chapterContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
       const prompt = JSON.parse(ai.generateObject.mock.calls[0]![0].prompt);
       expect(prompt).toEqual({
         question: 'Explique',
@@ -138,13 +138,13 @@ describe('CardTalkService', () => {
     });
 
     it.each([
-      ['an unknown subject', null, stop(), 1],
-      ['a topic out of range', discipline, stop(), 5],
-      ['a stop not stored', discipline, null, 1],
-      ['a stop with no explique exercise', discipline, stop(false), 1],
+      ['an unknown subject', null, chapter(), 1],
+      ['a topic out of range', discipline, chapter(), 5],
+      ['a chapter not stored', discipline, null, 1],
+      ['a chapter with no explique exercise', discipline, chapter(false), 1],
     ])('404s for %s without calling the model', async (_, d, c, t) => {
       paths.discipline.mockResolvedValue(d);
-      paths.stopContent.mockResolvedValue(c);
+      paths.chapterContent.mockResolvedValue(c);
 
       await expect(service.explain(7, t, 'a')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -154,7 +154,7 @@ describe('CardTalkService', () => {
   });
 
   describe('explain outside the made run', () => {
-    it('404s for a stop past the made run even when its content is stored', async () => {
+    it('404s for a chapter past the made run even when its content is stored', async () => {
       paths.madeCount.mockResolvedValue(1);
 
       await expect(service.explain(7, 1, 'a')).rejects.toBeInstanceOf(
@@ -213,11 +213,11 @@ describe('CardTalkService', () => {
     });
 
     it.each([
-      ['an unknown subject', null, stop()],
-      ['a stop not stored', discipline, null],
+      ['an unknown subject', null, chapter()],
+      ['a chapter not stored', discipline, null],
     ])('404s for %s without calling the model or saving', async (_, d, c) => {
       paths.discipline.mockResolvedValue(d);
-      paths.stopContent.mockResolvedValue(c);
+      paths.chapterContent.mockResolvedValue(c);
 
       await expect(service.ask('u', 7, 1, 'q')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -226,7 +226,7 @@ describe('CardTalkService', () => {
       expect(paths.saveQuestion).not.toHaveBeenCalled();
     });
 
-    it('404s for a stop past the made run and saves nothing', async () => {
+    it('404s for a chapter past the made run and saves nothing', async () => {
       paths.madeCount.mockResolvedValue(1);
 
       await expect(service.ask('u', 7, 1, 'q')).rejects.toBeInstanceOf(
