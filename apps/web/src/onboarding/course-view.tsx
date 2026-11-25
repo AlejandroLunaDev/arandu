@@ -59,7 +59,7 @@ export function CourseView({
 }) {
   const talk = useAttempt();
   const [chat, setChat] = useState<{ sessionId: string; reply: string; chosen: number | null } | null>(null);
-  const where = `${placeName(place.institution)}, em ${place.city}`;
+  const where = `${placeName(place.institution)}, ${place.city ? `em ${place.city}` : "a distância"}`;
   const chosen = chat?.chosen ?? null;
   const ask = (message: string, sessionId?: string) =>
     talk.attempt(async () => {

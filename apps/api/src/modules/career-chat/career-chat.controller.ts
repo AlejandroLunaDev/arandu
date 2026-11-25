@@ -27,7 +27,7 @@ const chatRequest = z.union([
               courseId: z.number().int().positive(),
               course: z.string().trim().min(1).max(200),
               institution: z.string().trim().min(1).max(200),
-              city: z.string().trim().min(1).max(100),
+              city: z.string().trim().min(1).max(100).nullable(),
             })
             .strict(),
         )

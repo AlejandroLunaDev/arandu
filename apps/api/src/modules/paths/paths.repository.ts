@@ -40,7 +40,7 @@ interface PathRow {
   course_id: number;
   institution: string;
   course: string;
-  city: string;
+  city: string | null;
   discipline_id: number;
   code: string | null;
   subject: string;

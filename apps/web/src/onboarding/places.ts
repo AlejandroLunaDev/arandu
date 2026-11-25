@@ -4,7 +4,7 @@ import type { CareerOption, CourseChoice, Institution } from "@arandu/contracts"
 export type PlaceCourse = { courseId: number; course: string; profession: CareerOption["profession"]; reason: string };
 
 /** An institution where at least one recommended career can be lived, with its courses. */
-export type Place = { institution: Institution; city: string; courses: PlaceCourse[] };
+export type Place = { institution: Institution; city: string | null; courses: PlaceCourse[] };
 
 /** The name the person reads: the short one when there is one ("USP"). */
 export const placeName = (institution: Institution) => institution.shortName ?? institution.name;

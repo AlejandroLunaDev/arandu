@@ -15,7 +15,7 @@ export function curriculaText(profession: ProfessionFirstTerm): string {
             `  - ${s.name}${s.hours ? ` (${s.hours} h)` : ''}${s.isElective ? ' [optativa]' : ''}`,
         )
         .join('\n');
-      return `${c.institution}, ${c.course}, ${c.city}${c.shift ? `, ${c.shift}` : ''}: ${period}\nSource: ${c.source.label}\n${subjects}`;
+      return `${c.institution}, ${c.course}, ${c.city ?? 'distance learning'}${c.shift ? `, ${c.shift}` : ''}: ${period}\nSource: ${c.source.label}\n${subjects}`;
     })
     .join('\n\n');
 }
@@ -79,7 +79,7 @@ function choosingRules(choices: CourseChoice[]): string {
   such as "Boa escolha! Vamos experimentar Arquitetura no Mackenzie.", with no question: the app moves on right after,
   so this rule replaces the one about ending with exactly one question.
 - The courses on screen (courseId: course, institution, city):
-${choices.map((c) => `  - ${c.courseId}: ${c.course}, ${c.institution}, ${c.city}`).join('\n')}`;
+${choices.map((c) => `  - ${c.courseId}: ${c.course}, ${c.institution}, ${c.city ?? 'distance learning'}`).join('\n')}`;
 }
 
 function grounding(what: string): string {

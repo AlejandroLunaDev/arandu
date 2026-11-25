@@ -373,6 +373,16 @@ describe('POST /arandu/chat among the recommended careers', () => {
     expect(res.body.reply).toBe('Claro!');
   });
 
+  it('takes a distance course, which has no city', async () => {
+    await app.close();
+    await start({ professionSlug: 'arquitetura', chosenCourseId: 11 });
+    const distance = { courseId: 11, course: 'Arquitetura', institution: 'Unip', city: null };
+
+    const res = await post({ ...body, choices: [distance] }).expect(200);
+
+    expect(res.body.chosenCourseId).toBe(11);
+  });
+
   it('returns null when the model picks an id but no choices were sent', async () => {
     await app.close();
     await start({ professionSlug: 'arquitetura', chosenCourseId: 7 });
@@ -546,10 +556,12 @@ describe('career chat prompts', () => {
     const withChoices = choosingInstructions(professions, undefined, [
       { courseId: 7, course: 'Direito', institution: 'USP', city: 'São Paulo' },
       { courseId: 9, course: 'Direito', institution: 'PUC', city: 'Santos' },
+      { courseId: 11, course: 'Direito', institution: 'Unip', city: null },
     ]);
 
     expect(withChoices).toContain('7: Direito, USP, São Paulo');
     expect(withChoices).toContain('9: Direito, PUC, Santos');
+    expect(withChoices).toContain('11: Direito, Unip, distance learning');
     expect(withChoices).toContain('short warm confirmation');
     expect(withChoices).toContain('offered at more than one place');
     expect(withChoices).toContain('which');

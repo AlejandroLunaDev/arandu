@@ -52,7 +52,7 @@ export function SemesterView({ course, place, path, ...next }: Next & { course: 
         <div className={p.head}>
           <span className={p.pill}>{course.course}</span>
           <span className={p.meta}>
-            {place} · {path.city}
+            {place} · {path.city ?? "A distância"}
           </span>
         </div>
         <p className={p.why}>{course.reason}</p>

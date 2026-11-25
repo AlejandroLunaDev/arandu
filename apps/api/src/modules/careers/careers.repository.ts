@@ -10,7 +10,7 @@ import { SQL, type Sql } from '../../core/database/database.module.js';
 export interface CourseFirstTerm {
   institution: string;
   course: string;
-  city: string;
+  city: string | null;
   /** A course can publish one grade per shift (USP Administração: integral and noturno). Null: the source states none. */
   shift: string | null;
   /** True when the source groups by year only (FIAP): the subjects are the whole first year. */
@@ -32,7 +32,7 @@ interface Row {
   course_id: string;
   institution: string;
   course: string;
-  city: string;
+  city: string | null;
   shift: string | null;
   term: number | null;
   subject: string;
@@ -60,7 +60,7 @@ export class CareersRepository {
         name: string;
         course_id: number;
         course: string;
-        city: string;
+        city: string | null;
       })[]
     >`
       select p.slug, p.name, c.id::int as course_id, c.name as course, c.city, i.name as institution, i.short_name, i.kind,

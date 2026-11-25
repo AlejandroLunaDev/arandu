@@ -133,7 +133,8 @@ export interface CourseChoice {
   courseId: number;
   course: string;
   institution: string;
-  city: string;
+  /** Null for a distance course: the census gives it no city. */
+  city: string | null;
 }
 
 export interface AranduChatReply {
@@ -208,7 +209,8 @@ export interface CareerOption {
     courseId: number;
     course: string;
     institution: Institution;
-    city: string;
+    /** Null for a distance course: the census gives it no city. */
+    city: string | null;
   }[];
 }
 
@@ -274,7 +276,8 @@ export interface CareerPath {
   courseId: number;
   institution: string;
   course: string;
-  city: string;
+  /** Null for a distance course: the census gives it no city. */
+  city: string | null;
   shift: string | null;
   subjects: PathSubject[];
   source: Source;
