@@ -42,7 +42,6 @@ const calm = (text: string) => (text === text.toUpperCase() ? text.charAt(0) + t
 /** Real screens of the app (public/screens, drawn to public/img/screens), in the journey's order: the product book shows them by its first page. */
 const SCREENS = [
   { src: "/img/screens/a4.webp", step: "Conhecer você", alt: "Tela do Arandu: uma pergunta do questionário sobre o seu tempo livre" },
-  { src: "/img/screens/u2.webp", step: "Opções reais", alt: "Tela do Arandu: a ficha de um curso, com a nota de corte e a fonte" },
   { src: "/img/screens/b3.webp", step: "Experimentar", alt: "Tela do Arandu: um exercício de uma matéria, já respondido" },
 ];
 const KIND: Record<Offering["institution"]["kind"], string> = { public: "Pública", private: "Privada", special: "Especial" };
@@ -392,7 +391,7 @@ function SamplePage({ book }: { book: Book }) {
   );
 }
 
-// Facing the product book's first page: the app itself, three of its screens.
+// Facing the product book's first page: the app itself, two of its screens.
 function ScreensPage() {
   return (
     <Card>

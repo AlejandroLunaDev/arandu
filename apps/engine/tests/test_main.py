@@ -147,8 +147,7 @@ class MainTest(unittest.TestCase):
     def test_adapters_run_each_list_before_its_curriculum_level(self):
         order = {n: i for i, n in enumerate(cli.ADAPTERS)}
         for first, second in (("usp_courses", "usp_curriculum"), ("anima_sitemap", "anima_course"), ("anima_course", "anima_curriculum"),
-                              ("unip_courses", "unip_units"), ("unip_units", "unip_curriculum"),
-                              ("usp_curriculum", "enem_usp")):
+                              ("unip_courses", "unip_units"), ("unip_units", "unip_curriculum")):
             self.assertLess(order[first], order[second], f"{first} must run before {second}")
 
 

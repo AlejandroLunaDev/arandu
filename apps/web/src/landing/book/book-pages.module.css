@@ -293,7 +293,9 @@
 /* The product book's screens of the app: three phones side by side, each over its step. */
 .screens {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Two screens at the width three had, centered. */
+  grid-template-columns: repeat(2, calc((100% - 20px) / 3));
+  justify-content: center;
   gap: 10px;
   margin: auto 0;
 }

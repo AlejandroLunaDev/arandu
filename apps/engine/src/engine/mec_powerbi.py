@@ -1,4 +1,4 @@
-"""MEC's public Power BI behind acessounico.mec.gov.br/busca: SISU and ProUni cut-offs, and each course's campus.
+"""MEC's public Power BI behind acessounico.mec.gov.br/busca: each course's campus, read from its SISU and ProUni rows.
 
 The page embeds the report with a public resource key; the engine sends the same querydata POST the report sends.
 """
@@ -118,7 +118,7 @@ def parse(doc):
 
 
 def load(conn, source_id, rows):
-    """Replace the source's staged rows, normalize them, and re-link the curriculum pages that name their units."""
+    """Replace the source's staged rows, set each course's campus, and re-link the pages that name their units."""
     conn.execute("delete from staging.mec_offers where source_id = %s", (source_id,))
     with conn.cursor() as cur:
         with cur.copy("copy staging.mec_offers (source_id, route, course_code, campus, shift, edition_year,"
