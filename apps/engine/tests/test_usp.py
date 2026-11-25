@@ -133,9 +133,20 @@ class ParseCurriculumTest(unittest.TestCase):
             usp.parse_curriculum(doc("<table><tr><td>Disciplinas Obrigatórias</td></tr></table>"))
 
     def test_subject_outside_a_section_and_term_raises(self):
-        html = '<table><tr><td><a href="obterDisciplina?sgldis=X1">X1</a></td><td>Name</td><td>4</td><td>0</td><td>60</td></tr></table>'
+        html = '<table><tr><td><a href="obterDisciplina?sgldis=X1&codcur=1">X1</a></td><td>Name</td><td>4</td><td>0</td><td>60</td></tr></table>'
         with self.assertRaisesRegex(ValueError, "outside a section"):
             usp.parse_curriculum(doc(html))
+
+    def test_note_row_that_links_a_subject_mid_text_is_not_a_subject(self):
+        note = (
+            '<tr><td>1. O aluno deverá cursar <a href="obterDisciplina?sgldis=MFT0290&codcur=5063&codhab=0">MFT0290</a>'
+            " Procedimentos em Fonoaudiologia.</td></tr>"
+        )
+        subject = '<tr><td><a href="obterDisciplina?sgldis=MFT0100&codcur=5063&codhab=0">MFT0100</a></td><td>Anatomia</td><td>4</td><td>0</td><td>60</td></tr>'
+        html = f"<table><tr><td>Disciplinas Obrigatórias</td></tr><tr><td>1º Período Ideal</td></tr>{subject}{note}</table>"
+        self.assertEqual([(s[0], s[2], s[3]) for s in usp.parse_curriculum(doc(html))], [(1, "Anatomia", 60)])
+        # outside any section and term it is skipped too, instead of raising
+        self.assertEqual(len(usp.parse_curriculum(doc(f"<table>{note}</table>{html}"))), 1)
 
 
 class FakeConn:
