@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useInstall } from "@/install/use-install";
 import { MOTTO } from "../copy";
 import { VIDEO_URL } from "../links";
 import styles from "./hero.module.css";
@@ -10,6 +11,12 @@ import styles from "./hero.module.css";
 // The title stays in the page while the video plays, unseen, so it is still read.
 export function TvCard() {
   const [playing, setPlaying] = useState(false);
+  // Loading use-install holds back Chrome's own install banner, which would open the app from here; an app already
+  // installed and opened at the landing (iOS can do that) still goes on to /app, as DownloadButton did.
+  const { where } = useInstall();
+  useEffect(() => {
+    if (where === "installed") location.replace("/app");
+  }, [where]);
   return (
     <div data-tv data-theme="dark" data-playing={playing || undefined} className={styles.tv}>
       <h1 id="hero-title" className={styles.brand}>
