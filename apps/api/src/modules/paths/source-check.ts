@@ -61,15 +61,38 @@ export function quoteIn(page: string, quote: string): boolean {
   return needle.length > 0 && normalize(plain(page)).includes(needle);
 }
 
-/** Sites of documents uploaded by users, and placeholder domains: never a source, whatever a search returns. */
-const REFUSED_HOST =
-  /^([a-z0-9-]+\.)*(scribd\.com|passeidireto\.com|brainly\.[a-z.]+|studocu\.com|slideshare\.net|example\.(com|org|net))\.?$/i;
+/**
+ * Never a source, whatever a search returns: sites of documents users upload, videos and social networks (a page
+ * of comments or a transcript, not a text that explains), and placeholder domains. A subdomain counts as its site.
+ */
+export const REFUSED_SITES = [
+  'scribd.com',
+  'passeidireto.com',
+  'brainly.com',
+  'brainly.com.br',
+  'studocu.com',
+  'slideshare.net',
+  'youtube.com',
+  'youtu.be',
+  'facebook.com',
+  'instagram.com',
+  'tiktok.com',
+  'x.com',
+  'twitter.com',
+  'example.com',
+  'example.org',
+  'example.net',
+];
 
 /** True for a page that may not be a source: not https, or on a refused site. */
 export function refusedPage(url: string): boolean {
   try {
     const { protocol, hostname } = new URL(url);
-    return protocol !== 'https:' || REFUSED_HOST.test(hostname);
+    const host = hostname.toLowerCase().replace(/\.$/, '');
+    return (
+      protocol !== 'https:' ||
+      REFUSED_SITES.some((site) => host === site || host.endsWith(`.${site}`))
+    );
   } catch {
     return true;
   }

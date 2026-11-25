@@ -14,7 +14,8 @@ import type { Env } from '../../core/config/env.js';
 import { ProgressService } from '../progress/progress.service.js';
 import {
   cardsInstructions,
-  piecesInstructions,
+  basicsInstructions,
+  practiceInstructions,
   subjectCardsInstructions,
 } from './chapter.prompt.js';
 import {
@@ -34,11 +35,12 @@ import {
 import { PathsRepository } from './paths.repository.js';
 import {
   enoughPieces,
-  piecesDraft,
+  basicsDraft,
+  practiceDraft,
   piecesOf,
   type StoredChapter,
 } from './pieces.js';
-import { quoteIn } from './source-check.js';
+import { quoteIn, refusedPage } from './source-check.js';
 
 /** Topics whose cards one search writes: the search is paid once for them, not once per chapter. */
 export const TOPICS_PER_SEARCH = 6;
@@ -80,8 +82,18 @@ async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
 /** Tries to write a chapter's cards, and then its pieces, this many times before giving up. */
 const ATTEMPTS = 2;
 
-const queryOf = (name: string, topics: string[]) =>
-  `${name} ${topics.join(' ')}`.split(/\s+/).slice(0, QUERY_WORDS).join(' ');
+/** The subject's name and the first words of every topic (its "1." numbering left out), so each topic is in the query. */
+const queryOf = (name: string, topics: string[]) => {
+  const per = Math.max(3, Math.floor(QUERY_WORDS / topics.length));
+  const words = topics.map((t) =>
+    t
+      .replace(/^\s*\d+[.)]\s*/, '')
+      .split(/\s+/)
+      .slice(0, per)
+      .join(' '),
+  );
+  return [name, ...words].join(' ');
+};
 
 const pagesPrompt = (pages: Source[]) =>
   pages
@@ -385,6 +397,12 @@ export class ChaptersService {
     topics: string[],
   ): Promise<ChapterCard[]> {
     const stored = await this.paths.chapterCards(id, topics);
+    // A card stored before its site was refused is dropped; a topic left without cards is made again.
+    for (const [t, cards] of stored) {
+      const kept = cards.filter((c) => !refusedPage(c.source.url));
+      if (kept.length) stored.set(t, kept);
+      else stored.delete(t);
+    }
     const mine = stored.get(topic);
     if (mine) return mine;
 
@@ -470,23 +488,33 @@ export class ChaptersService {
       cards.map((c) => ({ title: c.title, text: c.text })),
     );
     const prompt = `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}\n\nCards:\n${facts}`;
+    // Practice is optional: an answer that missed its schema leaves the chapter without problems or code.
+    const practice = (await orRetry(
+      this.ai.generateObject({
+        label: 'arandu-chapter-practice',
+        schema: practiceDraft,
+        instructions: practiceInstructions(),
+        prompt,
+        maxOutputTokens: 3000,
+      }),
+    )) ?? { problems: [], code: [] };
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-      const draft = await orRetry(
+      const basics = await orRetry(
         this.ai.generateObject({
           label: 'arandu-chapter-pieces',
-          schema: piecesDraft,
-          instructions: piecesInstructions(),
+          schema: basicsDraft,
+          instructions: basicsInstructions(),
           prompt,
-          maxOutputTokens: 6000,
+          maxOutputTokens: 4000,
         }),
       );
-      if (!draft) {
+      if (!basics) {
         this.logger.warn(
           `Chapter ${id}:${topic} pieces attempt ${attempt}: the answer missed its schema`,
         );
         continue;
       }
-      const pieces = piecesOf(draft);
+      const pieces = piecesOf({ ...basics, ...practice });
       this.logger.log(
         `Chapter ${id}:${topic} pieces attempt ${attempt}: ${pieces.map((p) => p.type).join(', ')}`,
       );

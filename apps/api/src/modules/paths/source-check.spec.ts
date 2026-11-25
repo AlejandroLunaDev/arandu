@@ -65,6 +65,9 @@ describe('refusedPage', () => {
     'https://br.brainly.com.br/tarefa/1',
     'https://pt.slideshare.net/x',
     'https://passeidireto.com.',
+    'https://www.youtube.com/watch?v=1',
+    'https://m.YouTube.com/watch?v=1',
+    'https://youtu.be/1',
     'http://scielo.br/a',
     'not a url',
   ])('refuses %s', (url) => {

@@ -102,7 +102,7 @@ describe('ChaptersService', () => {
   >;
   type Fn = Mock<(...args: never[]) => unknown>;
   // One mock per model call; `ai.generateObject` routes to it by the call's label.
-  let steps: { subject: Step; cards: Step; pieces: Step };
+  let steps: { subject: Step; cards: Step; practice: Step; pieces: Step };
   let ai: { generateObject: Step };
   let paths: Record<
     | 'discipline'
@@ -139,6 +139,7 @@ describe('ChaptersService', () => {
       // By default the block search verifies nothing, so a chapter falls back to its own search.
       subject: vi.fn().mockResolvedValue(reply({ cards: [] })),
       cards: vi.fn().mockResolvedValue(reply(cardsReply())),
+      practice: vi.fn().mockResolvedValue(reply({ problems: [], code: [] })),
       pieces: vi.fn().mockResolvedValue(reply(piecesReply())),
     };
     ai = {
@@ -147,7 +148,9 @@ describe('ChaptersService', () => {
           ? steps.subject(o)
           : o.label === 'arandu-chapter-cards'
             ? steps.cards(o)
-            : steps.pieces(o),
+            : o.label === 'arandu-chapter-practice'
+              ? steps.practice(o)
+              : steps.pieces(o),
       ),
     };
     paths = {
@@ -401,6 +404,50 @@ describe('ChaptersService', () => {
       expect(steps.pieces).toHaveBeenCalledTimes(2);
     });
 
+    it('adds the problems the practice call wrote, from the same cards', async () => {
+      steps.practice.mockResolvedValue(
+        reply({
+          problems: [
+            {
+              statement:
+                'Um carro percorre {d} km em {t} h. Qual é a velocidade média?',
+              numbers: [
+                { name: 'd', min: 60, max: 300, step: 10 },
+                { name: 't', min: 1, max: 5, step: 1 },
+              ],
+              booleans: [],
+              answer: 'd / t',
+              decimals: 1,
+              unit: 'km/h',
+              mistakes: [{ formula: 'd * t', why: 'w' }],
+              example: [
+                { name: 'd', value: 120 },
+                { name: 't', value: 2 },
+              ],
+              exampleAnswer: 60,
+              why: 'w',
+            },
+          ],
+          code: [],
+        }),
+      );
+
+      await service.make(7, 0);
+
+      expect(promptOf(steps.practice)).toBe(promptOf(steps.pieces));
+      expect(saved().pieces?.map((p) => p.type)).toContain('problema');
+      expect(saved().exercises.map((e) => e.kind)).toContain('resolva');
+    });
+
+    it('a practice answer that missed its schema leaves the chapter without problems or code', async () => {
+      steps.practice.mockRejectedValue(outputError());
+
+      await service.make(7, 0);
+
+      expect(steps.practice).toHaveBeenCalledTimes(1);
+      expect(saved().pieces?.map((p) => p.type)).not.toContain('problema');
+    });
+
     it('shares one generation between concurrent calls for the same chapter', async () => {
       const [a, b] = await Promise.all([
         service.make(7, 0),
@@ -452,6 +499,56 @@ describe('ChaptersService', () => {
       expect(steps.subject).not.toHaveBeenCalled();
       expect(steps.cards).not.toHaveBeenCalled();
       expect(titles(chapter.cards)).toEqual(['s1']);
+    });
+
+    it('drops a stored card from a refused site and makes its topic again', async () => {
+      paths.chapterCards.mockResolvedValue(
+        new Map([
+          [
+            1,
+            [
+              {
+                title: 'video',
+                text: 'x',
+                source: {
+                  label: 'l',
+                  url: 'https://www.youtube.com/watch?v=1',
+                  quote: 'q',
+                },
+              },
+            ],
+          ],
+        ]),
+      );
+      steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'a')] }));
+
+      const chapter = await service.make(7, 1);
+
+      expect(steps.subject).toHaveBeenCalledTimes(1);
+      expect(titles(chapter.cards)).toEqual(['a']);
+    });
+
+    it('a block query keeps the first words of every topic, without its numbering', async () => {
+      paths.discipline.mockResolvedValue({
+        id: 7,
+        name: 'Cálculo',
+        topics: Array.from(
+          { length: 6 },
+          (_, i) => `${i + 1}. Tema ${i} com muitas palavras que não cabem`,
+        ),
+      });
+
+      await service.make(7, 0);
+
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo ' +
+          [0, 1, 2, 3, 4, 5]
+            .map((i) => `Tema ${i} com muitas palavras`)
+            .join(' '),
+        5,
+        false,
+      );
     });
 
     it("searches the block once, saves every topic with a verified card and returns this topic's", async () => {

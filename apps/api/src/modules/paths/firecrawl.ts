@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { refusedPage } from './source-check.js';
+import { REFUSED_SITES, refusedPage } from './source-check.js';
 
 /** A page a search found, with its main text as Firecrawl downloaded it: the only text a card may quote. */
 export interface Page {
@@ -13,16 +13,8 @@ const TIMEOUT_MS = 90_000;
 /** The most of a page's text the model reads: about 2,000 tokens. */
 export const PAGE_CHARS = 8_000;
 
-// Never an academic source here: Wikipedia comes from its own search, the rest are copies of other people's work.
-const EXCLUDED = [
-  'wikipedia.org',
-  'scribd.com',
-  'passeidireto.com',
-  'brainly.com',
-  'brainly.com.br',
-  'studocu.com',
-  'slideshare.net',
-];
+// Wikipedia comes from its own search; the refused sites never.
+const EXCLUDED = ['wikipedia.org', ...REFUSED_SITES];
 
 const result = z.object({
   url: z.string(),

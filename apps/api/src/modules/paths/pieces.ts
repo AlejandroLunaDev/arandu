@@ -48,9 +48,10 @@ export type StoredChapter = ChapterContent & { pieces?: Piece[] };
 const text = z.string().min(1);
 const two = z.object({ first: text, second: text });
 
-// Kept without tuples or optional fields: the provider's structured output refuses `prefixItems` and large grammars.
+// Kept without tuples or optional fields: the provider's structured output refuses `prefixItems`. All the parts in one
+// schema compile to a grammar every provider refuses as too large (2026-11-25), so they come in two calls.
 // A part a topic has no use for is an empty list.
-export const piecesDraft = z.object({
+export const basicsDraft = z.object({
   concepts: z
     .array(z.object({ term: text, definition: text }))
     .min(3)
@@ -92,6 +93,10 @@ export const piecesDraft = z.object({
     why: text,
   }),
   cases: z.array(z.object({ situation: text, term: text, why: text })).max(2),
+});
+
+/** Practice for topics that calculate, reason with rules or program: empty lists for any other topic. */
+export const practiceDraft = z.object({
   problems: z
     .array(
       z.object({
@@ -135,7 +140,8 @@ export const piecesDraft = z.object({
     .max(2),
 });
 
-export type PiecesDraft = z.infer<typeof piecesDraft>;
+export type PiecesDraft = z.infer<typeof basicsDraft> &
+  z.infer<typeof practiceDraft>;
 
 const same = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
