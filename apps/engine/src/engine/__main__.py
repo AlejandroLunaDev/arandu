@@ -1,12 +1,17 @@
 """Run one adapter by hand: python -m engine <adapter>. Reads DATABASE_URL (ADR-0003)."""
 
+import hashlib
 import os
+import pathlib
 import sys
 import tempfile
 
 import psycopg
 
 from engine import anima, belas_artes, facsp, fatec, fetch, fiap, inep_census, mackenzie, mec_powerbi, unifesp, unip, usp
+
+# A fetched document its adapter could not read is kept here, so fixing the reader does not pay for the fetch again.
+UNREAD = pathlib.Path(__file__).resolve().parents[2] / ".unread"
 
 # Run order for 'all': each list adapter comes before the level it registers (<x>_courses before <x>_curriculum).
 ADAPTERS = {
@@ -55,18 +60,33 @@ def run(conn, name):
         for source_id, url, last_hash in sources:
             try:
                 with tempfile.TemporaryFile() as doc:
-                    digest = getattr(adapter, "download", fetch.download)(url, doc)
-                    parsed = None
-                    if digest != last_hash:
+                    kept = UNREAD / hashlib.sha256(url.encode()).hexdigest()
+                    if kept.exists():
+                        # shortcut: a kept document is read again instead of fetched until its reader handles it,
+                        # so a page that changes meanwhile is only seen once it parses; delete the file to refetch.
+                        content = kept.read_bytes()
+                        doc.write(content)
+                        digest = hashlib.sha256(content).hexdigest()
+                    else:
+                        digest = getattr(adapter, "download", fetch.download)(url, doc)
+                    try:
+                        parsed = None
+                        if digest != last_hash:
+                            doc.seek(0)
+                            parsed = adapter.parse(doc)
+                        with conn.transaction():
+                            if parsed is not None:
+                                written += adapter.load(conn, source_id, parsed)
+                            conn.execute(
+                                "update sources set last_fetched_at = now(), last_content_hash = %s where id = %s",
+                                (digest, source_id),
+                            )
+                    except Exception:
+                        UNREAD.mkdir(exist_ok=True)
                         doc.seek(0)
-                        parsed = adapter.parse(doc)
-                    with conn.transaction():
-                        if parsed is not None:
-                            written += adapter.load(conn, source_id, parsed)
-                        conn.execute(
-                            "update sources set last_fetched_at = now(), last_content_hash = %s where id = %s",
-                            (digest, source_id),
-                        )
+                        kept.write_bytes(doc.read())
+                        raise
+                    kept.unlink(missing_ok=True)
             except Exception as error:
                 failures.append(f"{url}: {error}")
         if failures:

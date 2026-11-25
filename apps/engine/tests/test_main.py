@@ -1,5 +1,8 @@
 import contextlib
+import hashlib
 import io
+import pathlib
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -59,6 +62,17 @@ def adapter(db, fail_on=()):
 
 
 class RunTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.unread = pathlib.Path(tmp.name) / "unread"
+        patch = mock.patch.object(cli, "UNREAD", self.unread)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def kept(self, url):
+        return self.unread / hashlib.sha256(url.encode()).hexdigest()
+
     def run_adapter(self, db, ad, hashes=None):
         def download(url, dest):
             dest.write(url.encode())
@@ -91,6 +105,22 @@ class RunTest(unittest.TestCase):
         self.assertIn("bad: cannot parse bad", message)
         self.assertEqual(db.runs[0]["status"], "failed")
         self.assertEqual(db.runs[0]["error"], message)
+
+    def test_a_failing_source_keeps_its_bytes_unread(self):
+        db = FakeDb({"fake": [(1, "bad", None)]})
+        with self.assertRaises(RuntimeError):
+            self.run_adapter(db, adapter(db, fail_on={"bad"}))
+        self.assertEqual(self.kept("bad").read_bytes(), b"bad")
+
+    def test_a_kept_document_is_read_without_downloading_and_removed_once_loaded(self):
+        db = FakeDb({"fake": [(1, "a", None)]})
+        self.unread.mkdir()
+        self.kept("a").write_bytes(b"kept bytes")
+        with mock.patch.dict(cli.ADAPTERS, {"fake": adapter(db)}),                 mock.patch.object(cli.fetch, "download", side_effect=AssertionError("fetched")):
+            cli.run(db, "fake")
+        self.assertEqual(db.ran, ["kept bytes"])
+        self.assertEqual(db.hashes, {1: hashlib.sha256(b"kept bytes").hexdigest()})
+        self.assertFalse(self.kept("a").exists())
 
     def test_download_failure_is_collected_like_a_parse_failure(self):
         db = FakeDb({"fake": [(1, "a", None)]})
