@@ -68,6 +68,7 @@ describe('refusedPage', () => {
     'https://www.youtube.com/watch?v=1',
     'https://m.YouTube.com/watch?v=1',
     'https://youtu.be/1',
+    'https://www.google.com/goto?url=CAESZw',
     'http://scielo.br/a',
     'not a url',
   ])('refuses %s', (url) => {

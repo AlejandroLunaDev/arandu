@@ -82,6 +82,8 @@ export const REFUSED_SITES = [
   'example.com',
   'example.org',
   'example.net',
+  // A search can return Google's own redirect links (google.com/goto?url=...): the page behind one is unknown, even a video.
+  'google.com',
 ];
 
 /** True for a page that may not be a source: not https, or on a refused site. */
