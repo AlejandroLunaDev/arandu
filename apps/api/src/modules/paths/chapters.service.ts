@@ -74,8 +74,10 @@ async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
   try {
     return (await draft).object;
   } catch (error) {
-    if (error instanceof AiOutputError) return null;
-    throw error;
+    if (!(error instanceof AiOutputError)) throw error;
+    // The reason a draft missed its schema is what tells a weak prompt from a weak page.
+    Logger.warn(String(error).slice(0, 500), 'ChaptersService');
+    return null;
   }
 }
 

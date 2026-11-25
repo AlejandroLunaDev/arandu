@@ -10,6 +10,10 @@ export interface Page {
 
 const SEARCH = 'https://api.firecrawl.dev/v2/search';
 const TIMEOUT_MS = 90_000;
+/** A search refused for the rate limit is tried this many times in all. */
+const RATE_TRIES = 4;
+const rateLimited = z.object({ retry_after_seconds: z.number().nonnegative() });
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 /** The most of a page's text the model reads: about 2,000 tokens. */
 export const PAGE_CHARS = 8_000;
 
@@ -41,28 +45,38 @@ export async function searchPages(
   limit: number,
   wikipedia: boolean,
 ): Promise<Page[]> {
-  const res = await fetch(SEARCH, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  const body = JSON.stringify({
+    query,
+    limit,
+    country: 'BR',
+    location: 'Brazil',
+    ...(wikipedia
+      ? { includeDomains: ['pt.wikipedia.org'] }
+      : { excludeDomains: EXCLUDED }),
+    scrapeOptions: {
+      formats: ['markdown'],
+      onlyMainContent: true,
+      parsers: [],
     },
-    body: JSON.stringify({
-      query,
-      limit,
-      country: 'BR',
-      location: 'Brazil',
-      ...(wikipedia
-        ? { includeDomains: ['pt.wikipedia.org'] }
-        : { excludeDomains: EXCLUDED }),
-      scrapeOptions: {
-        formats: ['markdown'],
-        onlyMainContent: true,
-        parsers: [],
-      },
-    }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+  let res: Response;
+  for (let attempt = 1; ; attempt++) {
+    res = await fetch(SEARCH, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (res.status !== 429 || attempt === RATE_TRIES) break;
+    // The plan allows a few searches a minute: wait the seconds Firecrawl names, then search again.
+    const wait = rateLimited.safeParse(await res.json().catch(() => null));
+    await sleep(
+      ((wait.success ? wait.data.retry_after_seconds : 10) + 1) * 1000,
+    );
+  }
   if (!res.ok)
     throw new Error(
       `Firecrawl search answered HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
