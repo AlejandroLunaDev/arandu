@@ -257,7 +257,7 @@ def load_ementas(conn, source_id, units):
                  set name = excluded.name, topics = excluded.topics, source_id = excluded.source_id
                  where (disciplines.name, disciplines.topics, disciplines.source_id)
                    is distinct from (excluded.name, excluded.topics, excluded.source_id)""",
-            (code, name, [text], source_id, inep_code)).rowcount
+            (code, name, curricula.split_topics(text) or None, source_id, inep_code)).rowcount
     return written + conn.execute(
         "select coalesce(sum(staging.link_disciplines(id)), 0) from public.sources where adapter = 'anima_curriculum'"
     ).fetchone()[0]

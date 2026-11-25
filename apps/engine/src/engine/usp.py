@@ -90,6 +90,8 @@ def parse_discipline(doc):
     topics, titles = (_lines(match[1]) if match else [] for match in sections)
     cut = next((i for i, line in enumerate(topics) if LABEL.match(line)), len(topics))
     topics = topics[:cut]  # some pages write their bibliography inside the Conteúdo Programático
+    if len(topics) == 1:  # a programa written as one line ('1 - História; 2 - Noções; ...') is its items
+        topics = curricula.split_topics(topics[0])
     titles = [t for t in titles if not LABEL.match(t)]
     return heading[1], " ".join(entities.unescape(heading[2]).split()), topics or None, titles or None
 
