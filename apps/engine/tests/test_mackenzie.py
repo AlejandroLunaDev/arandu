@@ -320,12 +320,6 @@ class DownloadPageTest(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             self.run_with_errors({"https://www.mackenzie.br/a/1__Etapa.pdf": down})
 
-    def test_a_pdf_refused_by_robots_is_skipped_and_the_digest_changes(self):
-        whole = self.run_with_errors({})[0]
-        digest, bundle, *_ = self.run_with_errors({"https://www.mackenzie.br/a/ETAPA_1.pdf": PermissionError("robots")})
-        self.assertEqual(bundle.namelist(), ["page.html", "0.pdf"])
-        self.assertNotEqual(digest, whole)
-
     def test_the_page_itself_failing_still_raises(self):
         with mock.patch.object(mackenzie.fetch, "download", side_effect=urllib.error.HTTPError("u", 404, "x", {}, None)):
             with self.assertRaises(urllib.error.HTTPError):

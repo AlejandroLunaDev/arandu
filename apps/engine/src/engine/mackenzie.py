@@ -143,9 +143,6 @@ def download_page(url, dest):
                         raise
                     digest.update(f"{pdf_url} {error.code}".encode())
                     continue  # a dead link: its ementas go, the page's subjects still load
-                except PermissionError:  # robots.txt disallows it
-                    digest.update(f"{pdf_url} disallowed".encode())
-                    continue
                 part.seek(0)
                 bundle.writestr(f"{n}.pdf", part.read())
     return digest.hexdigest()

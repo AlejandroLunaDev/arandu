@@ -8,6 +8,8 @@ import io
 import re
 import zipfile
 
+from engine import fetch
+
 COURSES_FILE = re.compile(r"MICRODADOS_CADASTRO_CURSOS_\d{4}\.CSV$", re.IGNORECASE)
 IES_FILE = re.compile(r"MICRODADOS_ED_SUP_IES_\d{4}\.CSV$", re.IGNORECASE)
 COURSE_COLUMNS = (
@@ -19,6 +21,7 @@ IES_COLUMNS = ("CO_IES", "NO_IES", "SG_IES", "TP_CATEGORIA_ADMINISTRATIVA")
 CITY = ("SP", "São Paulo")  # the scope is São Paulo city only (owner, 2026-11-25)
 # TP_DIMENSAO: 1 in-person courses, 2 distance courses, one row per municipality where they have students.
 DIMENSIONS = ("1", "2")
+download = fetch.download_direct  # a 450 MB official ZIP: too large for the scraper
 MIN_ROWS_RATIO = 0.5  # fewer city courses than half the last load means the format probably changed
 
 

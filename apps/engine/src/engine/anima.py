@@ -185,7 +185,7 @@ def download_ementas(url, dest):
 
 
 def _fetch_part(url, part, digest):
-    """Download url into part and fold it into digest; False for a dead or disallowed link."""
+    """Download url into part and fold it into digest; False for a dead link."""
     try:
         digest.update(fetch.download(url, part).encode())
         part.seek(0)
@@ -194,8 +194,6 @@ def _fetch_part(url, part, digest):
         if error.code not in GONE:
             raise
         digest.update(f"{url} {error.code}".encode())
-    except PermissionError:  # robots.txt disallows it
-        digest.update(f"{url} disallowed".encode())
     return False
 
 
