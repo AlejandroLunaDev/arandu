@@ -4,9 +4,9 @@ import type { ChatMessage } from '@arandu/contracts';
 import { AiService, type AiTextResult } from '@nestjs/ai';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module.js';
-import { CareerChatService } from '../src/career-chat/career-chat.service.js';
-import { curriculaText } from '../src/career-chat/career-chat.prompt.js';
-import { CareersRepository } from '../src/careers/careers.repository.js';
+import { CareerChatService } from '../src/modules/career-chat/career-chat.service.js';
+import { curriculaText } from '../src/modules/career-chat/career-chat.prompt.js';
+import { CareersRepository } from '../src/modules/careers/careers.repository.js';
 import { createJudge, questionMarks } from './judge.js';
 
 /** Each case runs this many times: a model answers differently each time, and a case passes only if every run does. */

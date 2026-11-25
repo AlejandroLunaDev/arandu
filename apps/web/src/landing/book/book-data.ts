@@ -37,7 +37,7 @@ const THUMB = 500;
  */
 export const thumb = (url: string) => {
   const m = /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/(\w\/\w\w)\/([^/]+)$/.exec(url);
-  return m && !/\.svg$/i.test(m[2]) ? `https://upload.wikimedia.org/wikipedia/commons/thumb/${m[1]}/${m[2]}/${THUMB}px-${m[2]}` : url;
+  return m && !/\.svg$/i.test(m[2]!) ? `https://upload.wikimedia.org/wikipedia/commons/thumb/${m[1]}/${m[2]}/${THUMB}px-${m[2]}` : url;
 };
 
 /** The universities the book shows: only those with a photo of their own (owner's rule). */

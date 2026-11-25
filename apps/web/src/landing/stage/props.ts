@@ -306,8 +306,9 @@ export function makeKit(gltf: GLTF): Kit {
         );
       }
     }
-    if (FACES[m.name]) {
-      const map = FACES[m.name]();
+    const face = FACES[m.name];
+    if (face) {
+      const map = face();
       // Its own light, so it reads in the dark room; the GitHub plaque's rises under the pointer (run-stage).
       owned.push(
         map,
@@ -410,6 +411,16 @@ export function makeKit(gltf: GLTF): Kit {
     g.fillText(text, 0, 0);
   };
 
+  // A title too long for one line down the spine (it would shrink past reading) breaks at the space nearest its
+  // middle, on two.
+  const spineLines = (g: CanvasRenderingContext2D, text: string, size: number, length: number) => {
+    g.font = `600 ${size}px ${tokenValue("font-display")}`;
+    if (g.measureText(text).width <= length * 1.4 || !text.includes(" ")) return [text];
+    const spaces = [...text.matchAll(/ /g)].map((m) => m.index);
+    const at = spaces.reduce((best, i) => (Math.abs(i - text.length / 2) < Math.abs(best - text.length / 2) ? i : best));
+    return [text.slice(0, at), text.slice(at + 1)];
+  };
+
   // Each book gets its own spine and covers: no two carry the same title and proportions.
   const dress = (name: BookName, look: BookLook, career: string) => {
     const s = size(name);
@@ -424,7 +435,14 @@ export function makeKit(gltf: GLTF): Kit {
       g.fillRect(0, h * 0.83, w, h * 0.035);
       g.translate(w / 2, h * 0.47);
       g.rotate(Math.PI / 2);
-      write(g, career, w * 0.56, h * 0.66);
+      const lines = spineLines(g, career, w * 0.56, h * 0.66);
+      const size = lines.length === 1 ? w * 0.56 : w * 0.36;
+      lines.forEach((line, i) => {
+        g.save();
+        g.translate(0, (i - (lines.length - 1) / 2) * size * 1.08);
+        write(g, line, size, h * 0.66);
+        g.restore();
+      });
     });
     // Both covers map their flat part, from the spine's edge to the fore-edge, onto the full image.
     // The board edges sample its top-right corner, which stays plain.

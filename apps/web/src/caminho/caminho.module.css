@@ -1,0 +1,444 @@
+/* P1: the subject's path. */
+.map {
+  position: relative;
+  padding-bottom: 32px;
+  overflow: hidden;
+}
+
+/* The amber glow behind the stop the person is on. */
+.map::before {
+  content: "";
+  position: absolute;
+  top: 120px;
+  right: -230px;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--amber-300) 20%, transparent), transparent);
+  pointer-events: none;
+}
+
+.stats {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 0;
+}
+
+.grow {
+  flex: 1;
+}
+
+.stat {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 4px;
+  border: 1px solid var(--ink-700);
+  border-radius: 99px;
+  background: var(--ink-850);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.stat img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.stat svg {
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A 44px hit area around the 32px back pill. */
+a.stat::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.head {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px 6px;
+}
+
+.head h1 {
+  max-width: 300px;
+  margin: 0;
+  font: 800 30px/31px var(--font-bricolage), var(--font-display);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.cap {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cap[data-amber] {
+  color: var(--amber-300);
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* The stops wind down the screen in five columns, in turn. */
+.path {
+  position: relative;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 92px;
+}
+
+.row[data-col="0"] {
+  padding-left: 40px;
+}
+
+.row[data-col="1"] {
+  padding-left: 150px;
+}
+
+.row[data-col="2"] {
+  padding-left: 84px;
+}
+
+.row[data-col="3"] {
+  padding-left: 190px;
+}
+
+.row[data-col="4"] {
+  padding-left: 96px;
+}
+
+/* The stop the person is on leaves room above it for its card. */
+.row[data-state="current"] {
+  margin-top: 132px;
+}
+
+.node {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  font: 800 22px/1 var(--font-bricolage), var(--font-display);
+  text-decoration: none;
+}
+
+.row[data-state="current"] .node {
+  background: var(--amber-400);
+  box-shadow:
+    0 5px 0 var(--amber-800),
+    0 0 0 6px color-mix(in srgb, var(--amber-400) 18%, transparent),
+    0 0 40px color-mix(in srgb, var(--amber-300) 45%, transparent);
+  color: var(--ink-900);
+}
+
+.row[data-state="done"] .node {
+  background: var(--amber-700);
+  box-shadow: 0 5px 0 var(--amber-900);
+  color: var(--cream-50);
+}
+
+.row[data-state="locked"] .node {
+  border: 2px solid var(--ink-700);
+  background: var(--ink-850);
+  box-shadow: 0 5px 0 var(--ink-950);
+  color: var(--ink-500);
+}
+
+.node svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node:focus-visible,
+.go:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.label {
+  max-width: 170px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.row[data-state="locked"] .label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sitter {
+  position: absolute;
+  top: -14px;
+  left: 150px;
+  width: 118px;
+}
+
+/* The current stop's card, its tail pointing down at the node. */
+.pop {
+  position: absolute;
+  top: -128px;
+  right: 20px;
+  left: 20px;
+  z-index: 3;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 16px;
+  border: 1px solid var(--ink-600);
+  border-radius: 18px;
+  background: var(--ink-850);
+}
+
+.pop::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 56px;
+  width: 14px;
+  height: 14px;
+  border-right: 1px solid var(--ink-600);
+  border-bottom: 1px solid var(--ink-600);
+  background: var(--ink-850);
+  rotate: 45deg;
+}
+
+.popTitle {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+/* The main button's look (ui MainButton), as a link into the stop. */
+.go {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 50px;
+  border-radius: 14px;
+  background: var(--ink-950);
+  color: var(--text);
+  font: 600 15px/1 var(--font-body);
+  text-decoration: none;
+  filter: drop-shadow(1.5px 0 0 var(--violet-400)) drop-shadow(-1.5px 0 0 var(--violet-400)) drop-shadow(0 -1.5px 0 var(--violet-400))
+    drop-shadow(0 3px 0 var(--violet-400));
+}
+
+.go::before,
+.go::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  width: 12px;
+  height: 10px;
+  background: inherit;
+}
+
+.go::before {
+  left: 16px;
+  clip-path: polygon(0 100%, 25% 0, 100% 100%);
+}
+
+.go::after {
+  left: 32px;
+  clip-path: polygon(0 100%, 75% 0, 100% 100%);
+}
+
+.go svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--amber-400);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.empty h1 {
+  margin: 0;
+  font: 800 24px/28px var(--font-bricolage), var(--font-display);
+  text-wrap: balance;
+}
+
+.empty a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--violet-200);
+  font-weight: 600;
+}
+
+/* P6: no novelos left. */
+.out {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 24px 0;
+  text-align: center;
+}
+
+.out h1 {
+  margin: 4px 0 0;
+  font: 800 26px/30px var(--font-bricolage), var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.out p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.outCat {
+  width: 150px;
+}
+
+.timer {
+  margin-top: 4px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  background: var(--ink-850);
+  box-shadow: inset 0 0 0 1.5px var(--ink-700);
+  color: var(--amber-300);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ways {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 16px 0;
+}
+
+.way {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 2px solid var(--ink-700);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+  color: var(--text);
+  text-align: left;
+}
+
+.way:disabled {
+  opacity: 0.5;
+}
+
+.way img {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.way b {
+  display: block;
+  font-size: 15px;
+  line-height: 19px;
+}
+
+.way small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.way:focus-visible,
+.ghost:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.ghost {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--violet-200);
+  font: 500 14px/1 var(--font-body);
+}
+
+/* P1 with every stop done: the semester's next book. */
+.next {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 24px 20px 0;
+  padding: 16px;
+  border: 2px solid var(--violet-400);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+}
+
+.next p {
+  margin: 0;
+}

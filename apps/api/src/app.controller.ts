@@ -1,10 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service.js';
-import { Public } from './auth/public.decorator.js';
+import { OpenToBrowsers } from './modules/auth/public.decorator.js';
 import { SkipThrottle } from '@nestjs/throttler';
 
 /** Health check: public and never rate limited, or Render's checks and UptimeRobot would mark the API down. */
-@Public()
+@OpenToBrowsers()
 // Named: a bare @SkipThrottle() skips only a throttler called "default".
 @SkipThrottle({ burst: true, daily: true })
 @Controller()

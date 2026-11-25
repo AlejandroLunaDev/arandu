@@ -6,6 +6,7 @@ import noRawDesignValues from "./lint/no-raw-design-values.mjs";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
   {
     files: ["src/**/*.{js,jsx,mjs,ts,tsx}"],
     plugins: { arandu: { rules: { "no-raw-design-values": noRawDesignValues } } },
@@ -18,8 +19,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Blender scripts and their three.js preview are not part of the app.
-    "blender/**",
     // The Draco decoder is copied as is from three.js (three/examples/jsm/libs/draco/gltf).
     "public/draco/**",
   ]),

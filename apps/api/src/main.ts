@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
-import type { Env } from './config/env.js';
+import type { Env } from './core/config/env.js';
 
 async function bootstrap() {
   const production = process.env.NODE_ENV === 'production';
@@ -18,11 +18,12 @@ async function bootstrap() {
   });
   const config = app.get<ConfigService<Env, true>>(ConfigService);
 
-  // Only the web app may call the API from a browser; the token travels in the Authorization header, not a cookie.
+  // Browsers call only the landing's books (GET): everything else goes through the web's Next server, which holds
+  // the tokens (AuthGuard refuses a call without its internal secret).
   app.enableCors({
     origin: config.get('CORS_ORIGINS', { infer: true }),
-    methods: ['GET', 'POST', 'DELETE'],
-    allowedHeaders: ['Authorization', 'Content-Type'],
+    methods: ['GET'],
+    allowedHeaders: [],
     maxAge: 600,
   });
   // The largest valid body is a profile or a 2000-character message: anything bigger is refused before parsing.

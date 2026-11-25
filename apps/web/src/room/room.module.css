@@ -1,0 +1,141 @@
+.room {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 12px 16px 16px;
+}
+
+.top {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.top p {
+  display: inline-flex;
+  margin: 0;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 4px;
+  border: 1px solid var(--ink-800);
+  border-radius: 99px;
+  background: var(--ink-850);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Both sides set: with only the width, the preflight's height: auto follows the file's ratio, not the box. */
+.top img {
+  width: 26px;
+  height: 17px;
+  object-fit: contain;
+}
+
+.week img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* S1's week strip: a patinha per day studied, today ringed in amber, the goal on the right. */
+.week {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.week > div {
+  display: flex;
+  gap: 4px;
+}
+
+.week span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 26px;
+  padding: 2px 0;
+  border-radius: 8px;
+}
+
+.week img {
+  opacity: 0.16;
+  filter: grayscale(1);
+}
+
+.week [data-on] img {
+  opacity: 1;
+  filter: none;
+}
+
+.week [data-today] {
+  box-shadow: inset 0 0 0 1.5px var(--amber-400);
+}
+
+.week [data-today]:not([data-on]) img {
+  opacity: 0.45;
+  filter: none;
+}
+
+.week i {
+  color: var(--ink-500);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 11px;
+}
+
+.week [data-today] i {
+  color: var(--amber-300);
+}
+
+.week p {
+  margin: 0 0 0 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.week p strong {
+  color: var(--amber-200);
+  font-weight: 600;
+}
+
+.cat {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.catModel {
+  width: 220px;
+}
+
+.book {
+  padding: 12px;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 12px;
+}
+
+.book p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.book strong {
+  display: block;
+  margin-top: 2px;
+  font: 700 16px/1.25 var(--font-bricolage), var(--font-display);
+}
+
+.book span {
+  display: block;
+  margin-top: 4px;
+  color: var(--violet-200);
+  font-size: 12px;
+}

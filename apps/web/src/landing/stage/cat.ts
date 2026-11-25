@@ -3,7 +3,7 @@ import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { tokenColor } from "./palette";
 
 // Arandu, from public/models/arandu.glb (built by blender/arandu): feet at the origin, facing +X,
-// metres. The clips (sit, walk, jump, tap, read, lie) key the body bones only; this file drives the face bones:
+// metres. The clips (sit, walk, jump, tap, read, lie, startle, arch, stretch) key the body bones only; this file drives the face bones:
 // the head and eyes follow the pointer, the lids blink, the ears twitch now and then.
 
 export type CatPose = {
@@ -27,6 +27,12 @@ export type CatPose = {
   lie: number;
   /** A world point to look at, or null to look around on his own. */
   look: THREE.Vector3 | null;
+  /** 0..1 through the startle clip (he jerks upright, tail up), which starts and ends sitting. */
+  startle?: number;
+  /** 0..1 through the stretch clip (the play bow), which starts and ends sitting. */
+  stretch?: number;
+  /** Weight of the arch clip, 0..1: cross, crouched with his back humped and his tail lashing. */
+  arch?: number;
 };
 
 /** Where, through the tap clip, the paw meets the floor: frames 10 and 16 of 32 (blender/arandu/animate.py). */
@@ -80,17 +86,18 @@ float rimFresnel = pow(1.0 - clamp(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 
 totalEmissiveRadiance += uRimColor * (0.35 * rimFresnel);
 `;
 
-function addRim(m: THREE.MeshStandardMaterial) {
+function addRim(m: THREE.MeshStandardMaterial, rim: string) {
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uRimColor = { value: tokenColor("violet-400") };
+    shader.uniforms.uRimColor = { value: tokenColor(rim) };
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\nuniform vec3 uRimColor;")
       .replace("#include <emissivemap_fragment>", RIM);
   };
-  m.customProgramCacheKey = () => "arandu-rim";
+  m.customProgramCacheKey = () => `arandu-rim-${rim}`;
 }
 
-export function makeCat(gltf: GLTF): Cat {
+/** rim: the token his outline glows in; the landing's night room keeps the violet one. */
+export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
   const model = gltf.scene;
   const furs: THREE.SkinnedMesh[] = [];
   model.traverse((o) => {
@@ -99,7 +106,7 @@ export function makeCat(gltf: GLTF): Cat {
     const m = o.material as THREE.MeshStandardMaterial;
     if (m.name === "AranduFur" && o instanceof THREE.SkinnedMesh) {
       furs.push(o);
-      addRim(m);
+      addRim(m, rim);
     }
     if (m.name === "AranduEye") {
       m.emissive = tokenColor("amber-300");
@@ -127,10 +134,13 @@ export function makeCat(gltf: GLTF): Cat {
     };
   }
 
+  const head = rig.head;
+  if (!head) throw new Error("arandu.glb has no head bone");
+
   // His mouth: ahead of the head bone and below it, at rest, in metres of the model.
   const mouth = new THREE.Object3D();
-  mouth.position.copy(rig.head.bone.worldToLocal(rig.head.pos.clone().add(MOUTH)));
-  rig.head.bone.add(mouth);
+  mouth.position.copy(head.bone.worldToLocal(head.pos.clone().add(MOUTH)));
+  head.bone.add(mouth);
 
   // The book's pages face +Z in its own frame: turned to -X, toward him.
   const paws = new THREE.Object3D();
@@ -151,7 +161,7 @@ export function makeCat(gltf: GLTF): Cat {
     a.setEffectiveWeight(0);
     act[clip.name] = a;
   }
-  for (const name of ["walk", "jump", "tap"]) if (act[name]) act[name].paused = true;
+  for (const name of ["walk", "jump", "tap", "startle", "stretch"]) if (act[name]) act[name].paused = true;
 
   // Turns about model axes, taken from the bone's rest orientation.
   const tq = new THREE.Quaternion();
@@ -188,17 +198,29 @@ export function makeCat(gltf: GLTF): Cat {
     paws,
     update(p, dt, time) {
       for (const r of Object.values(rig)) if (r.clip) r.bone.quaternion.copy(r.clip);
-      // The tap clip takes over from the others while it runs, eased in and out at its ends.
-      const tap = p.tap > 0 && p.tap < 1 ? smooth(0, 0.1, p.tap) * (1 - smooth(0.9, 1, p.tap)) : 0;
-      act.sit?.setEffectiveWeight(p.sit * (1 - tap) * (1 - p.hold) * (1 - p.lie));
-      act.read?.setEffectiveWeight(p.sit * (1 - tap) * p.hold);
-      act.lie?.setEffectiveWeight(p.sit * (1 - tap) * p.lie);
-      act.walk?.setEffectiveWeight((1 - p.sit) * (1 - p.air) * (1 - tap));
-      act.jump?.setEffectiveWeight(p.air * (1 - tap));
+      // A clip played once (tap, startle, stretch) takes over from the others while it runs, eased in and out at its
+      // ends; the arch takes over from the rest by its weight.
+      const once = (t = 0) => (t > 0 && t < 1 ? smooth(0, 0.1, t) * (1 - smooth(0.9, 1, t)) : 0);
+      const tap = once(p.tap);
+      const startle = once(p.startle);
+      const stretch = once(p.stretch);
+      const shot = Math.min(1, tap + startle + stretch);
+      const arch = clamp(p.arch ?? 0, 0, 1) * (1 - shot);
+      const rest = (1 - shot) * (1 - arch);
+      act.sit?.setEffectiveWeight(p.sit * rest * (1 - p.hold) * (1 - p.lie));
+      act.read?.setEffectiveWeight(p.sit * rest * p.hold);
+      act.lie?.setEffectiveWeight(p.sit * rest * p.lie);
+      act.walk?.setEffectiveWeight((1 - p.sit) * (1 - p.air) * rest);
+      act.jump?.setEffectiveWeight(p.air * rest);
       act.tap?.setEffectiveWeight(tap);
+      act.startle?.setEffectiveWeight(startle);
+      act.stretch?.setEffectiveWeight(stretch);
+      act.arch?.setEffectiveWeight(arch);
       if (act.walk) act.walk.time = (((p.stride % 1) + 1) % 1) * act.walk.getClip().duration;
       if (act.jump) act.jump.time = clamp(p.leap, 0, 1) * act.jump.getClip().duration;
       if (act.tap) act.tap.time = clamp(p.tap, 0, 0.999) * act.tap.getClip().duration;
+      if (act.startle) act.startle.time = clamp(p.startle ?? 0, 0, 0.999) * act.startle.getClip().duration;
+      if (act.stretch) act.stretch.time = clamp(p.stretch ?? 0, 0, 0.999) * act.stretch.getClip().duration;
       mixer.update(dt);
 
       // Head and eyes follow the target; with none he looks around slowly.
@@ -206,7 +228,7 @@ export function makeCat(gltf: GLTF): Cat {
       let pitchTo = 0.08 * Math.sin(time * 0.31);
       if (p.look) {
         root.updateMatrixWorld(true);
-        model.worldToLocal(local.copy(p.look)).sub(rig.head.pos);
+        model.worldToLocal(local.copy(p.look)).sub(head.pos);
         yawTo = clamp(Math.atan2(-local.z, local.x), -1, 1);
         pitchTo = clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), -0.4, 0.5);
       }

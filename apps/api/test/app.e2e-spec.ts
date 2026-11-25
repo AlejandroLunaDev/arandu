@@ -1,13 +1,16 @@
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { AppModule } from './../src/app.module.js';
+import { AppModule } from '../src/app.module.js';
 
 // The real AppModule, with dummy variables: the database client connects lazily and the model is only called with a
 // valid token, so nothing here reaches a database, Supabase or OpenRouter.
 process.env.DATABASE_URL = 'postgresql://user:pass@127.0.0.1:1/none';
 process.env.SUPABASE_URL = 'https://dummy.supabase.co';
 process.env.OPENROUTER_API_KEY = 'dummy';
+process.env.SUPABASE_PUBLISHABLE_KEY = 'dummy';
+process.env.JWT_SECRET = 'j'.repeat(32);
+process.env.INTERNAL_API_SECRET = 'i'.repeat(32);
 
 describe('AppModule (e2e)', () => {
   let app: NestExpressApplication;
@@ -35,13 +38,18 @@ describe('AppModule (e2e)', () => {
       .expect(401);
 
     expect(res.body).toEqual({
-      statusCode: 401,
-      error: 'UNAUTHORIZED',
-      message: 'Sign in to talk with Arandu',
-      path: '/arandu/chat',
-      timestamp: expect.any(String),
+      error: {
+        statusCode: 401,
+        code: 'unauthorized',
+        message: 'Sign in again',
+      },
     });
   });
+
+  it('GET /arandu/memory/conversations without a token is 401', () =>
+    request(app.getHttpServer())
+      .get('/arandu/memory/conversations')
+      .expect(401));
 
   it('refuses a JSON body over 20 kb with 413', () =>
     request(app.getHttpServer())

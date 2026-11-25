@@ -223,7 +223,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     const w = room >= 0 ? world(room) : null;
     // One way only: he never turns back halfway.
     const dir = x >= pose.pos.x ? 1 : -1;
-    const plank = room >= 0 ? plankAt(rooms[room], pose.pos.y) : null;
+    const plank = room >= 0 ? plankAt(rooms[room]!, pose.pos.y) : null;
     for (let hops = 0; w && hops < 4; hops++) {
       const b = w.blocker(pose.pos.x + dir * 0.05, x + dir * AHEAD, pose.pos.y);
       if (!b) break;
@@ -654,7 +654,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
 
   /** What he does next, never the same twice in a row; off the plank, he first climbs back. */
   const choose = (): Doing => {
-    const r = rooms[room];
+    const r = rooms[room]!;
     const w = world(room);
     const ledge = w?.ledge();
     const drop = ledge ? dropTo(r, ledge) : null;
@@ -663,12 +663,12 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
       ["circle", 1, () => circle(r)],
       ["sleep", 6, () => sleep(r)],
     ];
-    if (w && r.reads.length > 0) options.push(["read", 3, () => read(r, w, r.reads[Math.floor(Math.random() * r.reads.length)])]);
+    if (w && r.reads.length > 0) options.push(["read", 3, () => read(r, w, r.reads[Math.floor(Math.random() * r.reads.length)]!)]);
     if (drop) options.push(["stroll", 3, () => stroll(r, drop)]);
     if (r.walk.to - r.walk.from > 0.1) options.push(["pace", 2, () => pace(r)]);
     const open = options.filter(([name]) => name !== last);
     let pick = Math.random() * open.reduce((sum, [, weight]) => sum + weight, 0);
-    const [name, , make] = open.find(([, weight]) => (pick -= weight) < 0) ?? open[0];
+    const [name, , make] = open.find(([, weight]) => (pick -= weight) < 0) ?? open[0]!;
     last = name;
     return make();
   };
@@ -710,14 +710,14 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
       const w = world(i);
       if (i !== room || !w || busy || leaving || still) return;
       end();
-      job = fetch(rooms[i], w, toy);
+      job = fetch(rooms[i]!, w, toy);
       // The pointer that threw it does not call him off it.
       calm = false;
     },
     update(step, idle) {
       dt = step;
       fetching?.wait();
-      for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].next().done) tasks.splice(i, 1);
+      for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i]!.next().done) tasks.splice(i, 1);
       if (room >= 0) {
         if (stop && !busy) end();
         if (leaving && !job) {
