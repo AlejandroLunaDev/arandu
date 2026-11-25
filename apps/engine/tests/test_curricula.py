@@ -47,9 +47,9 @@ class LoadDescribedTest(unittest.TestCase):
         return conn, load, order, result
 
     def test_codes_are_the_page_path_after_base_plus_the_name_and_inep_is_passed(self):
-        conn, *_ = self.load([("Web", "d1"), ("Data", "d2")])
+        conn, *_ = self.load([("Web", "Redes"), ("Data", "Dados")])
         upserts = [c for c in conn.calls if c[0].startswith("insert into public.disciplines")]
-        self.assertEqual([c[1] for c in upserts], [("a/b#Web", "Web", ["d1"], None, 7, 22), ("a/b#Data", "Data", ["d2"], None, 7, 22)])
+        self.assertEqual([c[1] for c in upserts], [("a/b#Web", "Web", ["Redes"], None, 7, 22), ("a/b#Data", "Data", ["Dados"], None, 7, 22)])
         self.assertEqual(conn.calls[1][1], (7, ["a/b#Web", "a/b#Data"]))
 
     def test_a_third_item_is_the_program_and_a_missing_one_is_none(self):
@@ -64,7 +64,7 @@ class LoadDescribedTest(unittest.TestCase):
         self.assertIn("disciplines.program", sql.split("where", 1)[1])
 
     def test_delete_first_then_upserts_then_load_subjects_last(self):
-        conn, load, order, result = self.load([("Web", "d1"), ("Data", "d2")])
+        conn, load, order, result = self.load([("Web", "Redes"), ("Data", "Dados")])
         sqls = [c[0] for c in conn.calls]
         self.assertTrue(sqls[0].startswith("select url from sources"))
         self.assertTrue(sqls[1].startswith("delete from public.disciplines where source_id"))
@@ -137,6 +137,40 @@ class LoadCoursesTest(unittest.TestCase):
         conn = Unchanged([(42,)])
         self.assertEqual(curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "São Paulo")]), 1)
         self.assertFalse(any("normalize_curriculum" in c[0] for c in conn.calls))
+
+
+class SplitTopicsTest(unittest.TestCase):
+    def test_sentences_and_semicolons_are_topics_in_order(self):
+        self.assertEqual(curricula.split_topics("Derivadas. Integral definida; métodos de integração. Limites."),
+                         ["Derivadas", "Integral definida", "métodos de integração", "Limites"])
+
+    def test_a_period_before_lowercase_or_after_an_ordinal_ends_no_topic(self):
+        self.assertEqual(curricula.split_topics("Equações do 1o. e 2o. Graus. Noções de cálculo, ex. limites."),
+                         ["Equações do 1o. e 2o. Graus", "Noções de cálculo, ex. limites"])
+
+    def test_animas_spaced_bullets_split(self):
+        self.assertEqual(curricula.split_topics(". Posse: Conceito . Propriedade .Garantias Reais"),
+                         ["Posse: Conceito", "Propriedade", "Garantias Reais"])
+
+    def test_numbered_items_split_at_their_numbers_only_and_keep_sub_items(self):
+        text = "1 - Breve história. Origens; 2 - Noções de programas; 3 - Linguagens; 3.1 Entrada e saída"
+        self.assertEqual(curricula.split_topics(text),
+                         ["Breve história. Origens", "Noções de programas", "Linguagens; 3.1 Entrada e saída"])
+
+    def test_one_numbered_item_is_prose(self):
+        self.assertEqual(curricula.split_topics("7- Direitos Transversais. Responsabilidade social"),
+                         ["7- Direitos Transversais", "Responsabilidade social"])
+
+    def test_page_furniture_is_cut_out_and_the_sentence_joined(self):
+        text = ("Conceitos da área de atuação Projeto Pedagógico do CST em Comércio Exterior Fatec Zona Leste - R-04 6. "
+                "do curso. Ementário Pág. 34 Ênfase na oralidade.  Leitura")
+        self.assertEqual(curricula.split_topics(text),
+                         ["Conceitos da área de atuação do curso", "Ênfase na oralidade", "Leitura"])
+
+    def test_pieces_that_are_no_topic_are_dropped(self):
+        text = ("Redes. Veja https://example.test. Departamento de Física - 4 créditos. Prova final. "
+                "Apresentação da disciplina e do plano. Assinado com senha por FULANO. 2. ;")
+        self.assertEqual(curricula.split_topics(text), ["Redes"])
 
 
 if __name__ == "__main__":
