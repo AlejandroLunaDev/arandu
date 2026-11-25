@@ -50,89 +50,63 @@ const two = z.object({ first: text, second: text });
 
 // Kept without tuples or optional fields: the provider's structured output refuses `prefixItems`. All the parts in one
 // schema compile to a grammar every provider refuses as too large (2026-11-25), so they come in two calls.
-// A part a topic has no use for is an empty list. Concepts and statements have no minimum here: a topic with one
-// central term gets fewer, and enoughPieces, not the parse, decides whether the chapter can be played.
+// A part a topic has no use for is an empty list. No counts here: the prompt asks for them, and piecesOf keeps the parts
+// in range, so one list too long or too short drops alone instead of the whole draft.
 export const basicsDraft = z.object({
-  concepts: z.array(z.object({ term: text, definition: text })).max(5),
-  statements: z.array(z.object({ right: text, wrong: text, why: text })).max(4),
-  classification: z
-    .array(
-      z.object({
-        prompt: text,
-        baskets: two,
-        items: z
-          .array(z.object({ text, basket: z.number().int() }))
-          .min(4)
-          .max(8),
-        why: text,
-      }),
-    )
-    .max(1),
-  sequence: z
-    .array(
-      z.object({ prompt: text, steps: z.array(text).min(3).max(6), why: text }),
-    )
-    .max(1),
-  sentence: z
-    .array(
-      z.object({
-        words: z.array(text).min(3).max(12),
-        distractors: z.array(text).max(3),
-        why: text,
-      }),
-    )
-    .max(1),
-  question: z.object({
-    prompt: text,
-    ideas: z.array(text).min(2).max(4),
-    why: text,
-  }),
-  cases: z.array(z.object({ situation: text, term: text, why: text })).max(2),
+  concepts: z.array(z.object({ term: text, definition: text })),
+  statements: z.array(z.object({ right: text, wrong: text, why: text })),
+  classification: z.array(
+    z.object({
+      prompt: text,
+      baskets: two,
+      items: z.array(z.object({ text, basket: z.number().int() })),
+      why: text,
+    }),
+  ),
+  sequence: z.array(
+    z.object({ prompt: text, steps: z.array(text), why: text }),
+  ),
+  sentence: z.array(
+    z.object({ words: z.array(text), distractors: z.array(text), why: text }),
+  ),
+  question: z.object({ prompt: text, ideas: z.array(text), why: text }),
+  cases: z.array(z.object({ situation: text, term: text, why: text })),
 });
 
 /** Practice for topics that calculate, reason with rules or program: empty lists for any other topic. */
 export const practiceDraft = z.object({
-  problems: z
-    .array(
-      z.object({
-        statement: text,
-        numbers: z
-          .array(
-            z.object({
-              name: text,
-              min: z.number(),
-              max: z.number(),
-              step: z.number(),
-            }),
-          )
-          .max(4),
-        booleans: z.array(text).max(3),
-        answer: text,
-        decimals: z.number().int(),
-        unit: z.string(),
-        mistakes: z
-          .array(z.object({ formula: text, why: text }))
-          .min(1)
-          .max(3),
-        example: z.array(z.object({ name: text, value: z.number() })).max(7),
-        exampleAnswer: z.number(),
-        why: text,
-      }),
-    )
-    .max(2),
-  code: z
-    .array(
-      z.object({
-        prompt: text,
-        language: text,
-        lines: z.array(text).min(3).max(10),
-        blankLine: z.number().int(),
-        blankToken: text,
-        distractors: z.array(text).min(2).max(3),
-        why: text,
-      }),
-    )
-    .max(2),
+  problems: z.array(
+    z.object({
+      statement: text,
+      numbers: z.array(
+        z.object({
+          name: text,
+          min: z.number(),
+          max: z.number(),
+          step: z.number(),
+        }),
+      ),
+      booleans: z.array(text),
+      answer: text,
+      decimals: z.number().int(),
+      unit: z.string(),
+      mistakes: z.array(z.object({ formula: text, why: text })),
+      example: z.array(z.object({ name: text, value: z.number() })),
+      exampleAnswer: z.number(),
+      why: text,
+    }),
+  ),
+  code: z.array(
+    z.object({
+      prompt: text,
+      language: text,
+      lines: z.array(text),
+      blankLine: z.number().int(),
+      blankToken: text,
+      distractors: z.array(text),
+      why: text,
+    }),
+  ),
 });
 
 export type PiecesDraft = z.infer<typeof basicsDraft> &
@@ -144,6 +118,8 @@ const same = (a: string, b: string) =>
 const distinct = (list: string[]) =>
   new Set(list.map((s) => s.trim().toLowerCase())).size === list.length;
 const bit = (i: number): i is 0 | 1 => i === 0 || i === 1;
+const within = (list: unknown[], min: number, max: number) =>
+  list.length >= min && list.length <= max;
 
 /** Kept when its formulas use only its own variables, its worked example adds up and most random plays are clean. */
 function problemOk(p: ProblemPiece): boolean {
@@ -151,6 +127,13 @@ function problemOk(p: ProblemPiece): boolean {
   if (
     !distinct(names) ||
     names.some((n) => !/^[A-Za-z_]\w*$/.test(n) || reserved(n))
+  )
+    return false;
+  if (
+    p.numbers.length > 4 ||
+    p.booleans.length > 3 ||
+    !within(p.mistakes, 1, 3) ||
+    p.example.length > 7
   )
     return false;
   if (p.decimals < 0 || p.decimals > 4) return false;
@@ -178,18 +161,19 @@ function problemOk(p: ProblemPiece): boolean {
 /** The chapter's pieces, without any the model got inconsistent. */
 export function piecesOf(draft: PiecesDraft): Piece[] {
   const out: Piece[] = [];
-  const concepts = draft.concepts.filter(
-    (c, i, all) => all.findIndex((o) => same(o.term, c.term)) === i,
-  );
+  const concepts = draft.concepts
+    .filter((c, i, all) => all.findIndex((o) => same(o.term, c.term)) === i)
+    .slice(0, 5);
   for (const c of concepts)
     out.push({ type: 'conceito', term: c.term, definition: c.definition });
-  for (const s of draft.statements)
+  for (const s of draft.statements.slice(0, 4))
     if (!same(s.right, s.wrong)) out.push({ type: 'afirmacao', ...s });
-  for (const c of draft.classification) {
+  for (const c of draft.classification.slice(0, 1)) {
     const items = c.items.filter((i) => bit(i.basket));
     const baskets: [string, string] = [c.baskets.first, c.baskets.second];
     if (
       items.length === c.items.length &&
+      within(items, 4, 8) &&
       distinct(baskets) &&
       distinct(items.map((i) => i.text)) &&
       items.some((i) => i.basket === 0) &&
@@ -203,11 +187,14 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
         why: c.why,
       });
   }
-  for (const s of draft.sequence)
-    if (distinct(s.steps)) out.push({ type: 'sequencia', ...s });
+  for (const s of draft.sequence.slice(0, 1))
+    if (within(s.steps, 3, 6) && distinct(s.steps))
+      out.push({ type: 'sequencia', ...s });
   // The answer may repeat a word; a distractor may not be one of its words, or a right tile would count as wrong.
-  for (const s of draft.sentence)
+  for (const s of draft.sentence.slice(0, 1))
     if (
+      within(s.words, 3, 12) &&
+      s.distractors.length <= 3 &&
       distinct([
         ...new Set(s.words.map((w) => w.trim().toLowerCase())),
         ...s.distractors,
@@ -215,8 +202,9 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
     )
       out.push({ type: 'frase', ...s });
   const q = draft.question;
-  if (distinct(q.ideas)) out.push({ type: 'pergunta', ...q });
-  for (const c of draft.cases) {
+  if (within(q.ideas, 2, 4) && distinct(q.ideas))
+    out.push({ type: 'pergunta', ...q });
+  for (const c of draft.cases.slice(0, 2)) {
     const concept = concepts.find((o) => same(o.term, c.term));
     if (concept)
       out.push({
@@ -226,15 +214,17 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
         why: c.why,
       });
   }
-  for (const p of draft.problems) {
+  for (const p of draft.problems.slice(0, 2)) {
     const piece: ProblemPiece = { type: 'problema', ...p };
     if (problemOk(piece)) out.push(piece);
   }
-  for (const c of draft.code) {
+  for (const c of draft.code.slice(0, 2)) {
     const line = c.lines[c.blankLine];
     // The gap is written ___, so the code itself may not hold one.
     if (
       line?.includes(c.blankToken) &&
+      within(c.lines, 3, 10) &&
+      within(c.distractors, 2, 3) &&
       !c.lines.some((l) => l.includes('___')) &&
       distinct(c.lines) &&
       distinct([c.blankToken, ...c.distractors])
@@ -252,7 +242,7 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
   return out;
 }
 
-/** Enough pieces for three lessons: 3 concepts, 3 statements, the open question and two more pieces of any kind. */
+/** Enough pieces for three lessons: 2 concepts, 3 statements, the open question and one more piece of any kind. */
 export function enoughPieces(pieces: Piece[]): boolean {
   const count = (type: Piece['type']) =>
     pieces.filter((p) => p.type === type).length;

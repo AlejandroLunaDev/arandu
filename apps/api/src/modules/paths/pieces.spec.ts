@@ -99,6 +99,35 @@ const draft = (over: Partial<PiecesDraft> = {}): PiecesDraft => ({
 const types = (d: PiecesDraft) => piecesOf(d).map((p) => p.type);
 
 describe('piecesOf', () => {
+  it('drops a part out of range alone: the schema takes it, piecesOf keeps the rest of the draft', () => {
+    const [sorting] = draft().classification;
+    const loose = basicsDraft.parse({
+      ...draft(),
+      // Two classifications (one is kept), a sentence of two words and a question with one idea.
+      classification: [sorting, sorting],
+      sentence: [{ words: ['Fósseis', 'contam'], distractors: [], why: 'w' }],
+      question: { prompt: 'Por quê?', ideas: ['uma'], why: 'w' },
+    });
+
+    expect(types({ ...draft(), ...loose })).toEqual([
+      'conceito',
+      'conceito',
+      'conceito',
+      'afirmacao',
+      'afirmacao',
+      'afirmacao',
+      'classificacao',
+      'caso',
+    ]);
+    expect(
+      types(
+        draft({
+          classification: [{ ...sorting!, items: sorting!.items.slice(0, 3) }],
+        }),
+      ),
+    ).not.toContain('classificacao');
+  });
+
   it('keeps every consistent piece, and enoughPieces accepts the set', () => {
     const pieces = piecesOf(draft({ problems: [mean] }));
     expect(pieces.map((p) => p.type)).toEqual([

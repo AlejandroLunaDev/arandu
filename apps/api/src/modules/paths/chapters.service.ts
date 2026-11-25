@@ -57,13 +57,11 @@ const index = z.number().int();
 // `page` is the page's number as listed (1-based); the card's source is that page.
 const card = z.object({ title: text, text, page: index, quote: text });
 
-const cardsDraft = z.object({ cards: z.array(card).min(1).max(3) });
+// No counts in these schemas: a list one card too long would drop every card. A chapter keeps its first 3 verified.
+const cardsDraft = z.object({ cards: z.array(card) });
 // Cards for several topics of a subject from one search; `topic` is the topic's number as listed (1-based).
 const subjectCardsDraft = z.object({
-  cards: z
-    .array(card.extend({ topic: index }))
-    .min(1)
-    .max(2 * TOPICS_PER_SEARCH),
+  cards: z.array(card.extend({ topic: index })),
 });
 
 /** A page with where it comes from: the model is told to prefer academic pages over Wikipedia's. */
@@ -377,9 +375,9 @@ export class ChaptersService {
         }),
       );
       if (!object) continue;
-      const cards = verified(object.cards, pages).map(
-        ({ title, text, source }) => ({ title, text, source }),
-      );
+      const cards = verified(object.cards, pages)
+        .slice(0, 3)
+        .map(({ title, text, source }) => ({ title, text, source }));
       this.logger.log(
         `Chapter cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified`,
       );
