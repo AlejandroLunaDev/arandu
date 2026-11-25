@@ -1,8 +1,39 @@
 """Shared loading for curriculum adapters: course pages found on a list, and the subjects each page publishes."""
 
+import re
 import unicodedata
 
 MIN_ROWS_RATIO = 0.5  # fewer subjects than half the last load means the page format probably changed
+
+# A numbered item opens with '1 - ', '1 – ', '1- ', '1. ' or '1) '; '3.1 Entrada' is a sub-item and stays in its item.
+NUMBERED = re.compile(r"(?:^|(?<=[\s;.]))\d{1,2}\s*(?:[.)]|[-–])\s+(?=\S)")
+# A sentence ends at a period before a capital ('Derivadas. Integral', Ânima's ' .Garantias') or at any semicolon;
+# an ordinal ('1o. e 2o. Graus') ends none.
+SENTENCE = re.compile(r"(?<!\d[oaº])(?:\s+\.\s*|\.\s+)(?=[A-ZÀ-ÖØ-Þ])|;\s*")
+# A PDF's page furniture inside a sentence: Fatec PPC headers ('Projeto Pedagógico do Curso (0013752828) SEI ... / pg. 50
+# Projeto Pedagógico do CST em ... Fatec Zona Leste - R-04 6', the second half also alone; 'Ementário Pág. 30') and the
+# icon glyph before 'Ementa'.
+PAGE_FURNITURE = re.compile(r"(?:Projeto (?:Projeto )?Pedag[óo]gico do Curso \(\d+\)\s+SEI\s+\S+\s+/\s+pg\.\s*\d+\s+)?"
+                            r"Projeto Pedag[óo]gico do CST\b.*?\bR-\d+\s+\d+\.?|Ement[áa]rio\s+P[áa]g\.\s*\d+|\uf0ea")
+NOT_A_TOPIC = re.compile(r"(?i)https?://|www\.|assinad[oa] (?:com senha|digitalmente)|^departamento de .*cr[ée]ditos"
+                         r"|^(?:prova|avalia[çc][ãa]o)(?: final)?$|^apresenta[çc][ãa]o da disciplina")
+
+
+def split_topics(text):
+    """An ementa stored as one block, as one topic per idea in its order (ADR-0008: a subject's chapters are its topics).
+
+    Two or more numbered items split at their numbers only, each item whole; otherwise sentence ends and semicolons
+    split it. Pieces that are no topic (a URL, a PDF's signature stamp, credits, course logistics) are dropped.
+    """
+    text = " ".join(PAGE_FURNITURE.sub(" ", text).split())
+    markers = list(NUMBERED.finditer(text))
+    if len(markers) >= 2:
+        ends = [m.start() for m in markers[1:]] + [len(text)]
+        pieces = [text[:markers[0].start()]] + [text[m.end():end] for m, end in zip(markers, ends)]
+    else:
+        pieces = SENTENCE.split(text)
+    topics = (p.strip(" .;,:-–\n\t") for p in pieces)
+    return [t for t in topics if sum(c.isalpha() for c in t) >= 3 and not NOT_A_TOPIC.search(t)]
 
 
 def in_city(city):
@@ -87,7 +118,8 @@ def load_described(conn, source_id, parsed, inep_code, base):
                      source_id = excluded.source_id
                  where (disciplines.name, disciplines.topics, disciplines.program, disciplines.source_id)
                    is distinct from (excluded.name, excluded.topics, excluded.program, excluded.source_id)""",
-            (code, name, [description], (program[0] or None) if program else None, source_id, inep_code)).rowcount
+            (code, name, split_topics(description) or None, (program[0] or None) if program else None, source_id,
+             inep_code)).rowcount
     return written + load_subjects(conn, source_id, subjects)
 
 

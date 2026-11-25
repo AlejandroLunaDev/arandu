@@ -151,16 +151,16 @@ class LoadPageTest(unittest.TestCase):
         return conn, load, order, result
 
     def test_codes_are_the_course_path_plus_the_name(self):
-        conn, *_ = self.load([("Web", "d1"), ("Data", "d2")])
+        conn, *_ = self.load([("Web", "Redes"), ("Data", "Dados")])
         upserts = [c for c in conn.calls if c[0].startswith("insert into public.disciplines")]
         self.assertEqual(
             [c[1] for c in upserts],
-            [("graduacao/tecnologo/inteligencia-artificial#Web", "Web", ["d1"], None, 7, 852), ("graduacao/tecnologo/inteligencia-artificial#Data", "Data", ["d2"], None, 7, 852)],
+            [("graduacao/tecnologo/inteligencia-artificial#Web", "Web", ["Redes"], None, 7, 852), ("graduacao/tecnologo/inteligencia-artificial#Data", "Data", ["Dados"], None, 7, 852)],
         )
         self.assertEqual(conn.calls[1][1], (7, ["graduacao/tecnologo/inteligencia-artificial#Web", "graduacao/tecnologo/inteligencia-artificial#Data"]))
 
     def test_delete_first_then_upserts_then_load_subjects_last(self):
-        conn, load, order, result = self.load([("Web", "d1"), ("Data", "d2")])
+        conn, load, order, result = self.load([("Web", "Redes"), ("Data", "Dados")])
         sqls = [c[0] for c in conn.calls]
         self.assertTrue(sqls[0].startswith("select url from sources"))
         self.assertTrue(sqls[1].startswith("delete from public.disciplines where source_id"))
