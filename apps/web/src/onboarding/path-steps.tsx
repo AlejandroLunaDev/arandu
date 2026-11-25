@@ -52,7 +52,7 @@ export function SemesterView({ course, place, path, ...next }: Next & { course: 
         <div className={p.head}>
           <span className={p.pill}>{course.course}</span>
           <span className={p.meta}>
-            {place} · {path.city}
+            {place} · {path.city ?? "A distância"}
           </span>
         </div>
         <p className={p.why}>{course.reason}</p>
@@ -107,7 +107,7 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
   );
 }
 
-// O13: the game in three things, before the first stop.
+// O13: the game in three things, before the first chapter.
 export function HowView({ course, place, ...next }: Next & { course: string; place: string }) {
   return (
     <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Experimentar o primeiro capítulo">
@@ -140,7 +140,7 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
   );
 }
 
-// O19: the sample of the first stop is over. It gave nothing: inside the app, chapter 1 starts from zero.
+// O19: the sample of the first chapter is over. It gave nothing: inside the app, chapter 1 starts from zero.
 export function DoneView({ course, subject, place, ...next }: Next & { course: string; subject: string; place: string }) {
   const say = `Esse foi um gostinho de ${course}. Guardando seu progresso, o primeiro capítulo começa de verdade, com mais exercícios.`;
   const { shown, done } = useReveal(say);

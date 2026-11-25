@@ -80,3 +80,6 @@ supabase/.temp/
 
 # OS
 Thumbs.db
+
+# Engine: fetched documents its readers could not parse yet (apps/engine/.unread)
+.unread/

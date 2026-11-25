@@ -5,7 +5,7 @@
   overflow: hidden;
 }
 
-/* The amber glow behind the stop the person is on. */
+/* The amber glow behind the chapter the person is on. */
 .map::before {
   content: "";
   position: absolute;
@@ -108,7 +108,7 @@ a.stat::after {
   line-height: 18px;
 }
 
-/* The stops wind down the screen in five columns, in turn. */
+/* The chapters wind down the screen in five columns, in turn. */
 .path {
   position: relative;
   margin: 18px 0 0;
@@ -144,7 +144,7 @@ a.stat::after {
   padding-left: 96px;
 }
 
-/* The stop the person is on leaves room above it for its card. */
+/* The chapter the person is on leaves room above it for its card. */
 .row[data-state="current"] {
   margin-top: 132px;
 }
@@ -220,7 +220,7 @@ a.stat::after {
   width: 118px;
 }
 
-/* The current stop's card, its tail pointing down at the node. */
+/* The current chapter's card, its tail pointing down at the node. */
 .pop {
   position: absolute;
   top: -128px;
@@ -257,7 +257,7 @@ a.stat::after {
   line-height: 20px;
 }
 
-/* The main button's look (ui MainButton), as a link into the stop. */
+/* The main button's look (ui MainButton), as a link into the chapter. */
 .go {
   position: relative;
   box-sizing: border-box;
@@ -426,7 +426,7 @@ a.stat::after {
   font: 500 14px/1 var(--font-body);
 }
 
-/* P1 with every stop done: the semester's next book. */
+/* P1 with every chapter done: the semester's next book. */
 .next {
   position: relative;
   display: flex;

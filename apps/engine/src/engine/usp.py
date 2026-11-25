@@ -51,7 +51,8 @@ def parse_curriculum(doc):
             section = first  # 'Disciplinas Obrigatórias', 'Disciplinas Optativas Eletivas', ...
         elif match := re.fullmatch(r"(\d+)º Período Ideal", first):
             term = int(match[1])
-        elif row and row[0][1] and "obterDisciplina" in row[0][1]:
+        # A subject row opens with its code, linked to its page; a note that links a subject mid-text is not one (5065).
+        elif row and row[0][1] and f"obterDisciplina?sgldis={first}&" in row[0][1]:
             if section is None or term is None or len(row) < 5:
                 raise ValueError(f"subject row outside a section and term: {row}")
             hours = row[4][0]  # CH, the subject's total hours

@@ -26,36 +26,26 @@ const HAS_PHOTO = (i: string) =>
   `${i}.photo_url is not null and ${i}.photo_credit is not null and ${i}.photo_license is not null
   and ${i}.photo_source_url is not null`;
 
-/** A profession on the shelf: an institution with a photo has a sample subject, the taste of the path. */
+/** The career's grid (ADR-0008): one per profession ($1), whichever institution published it. */
+const CAREER_GRID = `(
+  select g.source_id from public.career_grids g
+  join public.professions p on p.id = g.profession_id
+  where p.slug = $1)`;
+
+/** A profession on the shelf: its career grid has a sample subject, the taste of the path. */
 const IN_POOL = `exists (
-  select 1 from public.courses pc
-  join public.curriculum_subjects pcs on pcs.course_id = pc.id
-  join public.disciplines pd on pd.id = pcs.discipline_id
-  join public.institutions pi on pi.id = pd.institution_id
-  where pc.profession_id = p.id and ${sampleSubject('pcs', 'pd')} and ${HAS_PHOTO('pi')})`;
+  select 1 from public.career_grids g
+  join public.curriculum_subjects pcs on pcs.source_id = g.source_id
+  join public.subjects su on su.key = pcs.subject_key
+  join public.disciplines pd on pd.id = su.discipline_id
+  where g.profession_id = p.id and ${sampleSubject('pcs', 'pd')})`;
 
 /** The book's sample: at most 2 subjects (the contract's 1-2). */
 const SAMPLE_SIZE = 2;
 
-/**
- * The one institution a book's sample comes from: among those with a photo and a sample subject for the profession
- * ($1), a fixed pick that varies by profession (a hash of the INEP code, stable across reloads, not a preference), so
- * the shelf does not open every book with the same one. Null when none qualifies: the book then has no sample.
- */
-const SAMPLE_INSTITUTION = `(
-  select i.id from public.disciplines d
-  join public.institutions i on i.id = d.institution_id
-  join public.curriculum_subjects cs on cs.discipline_id = d.id
-  join public.courses c on c.id = cs.course_id
-  join public.professions p on p.id = c.profession_id
-  where p.slug = $1 and ${sampleSubject('cs', 'd')} and ${HAS_PHOTO('i')}
-  group by i.id, i.inep_code
-  order by md5($1 || ':' || i.inep_code)
-  limit 1)`;
-
 /** The first-year mandatory subjects of the profession's courses. Undated subjects (no year, no term) stay out. */
 const GRADE = `
-  select cs.course_id, cs.source_id, cs.name, cs.term, cs.discipline_id
+  select cs.course_id, cs.source_id, cs.name, cs.term
   from public.curriculum_subjects cs
   join public.courses c on c.id = cs.course_id
   join public.professions p on p.id = c.profession_id
@@ -107,7 +97,9 @@ interface OfferingRow extends InstitutionRow {
   degree: Offering['course']['degree'];
   duration_years: string | null;
   campus_name: string | null;
-  city: string;
+  modality: Offering['course']['modality'];
+  /** Null for a distance course. */
+  city: string | null;
   source_label: string;
   source_url: string;
   retrieved_at: Date;
@@ -176,11 +168,12 @@ export class BooksRepository {
           shift: null,
           durationYears:
             r.duration_years === null ? null : Number(r.duration_years),
-          campus: { name: r.campus_name, city: r.city },
+          modality: r.modality,
+          campus:
+            r.city === null ? null : { name: r.campus_name, city: r.city },
           source: source(r),
         },
         // The owner keeps cut-offs out of the book: it is about the career and its first year, not getting in.
-        admission: [],
         curriculum: first
           ? {
               years: [
@@ -198,22 +191,17 @@ export class BooksRepository {
    * Up to 3 institutions, one offering each and never repeated (owner's decision): fewer when fewer qualify. Only
    * institutions with a real photo (owner's decision), filtered before the cap so the next one fills the slot. An
    * offering has a real first-year grade, FIAP's even without one. Neutral order, no institution pays for its place:
-   * the sample's institution first, then FIAP, then alphabetical by institution and city. An institution's offering is its sample course, else one with a grade, else by city. A course with two
-   * grades (one per shift) shows the one holding the sample subjects, else the first.
+   * the institution whose grade is the career's grid first, then FIAP, then alphabetical by institution and city. An
+   * institution's offering is the course holding the career's grid, else one with a grade, else by city. A course with
+   * several grades shows the career's grid, else the first.
    */
   private offerings(slug: string): Promise<OfferingRow[]> {
     return this.sql.unsafe<OfferingRow[]>(
       `with grade as (${GRADE}),
       course_grade as (
-        (select distinct on (g.course_id) g.course_id, g.source_id,
-          exists (
-            select 1 from public.curriculum_subjects scs
-            join public.disciplines sd on sd.id = scs.discipline_id
-            where scs.course_id = g.course_id and ${sampleSubject('scs', 'sd')}
-          ) as sample
+        (select distinct on (g.course_id) g.course_id, g.source_id, g.source_id in ${CAREER_GRID} as sample
         from grade g
-        left join public.disciplines d on d.id = g.discipline_id and d.topics is not null
-        order by g.course_id, (d.id is not null) desc, g.source_id)
+        order by g.course_id, g.source_id in ${CAREER_GRID} desc, g.source_id)
         union all
         -- FIAP is in the book even where its grade is unknown: then it shows no subjects.
         select c.id, null, false from public.courses c
@@ -232,7 +220,7 @@ export class BooksRepository {
         where ${HAS_PHOTO('i')}
       ),
       picked as (
-        select ranked.*, institution_id = ${SAMPLE_INSTITUTION} as lead from ranked
+        select ranked.*, sample as lead from ranked
         where nth = 1
         order by lead desc nulls last, fiap desc, name, city, course_id
         -- shortcut: the cap applies before the fetch-date joins, so an unfetched source can leave fewer than 3 (none
@@ -242,7 +230,7 @@ export class BooksRepository {
       select k.course_id::text as course_id, k.source_id::text as grade_source_id,
         i.name as institution, i.short_name, i.kind, i.logo_url, i.logo_license, i.logo_source_url, i.photo_url,
         i.photo_credit, i.photo_license, i.photo_source_url, c.name as course, c.degree, c.duration_years,
-        c.campus_name, c.city, s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
+        c.modality, c.campus_name, c.city, s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at
       from picked k
       join public.courses c on c.id = k.course_id
       join public.institutions i on i.id = c.institution_id
@@ -253,34 +241,26 @@ export class BooksRepository {
   }
 
   /**
-   * The sample subjects, the taste of the path: all from the one institution SAMPLE_INSTITUTION picks, the career's
-   * own subjects first (fewest professions sharing the name there), then by name.
+   * The sample subjects, the taste of the path: from the career's grid (ADR-0008), the career's own subjects first
+   * (fewest careers whose grid lists the subject: 'Ética e Cidadania' is in many), then by name.
    */
   private async sample(slug: string): Promise<SampleSubject[]> {
     const rows = await this.sql.unsafe<
       (SourceRow & Omit<SampleSubject, 'source'>)[]
     >(
       `select name, topics, institution, source_label, source_url, retrieved_at from (
-        -- One per name: an institution that publishes ementas per course page has one discipline per page.
-        select distinct on (lower(d.name)) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
+        select distinct on (su.key) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
           s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at,
-          -- The professions whose first semester at this institution has a subject of this name: the fewer, the more
-          -- the subject belongs to this career ('Ética e Cidadania' is in all of them). A row linked to this discipline
-          -- counts whatever its spelling: São Judas's grades and ementários accent some names differently.
-          (select count(distinct oc.profession_id) from public.curriculum_subjects ocs
-            join public.courses oc on oc.id = ocs.course_id
-            where oc.institution_id = d.institution_id and (ocs.discipline_id = d.id or lower(ocs.name) = lower(d.name))
-              and (ocs.term = 1 or (ocs.term is null and ocs.year = 1))) as spread
-        from public.disciplines d
+          (select count(distinct og.profession_id) from public.career_grids og
+            join public.curriculum_subjects ocs on ocs.source_id = og.source_id and ocs.subject_key = su.key
+            where ocs.term = 1 or (ocs.term is null and ocs.year = 1)) as spread
+        from public.curriculum_subjects cs
+        join public.subjects su on su.key = cs.subject_key
+        join public.disciplines d on d.id = su.discipline_id
         join public.institutions i on i.id = d.institution_id
         join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
-        where d.institution_id = ${SAMPLE_INSTITUTION} and exists (
-          select 1 from public.curriculum_subjects cs
-          join public.courses c on c.id = cs.course_id
-          join public.professions p on p.id = c.profession_id
-          where cs.discipline_id = d.id and p.slug = $1 and ${sampleSubject('cs', 'd')}
-        )
-        order by lower(d.name), d.id
+        where cs.source_id in ${CAREER_GRID} and ${sampleSubject('cs', 'd')}
+        order by su.key
       ) named
       order by spread, name
       limit $2`,

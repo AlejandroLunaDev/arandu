@@ -1,4 +1,4 @@
-/* O11-O21: the first semester, the rhythm, the first stop and the sign-up. Compact scale: 14px text, 8-12px radii. */
+/* O11-O21: the first semester, the rhythm, the first chapter and the sign-up. Compact scale: 14px text, 8-12px radii. */
 
 .card {
   display: flex;
@@ -157,7 +157,7 @@
   line-height: 18px;
 }
 
-/* The stop's header: close, progress, the "primeira parada" tag. */
+/* The chapter's header: close, progress, the "primeira parada" tag. */
 .top {
   display: flex;
   flex: none;
@@ -234,8 +234,8 @@
   font-weight: 600;
 }
 
-/* The stop fills the screen, so an exercise's button sits at the bottom like every other step's. */
-.stop {
+/* The chapter fills the screen, so an exercise's button sits at the bottom like every other step's. */
+.chapter {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -399,17 +399,17 @@
 }
 
 /* An answer's state once checked: right is green, wrong red. */
-.stop [data-state="ok"] {
+.chapter [data-state="ok"] {
   border-color: var(--success) !important;
   background: color-mix(in srgb, var(--success) 14%, transparent) !important;
 }
 
-.stop [data-state="no"] {
+.chapter [data-state="no"] {
   border-color: var(--error) !important;
   background: color-mix(in srgb, var(--error) 14%, transparent) !important;
 }
 
-.stop [data-state="done"] {
+.chapter [data-state="done"] {
   opacity: 0.4;
 }
 
@@ -556,7 +556,7 @@
   line-height: 21px;
 }
 
-/* O19: the stop is done. */
+/* O19: the chapter is done. */
 .done {
   display: flex;
   flex-direction: column;
@@ -685,7 +685,7 @@
   margin: 12px 16px 0;
 }
 
-/* The novelos left, in a stop off the onboarding (P4-P6). */
+/* The novelos left, in a chapter off the onboarding (P4-P6). */
 .lives {
   display: flex;
   flex: none;

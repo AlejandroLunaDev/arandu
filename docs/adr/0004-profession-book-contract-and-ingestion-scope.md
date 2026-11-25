@@ -1,6 +1,7 @@
 # ADR-0004: Profession book contract and first ingestion scope
 
-- Status: accepted
+- Status: accepted; its São Paulo state scope is superseded by ADR-0007; its cut-offs and per-institution ingestion
+  are superseded by ADR-0008
 - Date: 2026-11-17
 - Decided by: Alejandro (owner), with the data squad ingeniero
 
@@ -106,12 +107,6 @@ This replaces the product docs' first draft, which had the engine cover every co
 - Collecting from institutions that block it: Unicamp, Unesp, FMU, Cruzeiro do Sul, UNICID, Anhanguera. Their courses still appear in the books, because they come from the INEP census; their cut-offs and curricula need permission or a data partnership.
 - SISU 2025 and 2026, which need a gov.br login.
 - The other curricula (UFABC, UFSCar, IFSP, São Judas and Anhembi), for a later batch.
-
-### Collection rules
-
-- Read robots.txt before every run, and check each source's terms of use before its first run.
-- At least 1.5 s between requests to one host, with backoff on 429 and 503. No logins, no captcha bypass, no proxy rotation.
-- Store facts only, never institution prose. Store no personal data.
 
 ### Engine behaviour
 

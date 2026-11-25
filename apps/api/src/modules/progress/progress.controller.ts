@@ -10,8 +10,8 @@ import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
 import { ProgressRepository } from './progress.repository.js';
 import { ProgressService } from './progress.service.js';
-import { stopNotFound } from '../paths/paths.errors.js';
-import { stopNotOpen, subjectNotFound } from './progress.errors.js';
+import { chapterNotFound } from '../paths/paths.errors.js';
+import { chapterNotOpen, subjectNotFound } from './progress.errors.js';
 import { id, param, topic } from '../../core/http/params.js';
 
 const reflection = z
@@ -73,20 +73,20 @@ export class ProgressController {
     return this.repository.spend(userId);
   }
 
-  /** P6: at 0 novelos, re-reading the stop's cards gives one back, once per stop. */
-  @Post('stops/:disciplineId/:topic/reread')
+  /** P6: at 0 novelos, re-reading the chapter's cards gives one back, once per chapter. */
+  @Post('chapters/:disciplineId/:topic/reread')
   @HttpCode(200)
   async reread(
     @UserId() userId: string,
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
   ): Promise<Wallet> {
-    const stop = (await this.progress.book(userId, disciplineId)).stops[
+    const chapter = (await this.progress.book(userId, disciplineId)).chapters[
       topicIndex
     ];
-    if (!stop) throw stopNotFound();
-    // Only the stop the person is on, or one they finished: never a novelo per stop of the catalog.
-    if (stop.state === 'locked') throw stopNotOpen();
+    if (!chapter) throw chapterNotFound();
+    // Only the chapter the person is on, or one they finished: never a novelo per chapter of the catalog.
+    if (chapter.state === 'locked') throw chapterNotOpen();
     return this.repository.reread(userId, disciplineId, topicIndex);
   }
 }

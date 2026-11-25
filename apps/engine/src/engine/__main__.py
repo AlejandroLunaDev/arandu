@@ -1,12 +1,17 @@
 """Run one adapter by hand: python -m engine <adapter>. Reads DATABASE_URL (ADR-0003)."""
 
+import hashlib
 import os
+import pathlib
 import sys
 import tempfile
 
 import psycopg
 
-from engine import anima, enem_usp, fatec, fetch, fiap, ifsp, inep_census, mackenzie, mec_powerbi, ufabc, ufscar, umc, unifesp, unip, usp
+from engine import anima, belas_artes, facsp, fatec, fetch, fiap, inep_census, mackenzie, mec_powerbi, unifesp, unip, usp
+
+# A fetched document its adapter could not read is kept here, so fixing the reader does not pay for the fetch again.
+UNREAD = pathlib.Path(__file__).resolve().parents[2] / ".unread"
 
 # Run order for 'all': each list adapter comes before the level it registers (<x>_courses before <x>_curriculum).
 ADAPTERS = {
@@ -15,7 +20,6 @@ ADAPTERS = {
     "usp_courses": usp.courses,
     "usp_curriculum": usp.curriculum,
     "usp_discipline": usp.discipline,  # after usp_curriculum: it links to the rows that level loads
-    "enem_usp": enem_usp,  # links through the Júpiter pages usp_curriculum registers
     "mackenzie_courses": mackenzie.courses,
     "mackenzie_curriculum": mackenzie.curriculum,
     "fiap_courses": fiap.courses,
@@ -27,49 +31,62 @@ ADAPTERS = {
     "unip_courses": unip.courses,
     "unip_units": unip.units,
     "unip_curriculum": unip.curriculum,
-    "ufabc_courses": ufabc.courses,
-    "ufabc_course_page": ufabc.course_page,
-    "ufabc_curriculum": ufabc.curriculum,
     "unifesp_courses": unifesp.courses,
     "unifesp_curriculum": unifesp.curriculum,
-    "ifsp_courses": ifsp.courses,
-    "ifsp_curriculum": ifsp.curriculum,
-    "ufscar_courses": ufscar.courses,
-    "ufscar_course": ufscar.course,
-    "ufscar_campus": ufscar.campus,
-    "ufscar_curriculum": ufscar.curriculum,
-    "umc_courses": umc.courses,
-    "umc_curriculum": umc.curriculum,
     "fatec_media": fatec.media,
     "fatec_curriculum": fatec.curriculum,
+    "belas_artes_curriculum": belas_artes.curriculum,
+    "facsp_curriculum": facsp.curriculum,
 }
 
 
 def run(conn, name):
-    """Fetch every source of one adapter, parse only changed documents, and log the run in scrape_runs."""
+    """Fetch the due sources of one adapter, parse only changed documents, and log the run in scrape_runs.
+
+    A source is due when it was never fetched or its refresh_interval has passed: every fetch costs a scraper credit.
+    """
     adapter = ADAPTERS[name]
     run_id = conn.execute("insert into scrape_runs (adapter) values (%s) returning id", (name,)).fetchone()[0]
     try:
-        sources = conn.execute("select id, url, last_content_hash from sources where adapter = %s", (name,)).fetchall()
-        if not sources:
+        if not conn.execute("select exists (select 1 from sources where adapter = %s)", (name,)).fetchone()[0]:
             raise LookupError(f"no source registered for adapter {name}")
+        sources = conn.execute(
+            """select id, url, last_content_hash from sources
+               where adapter = %s and (last_fetched_at is null or last_fetched_at + refresh_interval <= now())""",
+            (name,),
+        ).fetchall()
         written = 0
         failures = []  # one bad page must not stop the other sources; its hash stays, so the next run retries it
         for source_id, url, last_hash in sources:
             try:
                 with tempfile.TemporaryFile() as doc:
-                    digest = getattr(adapter, "download", fetch.download)(url, doc)
-                    parsed = None
-                    if digest != last_hash:
+                    kept = UNREAD / hashlib.sha256(url.encode()).hexdigest()
+                    if kept.exists():
+                        # shortcut: a kept document is read again instead of fetched until its reader handles it,
+                        # so a page that changes meanwhile is only seen once it parses; delete the file to refetch.
+                        content = kept.read_bytes()
+                        doc.write(content)
+                        digest = hashlib.sha256(content).hexdigest()
+                    else:
+                        digest = getattr(adapter, "download", fetch.download)(url, doc)
+                    try:
+                        parsed = None
+                        if digest != last_hash:
+                            doc.seek(0)
+                            parsed = adapter.parse(doc)
+                        with conn.transaction():
+                            if parsed is not None:
+                                written += adapter.load(conn, source_id, parsed)
+                            conn.execute(
+                                "update sources set last_fetched_at = now(), last_content_hash = %s where id = %s",
+                                (digest, source_id),
+                            )
+                    except Exception:
+                        UNREAD.mkdir(exist_ok=True)
                         doc.seek(0)
-                        parsed = adapter.parse(doc)
-                    with conn.transaction():
-                        if parsed is not None:
-                            written += adapter.load(conn, source_id, parsed)
-                        conn.execute(
-                            "update sources set last_fetched_at = now(), last_content_hash = %s where id = %s",
-                            (digest, source_id),
-                        )
+                        kept.write_bytes(doc.read())
+                        raise
+                    kept.unlink(missing_ok=True)
             except Exception as error:
                 failures.append(f"{url}: {error}")
         if failures:

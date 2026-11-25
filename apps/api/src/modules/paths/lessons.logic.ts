@@ -1,4 +1,4 @@
-/** A chapter (one stop) is this many lessons: three over its exercises, then a review. */
+/** A chapter is this many lessons: three over its exercises, then a review. */
 export const LESSONS = 4;
 /** Sabedoria each lesson gives the first time (demo value, #123). */
 export const LESSON_SABEDORIA = 4;

@@ -10,7 +10,7 @@ import { SQL, type Sql } from '../../core/database/database.module.js';
 export interface CourseFirstTerm {
   institution: string;
   course: string;
-  city: string;
+  city: string | null;
   /** A course can publish one grade per shift (USP Administração: integral and noturno). Null: the source states none. */
   shift: string | null;
   /** True when the source groups by year only (FIAP): the subjects are the whole first year. */
@@ -32,7 +32,7 @@ interface Row {
   course_id: string;
   institution: string;
   course: string;
-  city: string;
+  city: string | null;
   shift: string | null;
   term: number | null;
   subject: string;
@@ -51,7 +51,7 @@ export type Career = Omit<CareerOption, 'reason'>;
 export class CareersRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
-  /** The careers with a path people can open now: a real first-term curriculum and its first stop made. */
+  /** The careers with a path people can open now: a real first-term curriculum and its first chapter made. */
   async withFirstTerm(): Promise<Career[]> {
     const sql = this.sql;
     const rows = await sql<
@@ -60,7 +60,7 @@ export class CareersRepository {
         name: string;
         course_id: number;
         course: string;
-        city: string;
+        city: string | null;
       })[]
     >`
       select p.slug, p.name, c.id::int as course_id, c.name as course, c.city, i.name as institution, i.short_name, i.kind,
@@ -68,15 +68,16 @@ export class CareersRepository {
       from public.professions p
       join public.courses c on c.profession_id = p.id
       join public.institutions i on i.id = c.institution_id
-      -- The same rule as GET /careers/:slug/paths: a first-semester subject with topics, a fetched source and its first
-      -- stop made, so every offering's courseId opens a path.
+      -- The same rule as GET /careers/:slug/paths: the career's grid (ADR-0008) has a first-semester subject with topics
+      -- and its first chapter made, so every offering's courseId opens a path.
       where exists (
-        select 1 from public.curriculum_subjects cs
-        join public.disciplines d on d.id = cs.discipline_id
-        join public.sources s on s.id = cs.source_id
-        join public.stop_contents sc on sc.discipline_id = d.id and sc.topic = 0 and sc.topic_text = d.topics[1]
-        where cs.course_id = c.id and (cs.term = 1 or (cs.term is null and cs.year = 1))
-          and cardinality(d.topics) > 0 and s.last_fetched_at is not null
+        select 1 from public.career_grids g
+        join public.curriculum_subjects cs on cs.source_id = g.source_id
+        join public.subjects su on su.key = cs.subject_key
+        join public.disciplines d on d.id = su.discipline_id
+        join public.chapter_contents sc on sc.discipline_id = d.id and sc.topic = 0 and sc.topic_text = d.topics[1]
+        where g.profession_id = c.profession_id and (cs.term = 1 or (cs.term is null and cs.year = 1))
+          and cardinality(d.topics) > 0
       )
       order by p.name, coalesce(i.short_name, i.name), c.city, c.id`;
 
@@ -98,7 +99,7 @@ export class CareersRepository {
     return [...careers.values()];
   }
 
-  /** The profession and its courses' first-term subjects; null when no profession has that slug. */
+  /** The profession and its career grid's first-term subjects (ADR-0008); null when no profession has that slug. */
   async firstTerm(slug: string): Promise<ProfessionFirstTerm | null> {
     const sql = this.sql;
     const [profession] = await sql<
@@ -115,8 +116,12 @@ export class CareersRepository {
       join public.courses c on c.profession_id = p.id
       join public.institutions i on i.id = c.institution_id
       join public.curriculum_subjects cs on cs.course_id = c.id
+      join public.career_grids g on g.profession_id = p.id and g.source_id = cs.source_id
       join public.sources s on s.id = cs.source_id
       where p.slug = ${slug} and (cs.term = 1 or (cs.term is null and cs.year = 1))
+        -- The grid is linked to every course that carries its name: it is told once, at the first of them.
+        and c.id = (select min(o.course_id) from public.curriculum_subjects o join public.courses oc on oc.id = o.course_id
+                    where o.source_id = g.source_id and oc.profession_id = p.id)
       order by institution, c.city, c.id, cs.shift, cs.is_elective nulls last, cs.name`;
 
     const courses = new Map<string, CourseFirstTerm>();

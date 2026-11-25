@@ -22,7 +22,7 @@ const COLUMNS = {
   age: 'age',
 } as const satisfies Record<keyof Journey, string>;
 
-/** What each person chose on the way to their first stop (O02-O20). */
+/** What each person chose on the way to their first chapter (O02-O20). */
 @Injectable()
 export class JourneyRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}

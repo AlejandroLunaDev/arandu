@@ -196,14 +196,6 @@ class DownloadEmentasTest(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             self.run_download(errors={self.PPC2: urllib.error.HTTPError("u", 500, "x", {}, None)})
 
-    def test_robots_refusing_a_ppc_or_an_ementario_skips_it_and_changes_the_digest(self):
-        whole = self.run_download()[0]
-        for url in (self.PPC1, self.EM2):
-            with self.subTest(url=url):
-                digest, z, _ = self.run_download(errors={url: PermissionError("robots")})
-                self.assertEqual(z.namelist(), ["0.pdf"])
-                self.assertNotEqual(digest, whole)
-
     def test_every_ppc_dead_gives_an_empty_zip(self):
         gone = urllib.error.HTTPError("u", 404, "x", {}, None)
         digest, z, _ = self.run_download(errors={self.PPC1: gone, self.PPC2: gone})

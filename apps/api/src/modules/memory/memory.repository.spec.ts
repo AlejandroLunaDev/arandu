@@ -123,13 +123,13 @@ describe('MemoryRepository unsummarized', () => {
     });
   });
 
-  it('returns stop questions even with no session', async () => {
+  it('returns chapter questions even with no session', async () => {
     const result = await scripted([], [question]).unsummarized('u');
 
     expect(result.sessionIds).toEqual([]);
     expect(result.questionIds).toEqual([9]);
     expect(result.transcript).toBe(
-      'Questions on stop cards (source stop):\n- (Limites) Por que 0/0?',
+      'Questions on chapter cards (source chapter):\n- (Limites) Por que 0/0?',
     );
   });
 
@@ -151,7 +151,7 @@ describe('MemoryRepository unsummarized', () => {
     expect(result.sessionIds).toEqual(['s1']);
     expect(result.questionIds).toEqual([9]);
     expect(result.transcript).toBe(
-      'Session (source onboarding):\nuser: Oi\n\nQuestions on stop cards (source stop):\n- (Limites) Por que 0/0?',
+      'Session (source onboarding):\nuser: Oi\n\nQuestions on chapter cards (source chapter):\n- (Limites) Por que 0/0?',
     );
   });
 });
@@ -170,7 +170,7 @@ describe('MemoryRepository saveFacts', () => {
   }: {
     now?: Row[];
     readIds?: number[];
-    facts?: { text: string; source: 'stop' }[];
+    facts?: { text: string; source: 'chapter' }[];
     sessionIds?: string[];
     questionIds?: number[];
     sessionsLeft?: number;
@@ -187,7 +187,7 @@ describe('MemoryRepository saveFacts', () => {
           return Promise.resolve(
             Array.from({ length: sessionsLeft }, () => ({})),
           );
-        if (q.includes('from public.stop_questions'))
+        if (q.includes('from public.chapter_questions'))
           return Promise.resolve(
             Array.from({ length: questionsLeft }, () => ({})),
           );
@@ -217,8 +217,8 @@ describe('MemoryRepository saveFacts', () => {
     const { saved, writes, helpers } = await run({
       now: old,
       facts: [
-        { text: 'b', source: 'stop' },
-        { text: 'c', source: 'stop' },
+        { text: 'b', source: 'chapter' },
+        { text: 'c', source: 'chapter' },
       ],
       sessionIds: ['s1'],
       questionIds: [4],
@@ -229,11 +229,11 @@ describe('MemoryRepository saveFacts', () => {
       'delete from public.arandu_facts where id in ?',
       'insert into public.arandu_facts ?',
       'update public.arandu_sessions set summarized_at = now() where id in ?',
-      'update public.stop_questions set summarized_at = now() where id in ?',
+      'update public.chapter_questions set summarized_at = now() where id in ?',
     ]);
     expect(helpers).toContainEqual([1]);
     expect(helpers).toContainEqual([
-      { user_id: 'u', text: 'c', source: 'stop' },
+      { user_id: 'u', text: 'c', source: 'chapter' },
     ]);
   });
 
@@ -241,8 +241,8 @@ describe('MemoryRepository saveFacts', () => {
     const { saved, writes } = await run({
       now: old,
       facts: [
-        { text: 'a', source: 'stop' },
-        { text: 'b', source: 'stop' },
+        { text: 'a', source: 'chapter' },
+        { text: 'b', source: 'chapter' },
       ],
     });
 
@@ -252,7 +252,7 @@ describe('MemoryRepository saveFacts', () => {
 
   it('cuts a new fact to 300 characters', async () => {
     const { helpers } = await run({
-      facts: [{ text: 'x'.repeat(400), source: 'stop' }],
+      facts: [{ text: 'x'.repeat(400), source: 'chapter' }],
     });
 
     const [rows] = helpers as [{ text: string }[]];
@@ -270,7 +270,7 @@ describe('MemoryRepository saveFacts', () => {
   ])('saves nothing and returns false when %s', async (_, over) => {
     const { saved, writes } = await run({
       now: old,
-      facts: [{ text: 'z', source: 'stop' }],
+      facts: [{ text: 'z', source: 'chapter' }],
       ...over,
     });
 
@@ -307,7 +307,7 @@ describe('MemoryRepository conversations', () => {
     ]);
   });
 
-  it('maps a stop question to a card with its question and answer', async () => {
+  it('maps a chapter question to a card with its question and answer', async () => {
     const { conversations } = await scripted(
       [],
       [card('2026-11-02T00:00:00Z')],
@@ -318,7 +318,7 @@ describe('MemoryRepository conversations', () => {
         kind: 'card',
         startedAt: '2026-11-02T00:00:00.000Z',
         professionSlug: null,
-        stop: { disciplineId: 7, topic: 2 },
+        chapter: { disciplineId: 7, topic: 2 },
         messages: [
           { role: 'user', text: 'Por que 0/0?' },
           { role: 'assistant', text: 'Porque sim.' },
@@ -327,7 +327,7 @@ describe('MemoryRepository conversations', () => {
     ]);
   });
 
-  it('keeps a session as it is, with no stop', async () => {
+  it('keeps a session as it is, with no chapter', async () => {
     const { conversations } = await scripted(
       [session('2026-11-01T00:00:00Z')],
       [],
@@ -336,7 +336,7 @@ describe('MemoryRepository conversations', () => {
     expect(conversations[0]).toMatchObject({
       kind: 'career',
       professionSlug: 'direito',
-      stop: null,
+      chapter: null,
       messages: [{ role: 'user', text: 'Oi' }],
     });
   });

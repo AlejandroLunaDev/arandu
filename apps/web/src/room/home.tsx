@@ -8,7 +8,7 @@ const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
 
 // S1, the room: the wallet, this week's patinhas and the book the person is on (GET /me).
-// shortcut: the 3D room and cat, Arandu's talk and "Continuar" into the next stop come with the room step; for now it
+// shortcut: the 3D room and cat, Arandu's talk and "Continuar" into the next chapter come with the room step; for now it
 // shows where the person stands.
 export function HomeView({ home }: { home: Home }) {
   const { wallet, week, current } = home;

@@ -47,7 +47,7 @@ describe('ProgressService', () => {
       discipline: vi.fn().mockResolvedValue(discipline),
       reflection: vi
         .fn()
-        .mockResolvedValue({ stops: [], questions: 0, feeling: null }),
+        .mockResolvedValue({ chapters: [], questions: 0, feeling: null }),
     };
     service = new ProgressService(repo as unknown as ProgressRepository);
   });
@@ -168,38 +168,38 @@ describe('ProgressService', () => {
       );
     });
 
-    it('the first stop is current and the rest locked when nothing is done', async () => {
+    it('the first chapter is current and the rest locked when nothing is done', async () => {
       const book = await service.book('u', 7);
 
       expect(book.discipline).toEqual({ id: 7, name: 'Cálculo' });
-      expect(book.stops.map((s) => s.state)).toEqual([
+      expect(book.chapters.map((s) => s.state)).toEqual([
         'current',
         'locked',
         'locked',
       ]);
-      expect(book.stops.map((s) => s.index)).toEqual([0, 1, 2]);
-      expect(book.stops.map((s) => s.text)).toEqual(['a', 'b', 'c']);
+      expect(book.chapters.map((s) => s.index)).toEqual([0, 1, 2]);
+      expect(book.chapters.map((s) => s.text)).toEqual(['a', 'b', 'c']);
     });
 
-    it('the first stop not done is current, even after a gap; later ones are locked', async () => {
+    it('the first chapter not done is current, even after a gap; later ones are locked', async () => {
       repo.finishes!.mockResolvedValue([
         finish('2026-03-09', 1),
         finish('2026-03-09', 2, 99),
       ]);
 
-      const { stops } = await service.book('u', 7);
+      const { chapters } = await service.book('u', 7);
 
-      expect(stops.map((s) => s.state)).toEqual(['current', 'done', 'locked']);
+      expect(chapters.map((s) => s.state)).toEqual(['current', 'done', 'locked']);
     });
 
-    it('counts lessons done per stop: 4 when the stop is done, 0 when unknown', async () => {
+    it('counts lessons done per chapter: 4 when the chapter is done, 0 when unknown', async () => {
       repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
       repo.lessonsDone!.mockResolvedValue(new Map([[1, 2]]));
 
-      const { stops } = await service.book('u', 7);
+      const { chapters } = await service.book('u', 7);
 
       expect(repo.lessonsDone).toHaveBeenCalledWith('u', 7);
-      expect(stops.map((s) => s.lessonsDone)).toEqual([4, 2, 0]);
+      expect(chapters.map((s) => s.lessonsDone)).toEqual([4, 2, 0]);
     });
 
     it('has no current when all are done', async () => {
@@ -207,16 +207,16 @@ describe('ProgressService', () => {
         [0, 1, 2].map((t) => finish('2026-03-09', t)),
       );
 
-      const { stops } = await service.book('u', 7);
+      const { chapters } = await service.book('u', 7);
 
-      expect(stops.every((s) => s.state === 'done')).toBe(true);
+      expect(chapters.every((s) => s.state === 'done')).toBe(true);
     });
   });
 
   describe('reflection', () => {
     const reading = (over: object) =>
       repo.reflection!.mockResolvedValue({
-        stops: [],
+        chapters: [],
         questions: 0,
         feeling: null,
         ...over,
@@ -245,7 +245,7 @@ describe('ProgressService', () => {
 
     it('counts right items as items minus mistakes, never below zero', async () => {
       reading({
-        stops: [
+        chapters: [
           { topic: 0, mistakes: 1, items: 4 },
           { topic: 1, mistakes: 9, items: 3 },
           { topic: 2, mistakes: 0, items: 5 },
@@ -257,9 +257,9 @@ describe('ProgressService', () => {
       expect(items).toEqual({ right: 3 + 0 + 5, total: 12 });
     });
 
-    it('goes further on stops with no mistakes and is stuck on the one with most', async () => {
+    it('goes further on chapters with no mistakes and is stuck on the one with most', async () => {
       reading({
-        stops: [
+        chapters: [
           { topic: 0, mistakes: 0, items: 2 },
           { topic: 1, mistakes: 1, items: 2 },
           { topic: 2, mistakes: 3, items: 2 },
@@ -273,12 +273,12 @@ describe('ProgressService', () => {
     });
 
     it('is not stuck when there were no mistakes', async () => {
-      reading({ stops: [{ topic: 0, mistakes: 0, items: 2 }] });
+      reading({ chapters: [{ topic: 0, mistakes: 0, items: 2 }] });
 
       expect((await service.reflection('u', 7)).stuck).toBeNull();
     });
 
-    it('is finished once every stop is done', async () => {
+    it('is finished once every chapter is done', async () => {
       repo.finishes!.mockResolvedValue(
         [0, 1, 2].map((t) => finish('2026-03-09', t)),
       );
@@ -286,7 +286,7 @@ describe('ProgressService', () => {
       expect((await service.reflection('u', 7)).finished).toBe(true);
     });
 
-    it('is not finished when a subject has no stops', async () => {
+    it('is not finished when a subject has no chapters', async () => {
       repo.discipline!.mockResolvedValue({ ...discipline, topics: [] });
 
       expect((await service.reflection('u', 7)).finished).toBe(false);
@@ -334,6 +334,6 @@ describe('ProgressService', () => {
 
     const list = await service.achievements('u');
 
-    expect(list.map((a) => a.code)).toEqual(['primeira_parada']);
+    expect(list.map((a) => a.code)).toEqual(['primeiro_capitulo']);
   });
 });

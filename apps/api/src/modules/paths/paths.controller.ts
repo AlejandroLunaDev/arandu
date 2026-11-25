@@ -7,9 +7,9 @@ import type {
   Lesson,
   LessonResult,
   LessonResultRequest,
-  StopContent,
-  StopResult,
-  StopResultRequest,
+  ChapterContent,
+  ChapterResult,
+  ChapterResultRequest,
 } from '@arandu/contracts';
 import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -18,12 +18,12 @@ import { Public } from '../auth/public.decorator.js';
 import { UserId } from '../auth/user-id.decorator.js';
 import { CardTalkService } from './card-talk.service.js';
 import { PathsRepository } from './paths.repository.js';
-import { StopsService } from './stops.service.js';
-import { careerNotFound, stopNotFound } from './paths.errors.js';
+import { ChaptersService } from './chapters.service.js';
+import { careerNotFound, chapterNotFound } from './paths.errors.js';
 import { id, param, slug, topic } from '../../core/http/params.js';
 import { LESSONS } from './lessons.logic.js';
 
-const stopResult = z
+const chapterResult = z
   .object({
     mistakes: z.number().int().min(0).max(100),
     relampagoMistakes: z.number().int().min(0).max(100).nullable().optional(),
@@ -57,11 +57,11 @@ const askRequest = z
 export class PathsController {
   constructor(
     private readonly paths: PathsRepository,
-    private readonly stops: StopsService,
+    private readonly chapters: ChaptersService,
     private readonly talk: CardTalkService,
   ) {}
 
-  /** O10-O11: the career's courses and their first-semester subjects, each a book of stops. */
+  /** O10-O11: the career's courses and their first-semester subjects, each a book of chapters. */
   // Public (internal secret still required): the same for everyone, so the web server caches it without a token.
   // Not rate limited: a database read, no model call, and the server's cache misses all come from its one IP.
   @Public()
@@ -75,27 +75,27 @@ export class PathsController {
     return paths;
   }
 
-  /** O14-O18 and every later stop: its cards and exercises. Only made stops inside the subject's run; else 404. */
+  /** O14-O18 and every later chapter: its cards and exercises. Only made chapters inside the subject's run; else 404. */
   @Public()
   @SkipThrottle({ burst: true, daily: true })
-  @Get('stops/:disciplineId/:topic')
-  stop(
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
-  ): Promise<StopContent> {
-    return this.stops.stop(disciplineId, topicIndex);
+  @Get('chapters/:disciplineId/:topic')
+  chapter(
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+  ): Promise<ChapterContent> {
+    return this.chapters.chapter(disciplineId, topicIndex);
   }
 
-  /** O19: the stop is done. */
-  @Post('stops/:disciplineId/:topic/result')
+  /** O19: the chapter is done. */
+  @Post('chapters/:disciplineId/:topic/result')
   @HttpCode(200)
   finish(
     @UserId() userId: string,
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
-    @Body({ schema: stopResult }) body: StopResultRequest,
-  ): Promise<StopResult> {
-    return this.stops.finish(
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+    @Body({ schema: chapterResult }) body: ChapterResultRequest,
+  ): Promise<ChapterResult> {
+    return this.chapters.finish(
       userId,
       disciplineId,
       topicIndex,
@@ -106,27 +106,27 @@ export class PathsController {
   }
 
   /** P1-P2 (#123): one of the chapter's four lessons, for this person. */
-  @Get('stops/:disciplineId/:topic/lessons/:lesson')
+  @Get('chapters/:disciplineId/:topic/lessons/:lesson')
   lesson(
     @UserId() userId: string,
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
-    @Param('lesson', param(lessonIndex, stopNotFound)) lessonNumber: number,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, chapterNotFound)) lessonNumber: number,
   ): Promise<Lesson> {
-    return this.stops.lesson(userId, disciplineId, topicIndex, lessonNumber);
+    return this.chapters.lesson(userId, disciplineId, topicIndex, lessonNumber);
   }
 
   /** A lesson is done; lesson 4 finishes the chapter (O19). */
-  @Post('stops/:disciplineId/:topic/lessons/:lesson/result')
+  @Post('chapters/:disciplineId/:topic/lessons/:lesson/result')
   @HttpCode(200)
   finishLesson(
     @UserId() userId: string,
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
-    @Param('lesson', param(lessonIndex, stopNotFound)) lessonNumber: number,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, chapterNotFound)) lessonNumber: number,
     @Body({ schema: lessonResult }) body: LessonResultRequest,
   ): Promise<LessonResult> {
-    return this.stops.finishLesson(
+    return this.chapters.finishLesson(
       userId,
       disciplineId,
       topicIndex,
@@ -136,23 +136,23 @@ export class PathsController {
   }
 
   /** R12: which expected ideas the person's own explanation got. */
-  @Post('stops/:disciplineId/:topic/explain')
+  @Post('chapters/:disciplineId/:topic/explain')
   @HttpCode(200)
   explain(
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
     @Body({ schema: explainRequest }) body: ExplainRequest,
   ): Promise<ExplainReply> {
     return this.talk.explain(disciplineId, topicIndex, body.answer);
   }
 
-  /** T1: a question about the stop's cards. Never during exercises: the UI only offers it on the card. */
-  @Post('stops/:disciplineId/:topic/ask')
+  /** T1: a question about the chapter's cards. Never during exercises: the UI only offers it on the card. */
+  @Post('chapters/:disciplineId/:topic/ask')
   @HttpCode(200)
   ask(
     @UserId() userId: string,
-    @Param('disciplineId', param(id, stopNotFound)) disciplineId: number,
-    @Param('topic', param(topic, stopNotFound)) topicIndex: number,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
     @Body({ schema: askRequest }) body: AskRequest,
   ): Promise<AskReply> {
     return this.talk.ask(userId, disciplineId, topicIndex, body.question);

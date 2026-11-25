@@ -4,7 +4,7 @@ import { z } from 'zod';
 /** A row id: a positive Postgres integer. */
 export const id = z.coerce.number().int().positive().max(2_147_483_647);
 
-/** A stop's index inside its subject. */
+/** A chapter's index inside its subject. */
 export const topic = z.coerce.number().int().min(0).max(200);
 
 /** A profession's slug. */

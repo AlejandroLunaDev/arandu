@@ -1,6 +1,13 @@
 """Shared loading for curriculum adapters: course pages found on a list, and the subjects each page publishes."""
 
+import unicodedata
+
 MIN_ROWS_RATIO = 0.5  # fewer subjects than half the last load means the page format probably changed
+
+
+def in_city(city):
+    """True for São Paulo city however a source spells it ('SÃO PAULO', 'São Paulo')."""
+    return unicodedata.normalize("NFKD", city).encode("ascii", "ignore").decode().strip().upper() == "SAO PAULO"
 
 
 def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_unit=False):
@@ -12,6 +19,8 @@ def load_courses(conn, page_adapter, inep_code, label_prefix, courses, every_uni
     """
     written = 0
     for url, name, shift, city, *units in courses:
+        if not in_city(city):
+            continue  # the scope is São Paulo city only (ADR-0007): a page for another city is not registered
         units = units[0] if units else None
         label = f"{label_prefix}: {name}" + (f" ({shift})" if shift else "")
         written += conn.execute(
@@ -80,3 +89,11 @@ def load_described(conn, source_id, parsed, inep_code, base):
                    is distinct from (excluded.name, excluded.topics, excluded.program, excluded.source_id)""",
             (code, name, [description], (program[0] or None) if program else None, source_id, inep_code)).rowcount
     return written + load_subjects(conn, source_id, subjects)
+
+
+def load_page(conn, source_id, page_adapter, inep_code, label_prefix, parsed):
+    """Stage a page that is its own course, (name, city, subjects), then load its subjects when it is in the city."""
+    name, city, subjects = parsed
+    url = conn.execute("select url from sources where id = %s", (source_id,)).fetchone()[0]
+    written = load_courses(conn, page_adapter, inep_code, label_prefix, [(url, name, None, city)])
+    return written + (load_subjects(conn, source_id, subjects) if in_city(city) else 0)

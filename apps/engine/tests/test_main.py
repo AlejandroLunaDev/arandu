@@ -1,5 +1,8 @@
 import contextlib
+import hashlib
 import io
+import pathlib
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -12,7 +15,7 @@ class FakeDb:
 
     def __init__(self, sources):
         self.sources = sources  # adapter -> [(id, url, last_hash)]
-        self.hashes, self.runs, self.ran = {}, [], []
+        self.hashes, self.runs, self.ran, self.due_sql = {}, [], [], ""
 
     def execute(self, sql, params=()):
         sql = " ".join(sql.split())
@@ -20,7 +23,10 @@ class FakeDb:
         if sql.startswith("insert into scrape_runs"):
             self.runs.append({"adapter": params[0], "status": "running"})
             result.fetchone.return_value = (len(self.runs),)
+        elif sql.startswith("select exists"):
+            result.fetchone.return_value = (params[0] in self.sources,)
         elif sql.startswith("select id, url"):
+            self.due_sql = sql  # the fake returns the listed sources as the due ones; the filter is SQL
             result.fetchall.return_value = self.sources.get(params[0], [])
         elif sql.startswith("update sources"):
             self.hashes[params[1]] = params[0]
@@ -56,6 +62,17 @@ def adapter(db, fail_on=()):
 
 
 class RunTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.unread = pathlib.Path(tmp.name) / "unread"
+        patch = mock.patch.object(cli, "UNREAD", self.unread)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def kept(self, url):
+        return self.unread / hashlib.sha256(url.encode()).hexdigest()
+
     def run_adapter(self, db, ad, hashes=None):
         def download(url, dest):
             dest.write(url.encode())
@@ -89,6 +106,22 @@ class RunTest(unittest.TestCase):
         self.assertEqual(db.runs[0]["status"], "failed")
         self.assertEqual(db.runs[0]["error"], message)
 
+    def test_a_failing_source_keeps_its_bytes_unread(self):
+        db = FakeDb({"fake": [(1, "bad", None)]})
+        with self.assertRaises(RuntimeError):
+            self.run_adapter(db, adapter(db, fail_on={"bad"}))
+        self.assertEqual(self.kept("bad").read_bytes(), b"bad")
+
+    def test_a_kept_document_is_read_without_downloading_and_removed_once_loaded(self):
+        db = FakeDb({"fake": [(1, "a", None)]})
+        self.unread.mkdir()
+        self.kept("a").write_bytes(b"kept bytes")
+        with mock.patch.dict(cli.ADAPTERS, {"fake": adapter(db)}),                 mock.patch.object(cli.fetch, "download", side_effect=AssertionError("fetched")):
+            cli.run(db, "fake")
+        self.assertEqual(db.ran, ["kept bytes"])
+        self.assertEqual(db.hashes, {1: hashlib.sha256(b"kept bytes").hexdigest()})
+        self.assertFalse(self.kept("a").exists())
+
     def test_download_failure_is_collected_like_a_parse_failure(self):
         db = FakeDb({"fake": [(1, "a", None)]})
         with mock.patch.dict(cli.ADAPTERS, {"fake": adapter(db)}), \
@@ -102,6 +135,16 @@ class RunTest(unittest.TestCase):
         self.run_adapter(db, adapter(db))
         self.assertEqual(db.ran, [])
         self.assertIn(1, db.hashes)  # fetched-at still updated
+
+    def test_only_due_sources_are_selected(self):
+        db = FakeDb({"fake": [(1, "a", None)]})
+        self.run_adapter(db, adapter(db))
+        self.assertIn("last_fetched_at is null or last_fetched_at + refresh_interval <= now()", db.due_sql)
+
+    def test_registered_adapter_with_no_due_source_succeeds_with_zero_rows(self):
+        db = FakeDb({"fake": []})
+        self.run_adapter(db, adapter(db))
+        self.assertEqual(db.runs[0], {"adapter": "fake", "status": "succeeded", "rows": 0})
 
     def test_adapter_without_sources_fails_the_run(self):
         db = FakeDb({})
@@ -147,11 +190,12 @@ class MainTest(unittest.TestCase):
     def test_adapters_run_each_list_before_its_curriculum_level(self):
         order = {n: i for i, n in enumerate(cli.ADAPTERS)}
         for first, second in (("usp_courses", "usp_curriculum"), ("anima_sitemap", "anima_course"), ("anima_course", "anima_curriculum"),
-                              ("unip_courses", "unip_units"), ("unip_units", "unip_curriculum"), ("ufabc_courses", "ufabc_course_page"),
-                              ("ufabc_course_page", "ufabc_curriculum"), ("ufscar_courses", "ufscar_course"),
-                              ("ufscar_course", "ufscar_campus"), ("ufscar_campus", "ufscar_curriculum"),
-                              ("umc_courses", "umc_curriculum"), ("ifsp_courses", "ifsp_curriculum"), ("usp_curriculum", "enem_usp")):
+                              ("unip_courses", "unip_units"), ("unip_units", "unip_curriculum")):
             self.assertLess(order[first], order[second], f"{first} must run before {second}")
+
+    def test_belas_artes_and_facsp_curricula_are_registered(self):
+        self.assertIn("belas_artes_curriculum", cli.ADAPTERS)
+        self.assertIn("facsp_curriculum", cli.ADAPTERS)
 
 
 if __name__ == "__main__":

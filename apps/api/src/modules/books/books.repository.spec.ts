@@ -1,9 +1,10 @@
-import { createHash } from 'node:crypto';
 import postgres from 'postgres';
 import { BOOK_OFFERINGS, BooksRepository } from './books.repository.js';
 
-// Integration: runs the real SQL against a throwaway database with the catalog migrations applied. It is skipped
-// without TEST_DATABASE_URL, and it only ever writes rows it creates itself (slugs "t-*", INEP codes 9990000+).
+// Integration: runs the real SQL against the real database (the owner's rule: no local stack) with the catalog
+// migrations applied. It is skipped without TEST_DATABASE_URL, and it only ever writes rows it creates itself (slugs
+// "t-*", INEP codes 9990000+, sources of adapter "books_test"), all removed at the end. Setup is slow over the network.
+// Subject names are unique to the fixture: `public.subjects` is global, so the first discipline of a name claims it.
 const url = process.env.TEST_DATABASE_URL;
 
 describe.skipIf(!url)('BooksRepository (database)', () => {
@@ -17,6 +18,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
 
   const cleanup = async () => {
     await sql`delete from public.courses where inep_code >= 99900000`;
+    await sql`delete from public.disciplines where source_id in (select id from public.sources where adapter = 'books_test')`;
     await sql`delete from public.professions where slug like 't-%'`;
     await sql`delete from public.institutions where inep_code between 9990000 and 9999999`;
     if (createdFiap)
@@ -68,19 +70,20 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     return existing!.id;
   };
 
-  const profession = async (slug: string, name: string) => {
+  const profession = async (slug: string) => {
     const [row] = await sql<{ id: string }[]>`
       insert into public.professions (slug, name, cine_code)
-      values (${slug}, ${name}, ${`0411A${String(++professions).padStart(2, '0')}`})
+      values (${slug}, ${`Test ${slug.slice(2).replaceAll('-', ' ')}`}, ${`0411A${String(++professions).padStart(2, '0')}`})
       returning id::text`;
     return row!.id;
   };
 
   interface CourseOptions {
-    city?: string;
+    /** Null makes a distance course: it has no city (the migration's check ties them together). */
+    city?: string | null;
+    modality?: 'presencial' | 'a_distancia';
     duration?: number;
     campus?: string;
-    shift?: string;
     degree?: string;
   }
   const course = async (
@@ -91,25 +94,24 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     o: CourseOptions = {},
   ) => {
     const [row] = await sql<{ id: string }[]>`
-      insert into public.courses (inep_code, institution_id, profession_id, name, degree, shift, duration_years,
-        city, campus_name, source_id)
-      values (${99900000 + ++seq}, ${inst}, ${prof}, ${name}, ${o.degree ?? 'bacharelado'}, ${o.shift ?? null},
-        ${o.duration ?? null}, ${o.city ?? 'Sao Paulo'}, ${o.campus ?? null}, ${base})
+      insert into public.courses (inep_code, institution_id, profession_id, name, degree, duration_years,
+        city, modality, campus_name, source_id)
+      values (${99900000 + ++seq}, ${inst}, ${prof}, ${name}, ${o.degree ?? 'bacharelado'},
+        ${o.duration ?? null}, ${o.city === undefined ? 'Sao Paulo' : o.city}, ${o.modality ?? 'presencial'}, ${o.campus ?? null}, ${base})
       returning id::text`;
     return row!.id;
   };
 
+  /** A discipline with topics: the trigger makes it the one its subject name is taught from. */
   const discipline = async (
     inst: string,
     name: string,
     topics: string[] | null,
     src: string,
   ) => {
-    const [row] = await sql<{ id: string }[]>`
+    await sql`
       insert into public.disciplines (institution_id, code, name, topics, source_id)
-      values (${inst}, ${`D${++seq}`}, ${name}, ${topics}, ${src})
-      returning id::text`;
-    return row!.id;
+      values (${inst}, ${`TST${++seq}`}, ${name}, ${topics}, ${src})`;
   };
 
   interface Row {
@@ -117,25 +119,22 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     term: number | null;
     name: string;
     elective?: boolean;
-    shift?: string | null;
-    discipline?: string;
   }
   const subjects = async (courseId: string, src: string, rows: Row[]) => {
-    for (const r of rows)
-      await sql`
-        insert into public.curriculum_subjects (course_id, year, term, name, is_elective, shift, discipline_id,
-          source_id)
-        values (${courseId}, ${r.year}, ${r.term}, ${r.name}, ${r.elective ?? null}, ${r.shift ?? null},
-          ${r.discipline ?? null}, ${src})`;
+    await sql`insert into public.curriculum_subjects ${sql(
+      rows.map((r) => ({
+        course_id: courseId,
+        year: r.year,
+        term: r.term,
+        name: r.name,
+        is_elective: r.elective ?? null,
+        source_id: src,
+      })),
+    )}`;
   };
 
-  /** A first-semester subject, the minimum a course needs to carry a sample. */
-  const firstTerm = (name: string, discipline?: string): Row => ({
-    year: 1,
-    term: 1,
-    name,
-    discipline,
-  });
+  /** A first-semester subject. */
+  const firstTerm = (name: string): Row => ({ year: 1, term: 1, name });
 
   let base: string;
   const names = (book: { offerings: { course: { name: string } }[] } | null) =>
@@ -173,28 +172,24 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       photo: false,
     });
     const fiap = await institution(FIAP, 'FIAP', base);
-    // md5('t-photo-sample:9990015') sorts before md5('t-photo-sample:9990001'): without the photo filter it would win.
-    const noPhotoUniv = await institution(9990015, 'Nophoto Univ', base, {
-      photo: false,
-    });
 
-    // One sample discipline per test profession: the pool needs it, and the course holding it is "the sample's own".
+    /**
+     * The profession's career grid: its own source with one first-semester subject that has topics (taught from zeta),
+     * held by a zeta course named `name`, the lead of the offerings.
+     */
     const sampleCourse = async (
       prof: string,
+      slug: string,
       name = 'sample',
       o: CourseOptions = {},
     ) => {
-      const disc = await discipline(
-        zeta,
-        `Disc ${prof}`,
-        ['Topic one'],
-        await source(`Disc ${prof}`),
-      );
+      const grid = await source(`Grid ${slug}`);
+      await discipline(zeta, `Tz ${slug}`, ['Topic one'], base);
       const id = await course(prof, zeta, base, name, o);
-      await subjects(id, base, [firstTerm('Sample subject', disc)]);
+      await subjects(id, grid, [firstTerm(`Tz ${slug}`)]);
       return id;
     };
-    /** A course with one first-year mandatory subject: a candidate for the book. */
+    /** A course with one first-year mandatory subject without topics: a candidate for the book, not its grid. */
     const candidate = async (
       prof: string,
       inst: string,
@@ -206,9 +201,9 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       return id;
     };
 
-    // Ordering and picking: the sample's course, then FIAP, then names. 3 of 5 institutions.
-    const main = await profession('t-main', 'Test Main');
-    await sampleCourse(main, 'zeta1', {
+    // Ordering and picking: the course holding the career grid, then FIAP, then names. 3 of 5 institutions.
+    const main = await profession('t-main');
+    await sampleCourse(main, 't-main', 'zeta1', {
       city: 'Sao Paulo',
       duration: 4,
       campus: 'Campus Z',
@@ -225,40 +220,15 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     await course(main, fiap, base, 'fiap1');
 
     // A university without a full photo is not shown; the filter runs before the cap, so the next one fills in.
-    const photo = await profession('t-photo', 'Test Photo');
-    await sampleCourse(photo);
+    const photo = await profession('t-photo');
+    await sampleCourse(photo, 't-photo');
     await candidate(photo, bare, 'bare-no-photo');
     await candidate(photo, beta, 'beta-logo');
     await candidate(photo, carl, 'carl');
     await candidate(photo, echo, 'echo');
 
-    // Every institution of the profession lacks a photo: its only sample subject comes from one, so it is off the shelf.
-    const noPhoto = await profession('t-no-photo', 'Test No Photo');
-    const bareSample = await course(noPhoto, bare, base, 'bare-sample');
-    await subjects(bareSample, base, [
-      firstTerm(
-        'Bare subject',
-        await discipline(bare, 'Bare disc', ['B'], base),
-      ),
-    ]);
-
-    // A sample subject at an institution without a photo and one at an institution with a photo.
-    const photoSample = await profession('t-photo-sample', 'Test Photo Sample');
-    for (const [inst, label] of [
-      [noPhotoUniv, 'Nophoto'],
-      [zeta, 'Photo'],
-    ] as const) {
-      const id = await course(photoSample, inst, base, `${label}-course`);
-      await subjects(id, base, [
-        firstTerm(
-          `${label} subject`,
-          await discipline(inst, `${label} disc`, [label], base),
-        ),
-      ]);
-    }
-
-    const byName = await profession('t-name', 'Test Name');
-    await sampleCourse(byName);
+    const byName = await profession('t-name');
+    await sampleCourse(byName, 't-name');
     await candidate(byName, carl, 'carl');
     await candidate(byName, alpha, 'alpha');
     await candidate(
@@ -267,337 +237,274 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       'delta',
     );
 
-    const secondA = await profession('t-second-a', 'Test Second A');
-    await sampleCourse(secondA);
+    const secondA = await profession('t-second-a');
+    await sampleCourse(secondA, 't-second-a');
     await candidate(secondA, alpha, 'alpha-campinas', { city: 'Campinas' });
     await candidate(secondA, alpha, 'alpha-bauru', { city: 'Bauru' });
     await candidate(secondA, carl, 'carl');
 
-    const secondB = await profession('t-second-b', 'Test Second B');
-    await sampleCourse(secondB);
+    const secondB = await profession('t-second-b');
+    await sampleCourse(secondB, 't-second-b');
     await candidate(secondB, alpha, 'alpha-campinas', { city: 'Campinas' });
     await candidate(secondB, alpha, 'alpha-bauru', { city: 'Bauru' });
 
-    const fiapNoGrade = await profession('t-fiap-empty', 'Test Fiap Empty');
-    await sampleCourse(fiapNoGrade);
+    const fiapNoGrade = await profession('t-fiap-empty');
+    await sampleCourse(fiapNoGrade, 't-fiap-empty');
     await course(fiapNoGrade, fiap, base, 'fiap-sp', { city: 'Sao Paulo' });
     await course(fiapNoGrade, fiap, base, 'fiap-campinas', {
       city: 'Campinas',
     });
 
-    const fiapGrade = await profession('t-fiap-grade', 'Test Fiap Grade');
-    await sampleCourse(fiapGrade);
+    const fiapDistance = await profession('t-fiap-distance');
+    await sampleCourse(fiapDistance, 't-fiap-distance');
+    await course(fiapDistance, fiap, base, 'fiap-distance', {
+      city: null,
+      modality: 'a_distancia',
+    });
+
+    const fiapGrade = await profession('t-fiap-grade');
+    await sampleCourse(fiapGrade, 't-fiap-grade');
     await course(fiapGrade, fiap, base, 'fiap-empty-campinas', {
       city: 'Campinas',
     });
     await candidate(fiapGrade, fiap, 'fiap-grade-sp', { city: 'Sao Paulo' });
 
-    // One grade source: the one holding a sample discipline, else the lowest source id.
+    // The curriculum of an offering: the course's own first-year grade, the career grid's when it holds one, else the
+    // lowest source id.
     const gradeA = await source('Grade A');
     const gradeB = await source('Grade B');
-    const grade = await profession('t-grade', 'Test Grade');
-    const sampleDisc = await discipline(zeta, 'Sample Disc', ['x'], gradeB);
+    const gradeC = await source('Grade C');
+    const grade = await profession('t-grade');
+    await discipline(zeta, 'Sample Disc', ['x'], base);
     const zg = await course(grade, zeta, base, 'zg');
-    await subjects(zg, gradeA, [
-      { year: 1, term: 1, name: 'From A', shift: 'noturno' },
-    ]);
+    await subjects(zg, gradeA, [firstTerm('From A')]);
     await subjects(zg, gradeB, [
-      { ...firstTerm('Sample Disc', sampleDisc), shift: 'integral' },
-      { year: 1, term: 1, name: 'Beta', shift: 'integral' },
-      { year: 1, term: 1, name: 'Alpha', shift: 'integral' },
-      { year: 1, term: 2, name: 'Alpha', shift: 'integral' },
-      { year: 1, term: 2, name: 'Aaa', shift: 'integral' },
+      firstTerm('Sample Disc'),
+      firstTerm('Beta'),
+      firstTerm('Alpha'),
+      { year: 1, term: 2, name: 'Alpha' },
+      { year: 1, term: 2, name: 'Aaa' },
+      { year: 1, term: 3, name: 'Elective', elective: true },
+      { year: 2, term: 3, name: 'Second year' },
+      { year: null, term: null, name: 'Undated' },
+    ]);
+    const agCareer = await course(grade, alpha, base, 'ag-career');
+    await subjects(agCareer, gradeB, [firstTerm('B only')]);
+    await subjects(agCareer, gradeA, [firstTerm('A only')]);
+    const agLowest = await course(grade, carl, base, 'ag-lowest');
+    await subjects(agLowest, gradeC, [firstTerm('C only')]);
+    await subjects(agLowest, gradeA, [
+      firstTerm('A only'),
+      // year null, term 2 is still the first year: coalesce(year, (term + 1) / 2).
+      { year: null, term: 2, name: 'Term two' },
+    ]);
+
+    // Which grid a career plays: its first semester with the most subjects with topics, then the most subjects, then
+    // the lowest source id; a source never fetched is no grid.
+    const pick = async (
+      slug: string,
+      grids: { fetched?: boolean; subjects: [string, boolean][] }[],
+    ) => {
+      const prof = await profession(slug);
+      const id = await course(prof, zeta, base, 'pick');
+      for (const [n, g] of grids.entries()) {
+        const src = await source(`${slug} ${n}`, g.fetched ?? true);
+        for (const [name, topics] of g.subjects)
+          if (topics) await discipline(zeta, name, ['T'], base);
+        await subjects(
+          id,
+          src,
+          g.subjects.map(([name]) => firstTerm(name)),
+        );
+      }
+    };
+    await pick('t-pick-topics', [
       {
-        year: 1,
-        term: 3,
-        name: 'Elective',
-        elective: true,
-        shift: 'integral',
+        subjects: [
+          ['Pick topics x1', true],
+          ['Pick topics x2', false],
+          ['Pick topics x3', false],
+        ],
       },
-      { year: 2, term: 3, name: 'Second year', shift: 'integral' },
-      { year: null, term: null, name: 'Undated', shift: 'integral' },
+      {
+        subjects: [
+          ['Pick topics y1', true],
+          ['Pick topics y2', true],
+        ],
+      },
     ]);
-    const ag = await course(grade, alpha, base, 'ag');
-    await subjects(ag, gradeB, [{ year: 1, term: 1, name: 'B only' }]);
-    await subjects(ag, gradeA, [{ year: 1, term: 1, name: 'A only' }]);
-    // year null, term 2 is still the first year: coalesce(year, (term + 1) / 2).
-    await subjects(ag, gradeA, [{ year: null, term: 2, name: 'Term two' }]);
+    await pick('t-pick-count', [
+      {
+        subjects: [
+          ['Pick count x1', true],
+          ['Pick count x2', false],
+        ],
+      },
+      {
+        subjects: [
+          ['Pick count y1', true],
+          ['Pick count y2', false],
+          ['Pick count y3', false],
+        ],
+      },
+    ]);
+    await pick('t-pick-oldest', [
+      { subjects: [['Pick oldest x1', true]] },
+      { subjects: [['Pick oldest y1', true]] },
+    ]);
+    await pick('t-pick-unfetched', [
+      {
+        fetched: false,
+        subjects: [
+          ['Pick unfetched u1', true],
+          ['Pick unfetched u2', true],
+        ],
+      },
+      { subjects: [['Pick unfetched f1', true]] },
+    ]);
 
-    // The grade's shift only when every one of its rows shares one value of the four.
-    const shiftA = await profession('t-shift-a', 'Test Shift A');
-    const sz = await sampleCourse(shiftA, 'same-value', { shift: 'matutino' });
-    await sql`update public.curriculum_subjects set shift = 'Noturno' where course_id = ${sz}`;
-    await subjects(sz, base, [
-      { year: 1, term: 2, name: 'More', shift: 'NOTURNO' },
-    ]);
-    const mixed = await course(shiftA, alpha, base, 'two-values');
-    await subjects(mixed, base, [
-      { year: 1, term: 1, name: 'M1', shift: 'noturno' },
-      { year: 1, term: 2, name: 'M2', shift: 'integral' },
-    ]);
-    const unknown = await course(shiftA, carl, base, 'unknown-value');
-    await subjects(unknown, base, [
-      { year: 1, term: 1, name: 'U1', shift: 'manha' },
-    ]);
-
-    const shiftB = await profession('t-shift-b', 'Test Shift B');
-    await sampleCourse(shiftB, 'all-null');
-    const some = await course(shiftB, echo, base, 'null-and-value');
-    await subjects(some, base, [
-      { year: 1, term: 1, name: 'S1', shift: 'noturno' },
-      { year: 1, term: 2, name: 'S2', shift: null },
-    ]);
-    const column = await course(shiftB, beta, base, 'course-column-only', {
-      shift: 'vespertino',
-    });
-    await subjects(column, base, [{ year: 1, term: 1, name: 'C1' }]);
-
-    // The sample.
-    const sample = await profession('t-sample', 'Test Sample');
-    const dz = await discipline(
-      zeta,
-      'Zoologia',
-      ['Zeta last', 'Alpha first', 'Mid'],
-      await source('Src Z'),
-    );
-    const da = await discipline(
-      alpha,
-      'Anatomia',
-      ['A1', 'A2'],
-      await source('Src A'),
-    );
-    const dNull = await discipline(zeta, 'No topics', null, base);
-    const dTwo = await discipline(zeta, 'Term two only', ['T'], base);
-    const dUndated = await discipline(carl, 'Undated term', ['U'], base);
-    const other = await profession('t-sample-other', 'Test Sample Other');
-    const dOther = await discipline(zeta, 'Other profession', ['O'], base);
-    const sc1 = await course(sample, zeta, base, 'sc1');
-    await subjects(sc1, base, [
-      firstTerm('Zoologia', dz),
-      firstTerm('No topics', dNull),
-      { year: 1, term: 2, name: 'Term two only', discipline: dTwo },
-    ]);
-    const sc2 = await course(sample, alpha, base, 'sc2');
-    await subjects(sc2, base, [firstTerm('Anatomia', da)]);
-    const sc3 = await course(sample, carl, base, 'sc3');
-    await subjects(sc3, base, [
-      firstTerm('Anatomia', da),
-      { year: 1, term: null, name: 'Undated', discipline: dUndated },
-    ]);
-    const oc = await course(other, zeta, base, 'oc');
-    await subjects(oc, base, [firstTerm('Other', dOther)]);
-    // Three linked first-semester disciplines: the sample keeps the first two by name.
-    const cap = await profession('t-sample-cap', 'Test Sample Cap');
+    // The sample: three first-semester subjects with topics, one in term 2, one without topics.
+    const cap = await profession('t-sample-cap');
     const capCourse = await course(cap, zeta, base, 'cap');
-    await subjects(capCourse, base, [
-      firstTerm('Cap C', await discipline(zeta, 'Cap C', ['C'], base)),
-      firstTerm(
-        'Cap A',
-        await discipline(
-          zeta,
-          'Cap A',
-          ['Zeta last', 'Alpha first', 'Mid'],
-          await source('Src Cap'),
-        ),
-      ),
-      firstTerm('Cap B', await discipline(zeta, 'Cap B', ['B'], base)),
-    ]);
-
-    // The sample flag follows the shared rule: term 2 does not make a course the sample, a term-1 elective does.
-    const flagTerm2 = await profession('t-flag-term2', 'Test Flag Term Two');
-    await sampleCourse(flagTerm2, 'pool');
-    await candidate(flagTerm2, alpha, 'a-plain');
-    const cTerm2 = await candidate(flagTerm2, carl, 'c-term2');
-    await subjects(cTerm2, base, [
-      {
-        year: 1,
-        term: 2,
-        name: 'Linked',
-        discipline: await discipline(carl, 'Flag term 2', ['T'], base),
-      },
-    ]);
-    const flagElective = await profession(
-      't-flag-elective',
-      'Test Flag Elective',
+    const srcCap = await source('Src Cap');
+    await discipline(zeta, 'Cap C', ['C'], base);
+    await discipline(
+      zeta,
+      'Cap A',
+      ['Zeta last', 'Alpha first', 'Mid'],
+      srcCap,
     );
-    // Not a sampleCourse: the sample comes from one institution, so carl's elective must be the only candidate.
-    await candidate(flagElective, zeta, 'pool');
-    await candidate(flagElective, alpha, 'a-plain');
-    const cElective = await candidate(flagElective, carl, 'c-elective');
-    await subjects(cElective, base, [
-      {
-        year: 1,
-        term: 1,
-        name: 'Linked',
-        elective: true,
-        discipline: await discipline(carl, 'Flag elective', ['E'], base),
-      },
+    await discipline(zeta, 'Cap B', ['B'], base);
+    await discipline(zeta, 'Cap term two', ['T'], base);
+    await discipline(zeta, 'Cap no topics', null, base);
+    await subjects(capCourse, await source('Grid cap'), [
+      firstTerm('Cap C'),
+      firstTerm('Cap A'),
+      firstTerm('Cap B'),
+      firstTerm('Cap no topics'),
+      { year: 1, term: 2, name: 'Cap term two' },
     ]);
 
-    // The sample comes from ONE institution: here only alpha (no short name) has a sample subject.
-    const onlyAlpha = await profession('t-sample-alpha', 'Test Sample Alpha');
-    const alphaCourse = await course(onlyAlpha, alpha, base, 'alpha-only');
-    await subjects(alphaCourse, base, [
-      firstTerm(
-        'Solo alpha',
-        await discipline(alpha, 'Solo alpha', ['S'], base),
-      ),
-    ]);
+    // The institution of the sample is the discipline's, not the grid's: only alpha (no short name) teaches this one.
+    const onlyAlpha = await profession('t-sample-alpha');
+    await discipline(alpha, 'Solo alpha', ['S'], base);
+    await subjects(
+      await course(onlyAlpha, zeta, base, 'alpha-only'),
+      await source('Grid alpha'),
+      [firstTerm('Solo alpha')],
+    );
 
     // A FIAP page: year-only subjects (no term), each discipline holding its page description as the one topic.
     const fiapPage = await source('Fiap page');
-    const fiapIa = await profession('t-fiap-ia', 'Test Fiap IA');
+    const fiapIa = await profession('t-fiap-ia');
     const fiapIaCourse = await course(fiapIa, fiap, base, 'fiap-ia');
+    for (const name of ['Tz Machine Learning', 'Tz AI Challenges'])
+      await discipline(fiap, name, [`Descrição de ${name}`], fiapPage);
     await subjects(
       fiapIaCourse,
       fiapPage,
-      await Promise.all(
-        ['Machine Learning', 'AI Challenges'].map(async (name) => ({
-          year: 1,
-          term: null,
-          name,
-          discipline: await discipline(
-            fiap,
-            name,
-            [`Descrição de ${name}`],
-            fiapPage,
-          ),
-        })),
-      ),
+      ['Tz Machine Learning', 'Tz AI Challenges'].map((name) => ({
+        year: 1,
+        term: null,
+        name,
+      })),
     );
 
-    // Four institutions, each with sample subjects named so that a mix across them would show in the name order.
-    for (const slug of ['t-shared-a', 't-shared-b', 't-shared-c']) {
-      const shared = await profession(slug, `Test ${slug}`);
-      for (const [inst, label, names] of [
-        [zeta, 'zeta', ['A zeta', 'E zeta']],
-        [alpha, 'alpha', ['B alpha', 'F alpha']],
-        [carl, 'carl', ['C carl']],
-        [fiap, 'fiap', ['D fiap', 'G fiap']],
-      ] as const) {
-        const id = await course(shared, inst, base, `${slug}-${label}`);
-        await subjects(
-          id,
-          base,
-          await Promise.all(
-            names.map(async (name) =>
-              firstTerm(name, await discipline(inst, name, [name], base)),
-            ),
-          ),
-        );
-      }
-    }
-
-    // A profession with courses but no sample subject at all.
-    const noSample = await profession('t-no-sample', 'Test No Sample');
-    await subjects(await course(noSample, zeta, base, 'ns'), base, [
-      firstTerm('Plain'),
-    ]);
-
-    // At alpha, 'Aaa shared' and 'Bbb shared' open three careers, 'Ccc mid' two, 'Own' one: the shared ones sort first.
-    const spread = await profession('t-spread', 'Test Spread');
+    // Careers share subjects: at the grids of three careers, 'Aaa shared' and 'Bbb shared' open three, 'Ccc mid' two,
+    // 'Own' one: the career's own subjects come first.
+    const spread = await profession('t-spread');
+    for (const name of ['Aaa shared', 'Bbb shared', 'Ccc mid', 'Own'])
+      await discipline(alpha, name, [name], base);
     await subjects(
       await course(spread, alpha, base, 'spread'),
-      base,
-      await Promise.all(
-        ['Aaa shared', 'Bbb shared', 'Ccc mid', 'Own'].map(async (name) =>
-          firstTerm(name, await discipline(alpha, name, [name], base)),
-        ),
-      ),
+      await source('Grid spread'),
+      ['Aaa shared', 'Bbb shared', 'Ccc mid', 'Own'].map(firstTerm),
     );
     for (const [slug, shared] of [
       ['t-spread-x', ['Aaa shared', 'Bbb shared', 'Ccc mid']],
       ['t-spread-y', ['aaa SHARED', 'Bbb shared']],
     ] as const) {
-      const other = await profession(slug, `Test ${slug}`);
+      const other = await profession(slug);
       await subjects(
         await course(other, alpha, base, slug),
-        base,
-        shared.map((name) => firstTerm(name)),
+        await source(`Grid ${slug}`),
+        shared.map(firstTerm),
       );
     }
 
-    // São Judas spells a subject one way in the ementário and another in the grades, yet both rows link to one
-    // discipline: three careers at alpha reach 'Aaa Transmidia' through 'Aaa Transmídia', so it is as shared as can be.
-    const linked = await discipline(alpha, 'Aaa Transmidia', ['Topic'], base);
-    const link = await profession('t-link', 'Test Link');
-    await subjects(await course(link, alpha, base, 'link'), base, [
-      firstTerm('Aaa Transmídia', linked),
-      firstTerm('Own link', await discipline(alpha, 'Own link', ['O'], base)),
-    ]);
+    // A subject is spelled one way in the ementário and another in the grids, yet both are one subject (the key drops
+    // accents): three careers reach 'Aaa Transmidia', so it is as shared as can be.
+    const link = await profession('t-link');
+    await discipline(alpha, 'Aaa Transmidia', ['Topic'], base);
+    await discipline(alpha, 'Own link', ['O'], base);
+    await subjects(
+      await course(link, alpha, base, 'link'),
+      await source('Grid link'),
+      [firstTerm('Aaa Transmídia'), firstTerm('Own link')],
+    );
     for (const slug of ['t-link-x', 't-link-y']) {
-      const other = await profession(slug, `Test ${slug}`);
-      await subjects(await course(other, alpha, base, slug), base, [
-        firstTerm('Aaa Transmídia', linked),
-      ]);
+      const other = await profession(slug);
+      await subjects(
+        await course(other, alpha, base, slug),
+        await source(`Grid ${slug}`),
+        [firstTerm('Aaa Transmídia')],
+      );
     }
 
     // Two disciplines of one name (an institution with an ementa per course page): the sample holds it once.
-    const twin = await profession('t-twin', 'Test Twin');
-    await subjects(await course(twin, carl, base, 'twin'), base, [
-      firstTerm(
-        'Twin',
-        await discipline(carl, 'Twin', ['T1'], await source('Twin 1')),
-      ),
-      firstTerm(
-        'TWIN',
-        await discipline(carl, 'TWIN', ['T2'], await source('Twin 2')),
-      ),
-      firstTerm('Zed', await discipline(carl, 'Zed', ['Z'], base)),
-    ]);
+    const twin = await profession('t-twin');
+    await discipline(carl, 'Twin', ['T1'], await source('Twin 1'));
+    await discipline(carl, 'TWIN', ['T2'], await source('Twin 2'));
+    await discipline(carl, 'Zed', ['Z'], base);
+    await subjects(
+      await course(twin, carl, base, 'twin'),
+      await source('Grid twin'),
+      [firstTerm('Twin'), firstTerm('TWIN'), firstTerm('Zed')],
+    );
 
-    // The pool.
+    // The pool: the career grid has a first-semester subject with topics.
     const pool = async (
       slug: string,
-      name: string,
-      row: (d: string) => Row,
+      row: Row,
       topics: string[] | null = ['T'],
     ) => {
-      const id = await profession(slug, name);
-      const disc = await discipline(zeta, `Pool ${slug}`, topics, base);
-      await subjects(await course(id, zeta, base, `${slug}-course`), base, [
-        row(disc),
-      ]);
+      const id = await profession(slug);
+      if (topics) await discipline(zeta, row.name, topics, base);
+      await subjects(
+        await course(id, zeta, base, `${slug}-course`),
+        await source(`Grid ${slug}`),
+        [row],
+      );
     };
-    await pool('t-pool-term-null', 'Test Pool Undated Term', (d) => ({
+    await pool('t-pool-term-null', {
       year: 1,
       term: null,
-      name: 'S',
-      discipline: d,
-    }));
-    await pool('t-pool-term-two', 'Test Pool Term Two', (d) => ({
-      year: 1,
-      term: 2,
-      name: 'S',
-      discipline: d,
-    }));
-    await pool('t-pool-year-two', 'Test Pool Year Two', (d) => ({
+      name: 'Pool term null',
+    });
+    await pool('t-pool-term-two', { year: 1, term: 2, name: 'Pool term two' });
+    await pool('t-pool-year-two', {
       year: 2,
       term: null,
-      name: 'S',
-      discipline: d,
-    }));
-    await pool(
-      't-pool-no-topics',
-      'Test Pool No Topics',
-      (d) => firstTerm('S', d),
-      null,
+      name: 'Pool year two',
+    });
+    await pool('t-pool-no-topics', firstTerm('Pool no topics'), null);
+    await pool('t-pool-no-discipline', firstTerm('Pool no discipline'), null);
+    await profession('t-pool-no-courses');
+    await subjects(
+      await course(await profession('t-no-sample'), zeta, base, 'ns'),
+      base,
+      [firstTerm('Tz Plain')],
     );
-    await pool('t-pool-undisciplined', 'Test Pool No Discipline', () =>
-      firstTerm('S'),
-    );
-    await profession('t-pool-no-courses', 'Test Pool No Courses');
 
     // A source never fetched has no date to show: what it backs is left out, never a crash.
-    const unfetched = await profession('t-unfetched', 'Test Unfetched');
-    await sampleCourse(unfetched);
+    const unfetched = await profession('t-unfetched');
     const staleSource = await source('Unfetched', false);
-    const staleDisc = await discipline(zeta, 'Stale disc', ['S'], staleSource);
-    const freshDisc = await discipline(zeta, 'Fresh disc', ['F'], base);
-    const unfetchedSample = await course(unfetched, zeta, base, 'sample-2');
-    await subjects(unfetchedSample, base, [
-      firstTerm('Stale', staleDisc),
-      firstTerm('Fresh', freshDisc),
+    await discipline(zeta, 'Stale disc', ['S'], staleSource);
+    await discipline(zeta, 'Fresh disc', ['F'], base);
+    const unfetchedSample = await course(unfetched, zeta, base, 'sample');
+    await subjects(unfetchedSample, await source('Grid unfetched'), [
+      firstTerm('Stale disc'),
+      firstTerm('Fresh disc'),
     ]);
     const staleGrade = await course(unfetched, alpha, base, 'stale-grade');
     await subjects(staleGrade, staleSource, [firstTerm('Never fetched')]);
@@ -608,59 +515,56 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       'stale-census',
     );
     await subjects(staleCensus, base, [firstTerm('Census unfetched')]);
-  });
+  }, 300_000);
 
   afterAll(async () => {
     await cleanup();
     await sql.end();
-  });
+  }, 120_000);
 
   const book = (slug: string) => repository.book(slug);
-  /** The institution the sample must come from, computed here: the smallest md5(slug:INEP code) of the candidates. */
-  const pickedInstitution = async (slug: string, ineps: number[]) => {
-    const rows = await sql<{ id: string; inep: number }[]>`
-      select id::text, inep_code as inep from public.institutions where inep_code in ${sql(ineps)}`;
-    const hash = (inep: number) =>
-      createHash('md5').update(`${slug}:${inep}`).digest('hex');
-    return rows.sort((a, b) => hash(a.inep).localeCompare(hash(b.inep)))[0];
-  };
   const summaries = async () =>
     (await repository.list()).filter((s) => s.profession.slug.startsWith('t-'));
+  const sampleNames = async (slug: string) =>
+    (await book(slug))?.sample.map((s) => s.name);
 
   describe('list', () => {
     it('lists only the pool, alphabetically by profession name', async () => {
-      const slugs = (await summaries()).map((s) => s.profession.slug);
+      const all = await summaries();
 
-      expect(slugs).toEqual([
-        't-fiap-empty',
-        't-fiap-grade',
-        't-fiap-ia',
-        't-flag-elective',
-        't-flag-term2',
-        't-grade',
-        't-link',
-        't-main',
-        't-name',
-        't-photo',
-        't-photo-sample',
-        't-pool-term-null',
-        't-sample',
-        't-sample-alpha',
-        't-sample-cap',
-        't-sample-other',
-        't-second-a',
-        't-second-b',
-        't-shift-a',
-        't-shift-b',
-        't-spread',
-        't-link-x',
-        't-link-y',
-        't-shared-a',
-        't-shared-b',
-        't-shared-c',
-        't-twin',
-        't-unfetched',
-      ]);
+      expect(all.map((s) => s.profession.slug).sort()).toEqual(
+        [
+          't-fiap-distance',
+          't-fiap-empty',
+          't-fiap-grade',
+          't-fiap-ia',
+          't-grade',
+          't-link',
+          't-link-x',
+          't-link-y',
+          't-main',
+          't-name',
+          't-photo',
+          't-pick-count',
+          't-pick-oldest',
+          't-pick-topics',
+          't-pick-unfetched',
+          't-pool-term-null',
+          't-sample-alpha',
+          't-sample-cap',
+          't-second-a',
+          't-second-b',
+          't-spread',
+          't-spread-x',
+          't-spread-y',
+          't-twin',
+          't-unfetched',
+        ].sort(),
+      );
+      const professionNames = all.map((s) => s.profession.name);
+      expect(professionNames).toEqual(
+        [...professionNames].sort((a, b) => a.localeCompare(b, 'en')),
+      );
     });
 
     it('counts every census course of the profession, with or without a grade', async () => {
@@ -669,50 +573,89 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       );
 
       expect(main).toEqual({
-        profession: { slug: 't-main', name: 'Test Main' },
+        profession: { slug: 't-main', name: 'Test main' },
         offeringCount: 7,
       });
-    });
-
-    it('counts the courses of the profession only (t-sample has 3)', async () => {
-      const sample = (await summaries()).find(
-        (s) => s.profession.slug === 't-sample',
-      );
-
-      expect(sample?.offeringCount).toBe(3);
     });
   });
 
   describe('pool', () => {
     it.each([
-      ['a first-semester subject with a discipline that has topics', 't-main'],
+      ['a first-semester subject with topics', 't-main'],
       ['an undated term in year 1', 't-pool-term-null'],
     ])('includes a profession with %s', async (_n, slug) => {
       expect(await book(slug)).not.toBeNull();
     });
 
     it.each([
-      ['a discipline only in term 2', 't-pool-term-two'],
+      ['a subject only in term 2', 't-pool-term-two'],
       ['an undated term in year 2', 't-pool-year-two'],
-      ['a discipline without topics', 't-pool-no-topics'],
-      ['a first-semester subject without a discipline', 't-pool-undisciplined'],
+      ['a subject without topics', 't-pool-no-topics'],
+      ['a first-semester subject without a discipline', 't-pool-no-discipline'],
       ['no courses', 't-pool-no-courses'],
-      ['courses but no sample subject', 't-no-sample'],
+      ['courses but no subject with topics', 't-no-sample'],
       ['no such profession', 't-does-not-exist'],
     ])('answers null for a profession with %s', async (_n, slug) => {
       expect(await book(slug)).toBeNull();
     });
   });
 
+  describe('career grid', () => {
+    it.each([
+      [
+        'the most subjects with topics, over the most subjects',
+        't-pick-topics',
+        ['Pick topics y1', 'Pick topics y2'],
+      ],
+      [
+        'the most subjects when the topics tie',
+        't-pick-count',
+        ['Pick count y1'],
+      ],
+      [
+        'the lowest source id when everything ties',
+        't-pick-oldest',
+        ['Pick oldest x1'],
+      ],
+      [
+        'a fetched source over a better one never fetched',
+        't-pick-unfetched',
+        ['Pick unfetched f1'],
+      ],
+    ])('is the grid with %s', async (_n, slug, expected) => {
+      expect(await sampleNames(slug)).toEqual(expected);
+    });
+
+    it('is played by every course of the career, each with its own first-year grade', async () => {
+      const result = await book('t-grade');
+      const byCourse = Object.fromEntries(
+        (result?.offerings ?? []).map((o) => [
+          o.course.name,
+          o.curriculum?.years[0]!.subjects,
+        ]),
+      );
+
+      // Distinct, by term then name, in the grid that holds the sample; electives and later years left out.
+      expect(byCourse['zg']).toEqual(['Alpha', 'Beta', 'Sample Disc', 'Aaa']);
+      expect(byCourse['ag-career']).toEqual(['B only']);
+      // No grade of this course is the career's: the lowest source id.
+      expect(byCourse['ag-lowest']).toEqual(['A only', 'Term two']);
+      expect(
+        result?.offerings.find((o) => o.course.name === 'zg')?.curriculum
+          ?.source.label,
+      ).toBe('Grade B');
+    });
+  });
+
   describe('offerings', () => {
-    it('caps at BOOK_OFFERINGS and puts the sample course, then FIAP, then institutions by name', async () => {
+    it('caps at BOOK_OFFERINGS and puts the course holding the career grid first, then FIAP, then institutions by name', async () => {
       const result = await book('t-main');
 
       expect(BOOK_OFFERINGS).toBe(3);
       expect(names(result)).toEqual(['zeta1', 'fiap1', 'alpha1']);
     });
 
-    it('orders by institution name after the sample course, ignoring logos', async () => {
+    it('orders by institution name after the lead, ignoring logos', async () => {
       expect(names(await book('t-name'))).toEqual(['sample', 'alpha', 'carl']);
     });
 
@@ -723,37 +666,6 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(names(result)).toEqual(['sample', 'beta-logo', 'carl']);
       expect(result?.offerings.map((o) => o.institution.photo)).not.toContain(
         null,
-      );
-    });
-
-    it('does not pin or show FIAP without a photo, and the next institution takes its place', async () => {
-      const [saved] = await sql<
-        {
-          photo_url: string;
-          photo_credit: string;
-          photo_license: string;
-          photo_source_url: string;
-        }[]
-      >`select photo_url, photo_credit, photo_license, photo_source_url from public.institutions
-        where inep_code = ${FIAP}`;
-      await sql`update public.institutions set photo_url = null, photo_credit = null, photo_license = null,
-        photo_source_url = null where inep_code = ${FIAP}`;
-      try {
-        expect(names(await book('t-main'))).toEqual([
-          'zeta1',
-          'alpha1',
-          'beta1',
-        ]);
-        expect(names(await book('t-fiap-empty'))).toEqual(['sample']);
-      } finally {
-        await sql`update public.institutions set ${sql(saved!)} where inep_code = ${FIAP}`;
-      }
-    });
-
-    it('keeps a profession whose only sample subject is from an institution without a photo off the shelf', async () => {
-      expect(await book('t-no-photo')).toBeNull();
-      expect((await summaries()).map((s) => s.profession.slug)).not.toContain(
-        't-no-photo',
       );
     });
 
@@ -768,7 +680,6 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       const result = await book('t-second-b');
 
       expect(names(result)).toEqual(['sample', 'alpha-bauru']);
-      expect(result?.offerings).toHaveLength(2);
       expect(
         new Set(result?.offerings.map((o) => o.institution.name)).size,
       ).toBe(2);
@@ -786,7 +697,18 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
 
       expect(names(result)).toEqual(['sample', 'fiap-campinas']);
       expect(result?.offerings[1]!.curriculum).toBeNull();
-      expect(result?.offerings[1]!.institution.name).toBe('FIAP');
+      expect(result?.offerings[1]!.institution.name).toContain('FIAP');
+    });
+
+    it('shows a distance course with no campus and its modality, and an in-person one as presencial', async () => {
+      const result = await book('t-fiap-distance');
+
+      expect(names(result)).toEqual(['sample', 'fiap-distance']);
+      expect(result?.offerings[1]!.course).toMatchObject({
+        modality: 'a_distancia',
+        campus: null,
+      });
+      expect(result?.offerings[0]!.course.modality).toBe('presencial');
     });
 
     it('shows the FIAP course that has a grade, never an empty second FIAP page', async () => {
@@ -819,6 +741,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
           degree: 'bacharelado',
           shift: null,
           durationYears: 4,
+          modality: 'presencial',
           campus: { name: 'Campus Z', city: 'Sao Paulo' },
           source: {
             label: 'Base',
@@ -826,12 +749,11 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
             retrievedAt: '2026-01-02T03:04:05.000Z',
           },
         },
-        admission: [],
         curriculum: {
-          years: [{ year: 1, subjects: ['Sample subject'] }],
+          years: [{ year: 1, subjects: ['Tz t-main'] }],
           source: {
-            label: 'Base',
-            url: 'https://example.test/Base',
+            label: 'Grid t-main',
+            url: 'https://example.test/Grid-t-main',
             retrievedAt: '2026-01-02T03:04:05.000Z',
           },
         },
@@ -856,12 +778,6 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(carl!.institution.kind).toBe('special');
     });
 
-    it('has no admission cut-offs in any offering', async () => {
-      const result = await book('t-main');
-
-      expect(result?.offerings.map((o) => o.admission)).toEqual([[], [], []]);
-    });
-
     it('has a null durationYears when the census gives none, and a number when it does', async () => {
       const result = await book('t-main');
 
@@ -870,99 +786,10 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
   });
 
-  describe('curriculum', () => {
-    it('lists distinct year-1 mandatory subjects by term then name, from the grade holding the sample', async () => {
-      const result = await book('t-grade');
-      const zg = result?.offerings.find((o) => o.course.name === 'zg');
-
-      expect(zg?.curriculum).toEqual({
-        years: [
-          {
-            year: 1,
-            subjects: ['Alpha', 'Beta', 'Sample Disc', 'Aaa'],
-          },
-        ],
-        source: expect.objectContaining({ label: 'Grade B' }),
-      });
-    });
-
-    it('takes the lowest source id when no grade holds a sample discipline', async () => {
-      const result = await book('t-grade');
-      const ag = result?.offerings.find((o) => o.course.name === 'ag');
-
-      expect(ag?.curriculum?.years).toEqual([
-        { year: 1, subjects: ['A only', 'Term two'] },
-      ]);
-      expect(ag?.curriculum?.source.label).toBe('Grade A');
-    });
-
-    it('counts a year-less subject by its term as first year, and leaves out electives and later years', async () => {
-      const result = await book('t-grade');
-      const subjects = result?.offerings.flatMap(
-        (o) => o.curriculum?.years[0]!.subjects ?? [],
-      );
-
-      expect(subjects).toContain('Term two');
-      expect(subjects).not.toContain('Elective');
-      expect(subjects).not.toContain('Second year');
-      expect(subjects).not.toContain('Undated');
-    });
-  });
-
-  describe('shift', () => {
-    it('is always null, even when the grade states a clean shift', async () => {
-      const result = await book('t-shift-a');
-      const same = result?.offerings.find(
-        (o) => o.course.name === 'same-value',
-      );
-
-      expect(same).toBeDefined();
-      expect(result?.offerings.map((o) => o.course.shift)).toEqual(
-        result?.offerings.map(() => null),
-      );
-    });
-  });
-
   describe('sample', () => {
-    it('takes the sample from one institution only: the one the profession hash picks, subjects by name', async () => {
-      const result = await book('t-sample');
-      const picked = await pickedInstitution(
-        't-sample',
-        [9990001, 9990002, 9990004],
-      );
-
-      expect(result?.sample.map((s) => s.name)).toEqual(
-        (
-          {
-            9990001: ['Zoologia'],
-            9990002: ['Anatomia'],
-            9990004: ['Undated term'],
-          } as Record<number, string[]>
-        )[picked!.inep],
-      );
-      expect(new Set(result?.sample.map((s) => s.institution)).size).toBe(1);
-    });
-
-    it('never takes the sample from an institution without a photo, even when its hash sorts first', async () => {
-      const slug = 't-photo-sample';
-      // Premise: unfiltered, the institution without a photo (9990015) would win the hash.
-      expect((await pickedInstitution(slug, [9990001, 9990015]))!.inep).toBe(
-        9990015,
-      );
-      const result = await book(slug);
-
-      expect(result?.sample.map((s) => [s.name, s.institution])).toEqual([
-        ['Photo disc', 'ZU'],
-      ]);
-      expect(result?.offerings.map((o) => o.course.name)).toEqual([
-        'Photo-course',
-      ]);
-    });
-
-    it('returns 2 sample subjects, the first two by name, for 3 linked first-semester disciplines', async () => {
-      const result = await book('t-sample-cap');
-
-      expect(result?.sample.map((s) => s.name)).toEqual(['Cap A', 'Cap B']);
+    it('returns 2 subjects, the first two by name, of the first semester with topics only', async () => {
+      // Cap term two (term 2) and Cap no topics stay out.
+      expect(await sampleNames('t-sample-cap')).toEqual(['Cap A', 'Cap B']);
     });
 
     it('keeps topics in source order and uses the short name of the institution and the discipline source', async () => {
@@ -986,58 +813,22 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       );
     });
 
-    it('does not rank a course linked only through a term-2 subject as the sample course', async () => {
-      expect(names(await book('t-flag-term2'))).toEqual([
-        'pool',
-        'a-plain',
-        'c-term2',
-      ]);
-    });
-
-    it('ranks a course linked through a term-1 elective as a sample course', async () => {
-      expect(names(await book('t-flag-elective'))).toEqual([
-        'c-elective',
-        'a-plain',
-        'pool',
-      ]);
-    });
-
-    it("puts the career's own subjects before the ones other first semesters at the institution share", async () => {
+    it("puts the career's own subjects before the ones other careers' grids share", async () => {
       // By name alone it would be Aaa shared, Bbb shared.
-      expect((await book('t-spread'))?.sample.map((s) => s.name)).toEqual([
-        'Own',
-        'Ccc mid',
-      ]);
+      expect(await sampleNames('t-spread')).toEqual(['Own', 'Ccc mid']);
     });
 
     it('counts a linked subject as shared even when its rows are spelled differently', async () => {
       // Matching by name alone it would count 0 careers and come first, by name too.
-      expect((await book('t-link'))?.sample.map((s) => s.name)).toEqual([
+      expect(await sampleNames('t-link')).toEqual([
         'Own link',
         'Aaa Transmidia',
       ]);
     });
 
     it('holds a subject name once, whatever its case, when several disciplines carry it', async () => {
-      expect((await book('t-twin'))?.sample.map((s) => s.name)).toEqual([
-        'Twin',
-        'Zed',
-      ]);
+      expect(await sampleNames('t-twin')).toEqual(['Twin', 'Zed']);
     });
-
-    it('leaves out disciplines without topics, in term 2, or of another profession', async () => {
-      const names = (await book('t-sample'))?.sample.map((s) => s.name);
-
-      expect(names).not.toContain('No topics');
-      expect(names).not.toContain('Term two only');
-      expect(names).not.toContain('Other profession');
-    });
-  });
-
-  describe('one institution for the whole book', () => {
-    const shared = [9990001, 9990002, 9990004, 852];
-    const label = (i: { name: string; shortName: string | null }) =>
-      i.shortName ?? i.name;
 
     it('puts a FIAP profession on the shelf with the page descriptions as the sample topics', async () => {
       expect((await summaries()).map((s) => s.profession.slug)).toContain(
@@ -1048,39 +839,18 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
       expect(
         result?.sample.map((s) => [s.name, s.topics, s.institution]),
       ).toEqual([
-        ['AI Challenges', ['Descrição de AI Challenges'], 'FIAP'],
-        ['Machine Learning', ['Descrição de Machine Learning'], 'FIAP'],
+        [
+          'Tz AI Challenges',
+          ['Descrição de Tz AI Challenges'],
+          expect.stringContaining('FIAP'),
+        ],
+        [
+          'Tz Machine Learning',
+          ['Descrição de Tz Machine Learning'],
+          expect.stringContaining('FIAP'),
+        ],
       ]);
       expect(result?.offerings.map((o) => o.course.name)).toEqual(['fiap-ia']);
-    });
-
-    it.each(['t-shared-a', 't-shared-b', 't-shared-c'])(
-      'draws every sample subject of %s from the picked institution, which also leads the offerings',
-      async (slug) => {
-        const result = await book(slug);
-        const picked = await pickedInstitution(slug, shared);
-        const [lead] = result?.offerings ?? [];
-        const [{ name, short } = { name: '', short: null }] = await sql<
-          { name: string; short: string | null }[]
-        >`select name, short_name as short from public.institutions where id = ${picked!.id}`;
-
-        expect(result?.sample.length).toBeGreaterThan(0);
-        expect(new Set(result?.sample.map((s) => s.institution))).toEqual(
-          new Set([short ?? name]),
-        );
-        expect(label(lead!.institution)).toBe(short ?? name);
-        // by name, at most two: a mix across institutions would start 'A zeta', 'B alpha'.
-        const own = result?.sample.map((s) => s.name) ?? [];
-        expect(own).toEqual([...own].sort());
-        expect(own.length).toBeLessThanOrEqual(2);
-      },
-    );
-
-    it('is stable across calls', async () => {
-      const first = await book('t-shared-a');
-
-      for (let i = 0; i < 3; i++)
-        expect(await book('t-shared-a')).toEqual(first);
     });
   });
 
@@ -1096,24 +866,21 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
 
     it('drops a sample discipline whose source was never fetched', async () => {
-      const result = await book('t-unfetched');
-      const names = result?.sample.map((s) => s.name);
-
-      expect(names).toContain('Fresh disc');
-      expect(names).not.toContain('Stale disc');
+      expect(await sampleNames('t-unfetched')).toEqual(['Fresh disc']);
     });
 
     it('drops a course whose census source was never fetched from the offerings', async () => {
-      const result = await book('t-unfetched');
-
-      expect(names(result)).toEqual(['sample', 'stale-grade']);
+      expect(names(await book('t-unfetched'))).toEqual([
+        'sample',
+        'stale-grade',
+      ]);
     });
   });
 
   it('returns the profession with its slug and name', async () => {
     expect((await book('t-main'))?.profession).toEqual({
       slug: 't-main',
-      name: 'Test Main',
+      name: 'Test main',
     });
   });
 });

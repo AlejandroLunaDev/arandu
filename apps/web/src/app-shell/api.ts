@@ -57,7 +57,7 @@ export async function authApi<T>(path: string, token: string | null, init: Init 
 }
 
 /**
- * The API with no person, for reads every visitor shares (a career's paths, a stop's content): it never reads the
+ * The API with no person, for reads every visitor shares (a career's paths, a chapter's content): it never reads the
  * request, so a `use cache` function can call it and the cache key holds no token.
  */
 export function publicApi<T>(path: string): Promise<T> {

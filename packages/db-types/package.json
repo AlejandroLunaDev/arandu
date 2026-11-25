@@ -9,6 +9,6 @@
     }
   },
   "scripts": {
-    "gen": "supabase gen types typescript --local --schema public > src/database.ts"
+    "gen": "node --env-file=../../apps/api/.env gen.mjs"
   }
 }

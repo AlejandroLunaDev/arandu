@@ -52,7 +52,7 @@ describe('progress routes', () => {
     repo.spend.mockResolvedValue(wallet);
     repo.reread.mockResolvedValue(wallet);
     repo.reflection.mockResolvedValue({
-      stops: [],
+      chapters: [],
       questions: 2,
       feeling: null,
     });
@@ -75,10 +75,10 @@ describe('progress routes', () => {
   });
 
   describe('GET /me/books/:disciplineId', () => {
-    it('returns the stops with their state', async () => {
+    it('returns the chapters with their state', async () => {
       const res = await server().get('/me/books/7').expect(200);
 
-      expect(res.body.stops.map((s: { state: string }) => s.state)).toEqual([
+      expect(res.body.chapters.map((s: { state: string }) => s.state)).toEqual([
         'current',
         'locked',
       ]);
@@ -186,15 +186,15 @@ describe('progress routes', () => {
     });
   });
 
-  describe('POST /stops/:disciplineId/:topic/reread', () => {
-    it('gives back for the current stop', async () => {
-      const res = await server().post('/stops/7/0/reread').expect(200);
+  describe('POST /chapters/:disciplineId/:topic/reread', () => {
+    it('gives back for the current chapter', async () => {
+      const res = await server().post('/chapters/7/0/reread').expect(200);
 
       expect(repo.reread).toHaveBeenCalledWith(USER_ID, 7, 0);
       expect(res.body).toEqual(wallet);
     });
 
-    it('gives back for a finished stop', async () => {
+    it('gives back for a finished chapter', async () => {
       repo.finishes.mockResolvedValue([
         {
           disciplineId: 7,
@@ -205,13 +205,13 @@ describe('progress routes', () => {
         },
       ]);
 
-      await server().post('/stops/7/0/reread').expect(200);
+      await server().post('/chapters/7/0/reread').expect(200);
 
       expect(repo.reread).toHaveBeenCalledWith(USER_ID, 7, 0);
     });
 
-    it('409s for a locked stop', async () => {
-      await server().post('/stops/7/1/reread').expect(409);
+    it('409s for a locked chapter', async () => {
+      await server().post('/chapters/7/1/reread').expect(409);
 
       expect(repo.reread).not.toHaveBeenCalled();
     });
@@ -219,22 +219,22 @@ describe('progress routes', () => {
     it('404s for an unknown subject', async () => {
       repo.discipline.mockResolvedValue(null);
 
-      await server().post('/stops/7/0/reread').expect(404);
+      await server().post('/chapters/7/0/reread').expect(404);
 
       expect(repo.reread).not.toHaveBeenCalled();
     });
 
     it('404s for a topic out of range', async () => {
-      await server().post('/stops/7/2/reread').expect(404);
+      await server().post('/chapters/7/2/reread').expect(404);
 
       expect(repo.reread).not.toHaveBeenCalled();
     });
 
     it.each([
-      '/stops/0/0/reread',
-      '/stops/7/-1/reread',
-      '/stops/7/201/reread',
-      '/stops/x/0/reread',
+      '/chapters/0/0/reread',
+      '/chapters/7/-1/reread',
+      '/chapters/7/201/reread',
+      '/chapters/x/0/reread',
     ])('404s for %s', async (url) => {
       await server().post(url).expect(404);
 
