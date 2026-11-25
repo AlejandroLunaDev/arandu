@@ -89,3 +89,11 @@ def load_described(conn, source_id, parsed, inep_code, base):
                    is distinct from (excluded.name, excluded.topics, excluded.program, excluded.source_id)""",
             (code, name, [description], (program[0] or None) if program else None, source_id, inep_code)).rowcount
     return written + load_subjects(conn, source_id, subjects)
+
+
+def load_page(conn, source_id, page_adapter, inep_code, label_prefix, parsed):
+    """Stage a page that is its own course, (name, city, subjects), then load its subjects when it is in the city."""
+    name, city, subjects = parsed
+    url = conn.execute("select url from sources where id = %s", (source_id,)).fetchone()[0]
+    written = load_courses(conn, page_adapter, inep_code, label_prefix, [(url, name, None, city)])
+    return written + (load_subjects(conn, source_id, subjects) if in_city(city) else 0)

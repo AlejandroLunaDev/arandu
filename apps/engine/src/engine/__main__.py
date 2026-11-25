@@ -6,7 +6,7 @@ import tempfile
 
 import psycopg
 
-from engine import anima, fatec, fetch, fiap, inep_census, mackenzie, mec_powerbi, unifesp, unip, usp
+from engine import anima, belas_artes, facsp, fatec, fetch, fiap, inep_census, mackenzie, mec_powerbi, unifesp, unip, usp
 
 # Run order for 'all': each list adapter comes before the level it registers (<x>_courses before <x>_curriculum).
 ADAPTERS = {
@@ -30,17 +30,26 @@ ADAPTERS = {
     "unifesp_curriculum": unifesp.curriculum,
     "fatec_media": fatec.media,
     "fatec_curriculum": fatec.curriculum,
+    "belas_artes_curriculum": belas_artes.curriculum,
+    "facsp_curriculum": facsp.curriculum,
 }
 
 
 def run(conn, name):
-    """Fetch every source of one adapter, parse only changed documents, and log the run in scrape_runs."""
+    """Fetch the due sources of one adapter, parse only changed documents, and log the run in scrape_runs.
+
+    A source is due when it was never fetched or its refresh_interval has passed: every fetch costs a scraper credit.
+    """
     adapter = ADAPTERS[name]
     run_id = conn.execute("insert into scrape_runs (adapter) values (%s) returning id", (name,)).fetchone()[0]
     try:
-        sources = conn.execute("select id, url, last_content_hash from sources where adapter = %s", (name,)).fetchall()
-        if not sources:
+        if not conn.execute("select exists (select 1 from sources where adapter = %s)", (name,)).fetchone()[0]:
             raise LookupError(f"no source registered for adapter {name}")
+        sources = conn.execute(
+            """select id, url, last_content_hash from sources
+               where adapter = %s and (last_fetched_at is null or last_fetched_at + refresh_interval <= now())""",
+            (name,),
+        ).fetchall()
         written = 0
         failures = []  # one bad page must not stop the other sources; its hash stays, so the next run retries it
         for source_id, url, last_hash in sources:

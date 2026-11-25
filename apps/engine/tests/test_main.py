@@ -12,7 +12,7 @@ class FakeDb:
 
     def __init__(self, sources):
         self.sources = sources  # adapter -> [(id, url, last_hash)]
-        self.hashes, self.runs, self.ran = {}, [], []
+        self.hashes, self.runs, self.ran, self.due_sql = {}, [], [], ""
 
     def execute(self, sql, params=()):
         sql = " ".join(sql.split())
@@ -20,7 +20,10 @@ class FakeDb:
         if sql.startswith("insert into scrape_runs"):
             self.runs.append({"adapter": params[0], "status": "running"})
             result.fetchone.return_value = (len(self.runs),)
+        elif sql.startswith("select exists"):
+            result.fetchone.return_value = (params[0] in self.sources,)
         elif sql.startswith("select id, url"):
+            self.due_sql = sql  # the fake returns the listed sources as the due ones; the filter is SQL
             result.fetchall.return_value = self.sources.get(params[0], [])
         elif sql.startswith("update sources"):
             self.hashes[params[1]] = params[0]
@@ -103,6 +106,16 @@ class RunTest(unittest.TestCase):
         self.assertEqual(db.ran, [])
         self.assertIn(1, db.hashes)  # fetched-at still updated
 
+    def test_only_due_sources_are_selected(self):
+        db = FakeDb({"fake": [(1, "a", None)]})
+        self.run_adapter(db, adapter(db))
+        self.assertIn("last_fetched_at is null or last_fetched_at + refresh_interval <= now()", db.due_sql)
+
+    def test_registered_adapter_with_no_due_source_succeeds_with_zero_rows(self):
+        db = FakeDb({"fake": []})
+        self.run_adapter(db, adapter(db))
+        self.assertEqual(db.runs[0], {"adapter": "fake", "status": "succeeded", "rows": 0})
+
     def test_adapter_without_sources_fails_the_run(self):
         db = FakeDb({})
         with self.assertRaisesRegex(LookupError, "no source registered"):
@@ -149,6 +162,10 @@ class MainTest(unittest.TestCase):
         for first, second in (("usp_courses", "usp_curriculum"), ("anima_sitemap", "anima_course"), ("anima_course", "anima_curriculum"),
                               ("unip_courses", "unip_units"), ("unip_units", "unip_curriculum")):
             self.assertLess(order[first], order[second], f"{first} must run before {second}")
+
+    def test_belas_artes_and_facsp_curricula_are_registered(self):
+        self.assertIn("belas_artes_curriculum", cli.ADAPTERS)
+        self.assertIn("facsp_curriculum", cli.ADAPTERS)
 
 
 if __name__ == "__main__":
