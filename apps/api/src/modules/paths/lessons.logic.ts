@@ -13,7 +13,7 @@ export interface ExerciseRef {
 }
 
 /** A number generator seeded by a string (FNV-1a into mulberry32): the same seed always gives the same sequence. */
-function seeded(seed: string): () => number {
+export function seeded(seed: string): () => number {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++)
     h = Math.imul(h ^ seed.charCodeAt(i), 16777619);

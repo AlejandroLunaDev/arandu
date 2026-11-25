@@ -327,12 +327,16 @@ export type Exercise = { mode: ExerciseMode; why: string } & (
       kind: "verdadeiro_ou_falso";
       statements: { text: string; answer: boolean; why: string }[];
     }
-  /** `text` marks each gap with ___; `answers` fill them in order; `tiles` holds them plus distractors. */
+  /**
+   * `text` marks each gap with ___; `answers` fill them in order; `tiles` holds them plus distractors. With `code`,
+   * `text` is lines of code: show it monospaced, keeping its line breaks and indentation.
+   */
   | {
       kind: "complete_a_frase";
       text: string;
       tiles: string[];
       answers: string[];
+      code?: boolean;
     }
   /** `answer` is the sentence's words in order; the client shuffles them, plus `distractors`. */
   | {
@@ -368,10 +372,21 @@ export type Exercise = { mode: ExerciseMode; why: string } & (
       segments: string[];
       answer: number;
     }
-  /** `steps` in the right order; the client shuffles them. */
-  | { kind: "ordene"; prompt: string; steps: string[] }
+  /** `steps` in the right order; the client shuffles them. With `code`, each step is a line of code, shown monospaced. */
+  | { kind: "ordene"; prompt: string; steps: string[]; code?: boolean }
   /** A free answer by text or voice, graded by POST /chapters/:disciplineId/:topic/explain against `ideas`. */
   | { kind: "explique_para_o_arandu"; prompt: string; ideas: string[] }
+  /**
+   * A problem to solve, with new values on every play. `answer` is the index of the right option; `mistakes[i]` says
+   * which typical mistake leads to option i (null for the right one), to show when the person picks it.
+   */
+  | {
+      kind: "resolva";
+      prompt: string;
+      options: string[];
+      answer: number;
+      mistakes: (string | null)[];
+    }
 );
 
 /** GET /chapters/:disciplineId/:topic: a chapter of a subject, the same for everyone. */
@@ -383,13 +398,17 @@ export interface ChapterContent {
   exercises: Exercise[];
 }
 
-/** Where an exercise lives: lesson 4 mixes in misses from earlier chapters, so /explain goes to `topic`. */
+/**
+ * Where an exercise comes from: `index` is the chapter piece it tests (a concept, a statement, a problem...). Lesson 4
+ * mixes in misses from earlier chapters, so /explain goes to `topic`. Report a miss with this `topic` and `index`.
+ */
 export type LessonExercise = Exercise & { topic: number; index: number };
 
 /**
- * GET /chapters/:disciplineId/:topic/lessons/:lesson (1-4): one lesson of a chapter, for this person. Lessons 1-3 split the
- * chapter's exercises in a random order that stays the same for them; lesson 4 reviews what they missed. 409
- * `lesson_locked` before the lessons ahead of it are done.
+ * GET /chapters/:disciplineId/:topic/lessons/:lesson (1-4): one lesson of a chapter, for this person, built from the
+ * chapter's pieces: 1 recognises, 2 applies, 3 solves and produces, 4 brings back what they missed in another kind.
+ * The same person gets the same lesson again; another person gets another variant. 409 `lesson_locked` before the
+ * lessons ahead of it are done.
  */
 export interface Lesson {
   index: number;
