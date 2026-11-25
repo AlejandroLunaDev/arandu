@@ -2,7 +2,7 @@
 
 import type { Book, Offering, OwnBook, StoryPage } from "@arandu/contracts";
 import { getFontEmbedCSS, toCanvas } from "html-to-image";
-import { Fragment, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import Image from "next/image";import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import {
   BOOK_EVENT,
   getBook,
@@ -39,10 +39,11 @@ const CLOSING = "Com o Arandu, você vive um pedacinho dessa carreira antes de e
 const ownOf = (b: OpenedBook) => (b?.product ? "produto" : b?.research ? "solucao" : null);
 /** Census and some grades write in capitals: shown in sentence case, the words as they are. */
 const calm = (text: string) => (text === text.toUpperCase() ? text.charAt(0) + text.slice(1).toLowerCase() : text);
-/** Real screens of the app (public/screens, drawn to public/img/screens), in the journey's order: the product book shows them by its first page. */
+/** Real screens of the app (the README's, and the design canvas's F3 ficha), in the journey's order: the product book shows them by its first page. */
 const SCREENS = [
-  { src: "/img/screens/a4.webp", step: "Conhecer você", alt: "Tela do Arandu: uma pergunta do questionário sobre o seu tempo livre" },
-  { src: "/img/screens/b3.webp", step: "Experimentar", alt: "Tela do Arandu: um exercício de uma matéria, já respondido" },
+  { src: "/img/screens/conhecer.webp", step: "Conhecer você", alt: "Tela do Arandu: ele pergunta o que você curte fazer no tempo livre" },
+  { src: "/img/screens/opcoes.webp", step: "Opções reais", alt: "Tela do Arandu: Psicologia no Mackenzie, com as matérias do 1º semestre como livros numa estante" },
+  { src: "/img/screens/experimentar.webp", step: "Experimentar", alt: "Tela do Arandu: um exercício de Psicologia sobre o condicionamento clássico de Pavlov" },
 ];
 const KIND: Record<Offering["institution"]["kind"], string> = { public: "Pública", private: "Privada", special: "Especial" };
 
@@ -63,6 +64,8 @@ export function BookPages() {
   const [failed, setFailed] = useState<string | null>(null);
   const [spread, setSpread] = useState(0);
   const [turning, setTurning] = useState(false);
+  /** Whether a page has been turned yet: until then the next corner calls for it. */
+  const [leafed, setLeafed] = useState(false);
   const host = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -159,10 +162,18 @@ export function BookPages() {
             .slice(1)
             .map((o, i) => <OfferingPage key={`u${i + 1}`} offering={o} profession={shown.profession.name} />),
         ]
-      : [<Note key="wait" text={blank ? "Este livro não abriu agora. Tente de novo daqui a pouco." : "Abrindo o livro…"} />];
-  // A last page left alone gets Arandu's word, so no spread ends on bare paper; his own books' end on a plain page.
-  if (shown && pages.length % 2) pages.push(<Note key="end" text={CLOSING} />);
-  if (ownShown && pages.length % 2) pages.push(<Card key="end">{null}</Card>);
+      : blank
+        ? [<Note key="fail" text="Este livro não abriu agora. Tente de novo daqui a pouco." />]
+        : [
+            // While the book loads, its first page holds only Arandu's head, breathing as on the hero.
+            <Card key="wait">
+              <span className={styles.loading} role="status" aria-label="Abrindo o livro">
+                <Image src="/img/head.svg" alt="" width={40} height={40} priority />
+              </span>
+            </Card>,
+          ];
+  // A last page left alone gets Arandu's word, so no spread ends on bare paper; any other book's, a plain page.
+  if (pages.length % 2) pages.push(shown ? <Note key="end" text={CLOSING} /> : <Card key="end">{null}</Card>);
   const spreads = Math.ceil(pages.length / 2);
   const proofSpreads = printable ? Array.from({ length: spreads }, (_, i) => pages.slice(i * 2, i * 2 + 2)) : [];
 
@@ -170,6 +181,7 @@ export function BookPages() {
   const turn = (dir: 1 | -1) => {
     const ms = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : TURN * 1000;
     setTurning(true);
+    setLeafed(true);
     dispatchEvent(new CustomEvent(TURN_EVENT, { detail: dir }));
     timers.current = [window.setTimeout(() => setSpread((n) => n + dir), ms / 2), window.setTimeout(() => setTurning(false), ms)];
   };
@@ -187,10 +199,18 @@ export function BookPages() {
     const dir = dx < 0 ? 1 : -1;
     if (spread + dir >= 0 && spread + dir < spreads) turn(dir);
   };
+  // And under the arrow keys, from anywhere in the open book.
+  const onKey = (e: KeyboardEvent) => {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!dir || turning || spread + dir < 0 || spread + dir >= spreads) return;
+    e.preventDefault();
+    turn(dir);
+  };
 
   return (
     <section
       ref={host}
+      onKeyDown={onKey}
       onPointerDown={onSwipeStart}
       onPointerUp={onSwipeEnd}
       onPointerCancel={() => (swipe.current = null)}
@@ -205,7 +225,8 @@ export function BookPages() {
       <div className={styles.page}>{pages[spread * 2]}</div>
       <div className={styles.page}>{pages[spread * 2 + 1]}</div>
       {spreads > 1 && (
-        // The pages turn by their folded corners, as a book's do.
+        // The pages turn by their folded corners, as a book's do. Until the first turn, the next corner keeps
+        // peeling up in gold, so nobody misses that the book leafs.
         <nav className={styles.turn} aria-label="Páginas">
           <button
             type="button"
@@ -221,10 +242,10 @@ export function BookPages() {
             type="button"
             className={styles.corner}
             aria-label="Próxima página"
+            data-hint={!leafed || undefined}
             disabled={spread === spreads - 1 || turning}
             onClick={() => turn(1)}
-          />
-        </nav>
+          />        </nav>
       )}
       {/* A tap outside the book or Escape shuts it; the button is there for the keyboard, shown on focus. */}
       <button type="button" className={styles.shut} aria-label="Fechar o livro" onClick={() => dispatchEvent(new Event(SHUT_EVENT))}>
@@ -391,7 +412,7 @@ function SamplePage({ book }: { book: Book }) {
   );
 }
 
-// Facing the product book's first page: the app itself, two of its screens.
+// Facing the product book's first page: the app itself, three of its screens.
 function ScreensPage() {
   return (
     <Card>

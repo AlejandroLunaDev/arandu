@@ -184,6 +184,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Arandu's head in the middle of the first page, breathing while the book loads (the hero's loading, in the book). */
+.loading {
+  display: flex;
+  margin: auto;
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.4;
+    scale: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+  }
+}
+
 .note {
   justify-content: center;
   color: var(--text-muted);
@@ -362,17 +382,17 @@
   bottom: 20px;
 }
 
-/* A page's corner, folded up: the back of the leaf over the corner it uncovers. It lifts more under the pointer. */
+/* A page's corner, folded up: the back of the leaf, gold, over the corner it uncovers. It lifts more under the pointer. */
 .corner {
   position: absolute;
   right: 1px;
   bottom: 11px;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   border-top-left-radius: 4px;
-  background: linear-gradient(to top left, transparent 50%, var(--surface-raised) 50%);
+  background: linear-gradient(to top left, transparent 50%, var(--amber-300) 50%, var(--amber-600));
   filter: drop-shadow(-1px -1px 2px var(--ink-950));
   cursor: pointer;
   pointer-events: auto;
@@ -386,23 +406,47 @@
   left: 1px;
   border-top-left-radius: 0;
   border-top-right-radius: 4px;
-  background: linear-gradient(to top right, transparent 50%, var(--surface-raised) 50%);
+  background: linear-gradient(to top right, transparent 50%, var(--amber-300) 50%, var(--amber-600));
   filter: drop-shadow(1px -1px 2px var(--ink-950));
 }
 
 .corner:hover,
 .corner:focus-visible {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
 }
 
 .corner:disabled {
   visibility: hidden;
 }
 
+/* Until the first turn the next corner peels up and settles, again and again, glowing as it lifts. */
+.corner[data-hint] {
+  animation: peel 2.4s ease-in-out 0.8s infinite;
+}
+
+@keyframes peel {
+  0%,
+  55%,
+  100% {
+    width: 28px;
+    height: 28px;
+  }
+
+  75% {
+    width: 48px;
+    height: 48px;
+    filter: drop-shadow(-1px -1px 2px var(--ink-950)) drop-shadow(0 0 10px var(--amber-400));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .corner {
     transition: none;
+  }
+
+  .corner[data-hint] {
+    animation: none;
   }
 }
 

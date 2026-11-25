@@ -65,7 +65,6 @@ Monorepo Turborepo com workspaces do npm ([ADR 0003](docs/adr/0003-backend-archi
 ```sh
 npm install           # todos os workspaces
 npm run dev           # o site e a API
-npx supabase start    # banco local (precisa de Docker)
 npm run check         # build, typecheck, lint e testes; rode antes de cada merge (não há CI)
 ```
 

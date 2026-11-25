@@ -884,7 +884,7 @@ describe.skipIf(!url)('BooksRepository (database)', () => {
     });
   });
 });
-/// Needs public.story_pages and public.story_facts as the full-text migration leaves them (7 pages, 28 facts). Every
+// Needs public.story_pages and public.story_facts as the full-text migration leaves them (7 pages, 30 facts). Every
 // test that changes them does it inside a transaction that is rolled back, so the tables stay exactly as seeded.
 describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
   const sql = postgres(url ?? '', { max: 1, onnotice: () => {} });
@@ -927,14 +927,14 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
 
   afterAll(() => sql.end());
 
-  it('has the migration seed: 7 pages and 28 facts', async () => {
+  it('has the migration seed: 7 pages and 30 facts', async () => {
     const [{ pages, facts } = { pages: -1, facts: -1 }] = await sql<
       { pages: number; facts: number }[]
     >`
       select (select count(*)::int from public.story_pages) as pages,
              (select count(*)::int from public.story_facts) as facts`;
 
-    expect({ pages, facts }).toEqual({ pages: 7, facts: 28 });
+    expect({ pages, facts }).toEqual({ pages: 7, facts: 30 });
   });
 
   it('serves the solucao book in three pages', async () => {
@@ -970,7 +970,7 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
       'Princípios que não mudam',
       'Feito com dados reais',
     ]);
-    expect(pages.map((p) => p.facts.length)).toEqual([1, 5, 5, 6]);
+    expect(pages.map((p) => p.facts.length)).toEqual([3, 5, 5, 6]);
     expect(pages[3]!.facts[0]!.text).toBe('Hoje a base do Arandu reúne:');
     expect(pages[3]!.facts[0]!.source).toBeNull();
     const grades = pages[3]!.facts.find(
@@ -1098,6 +1098,6 @@ describe.skipIf(!url)('BooksRepository.ownBook (database)', () => {
       select (select count(*)::int from public.story_pages) as pages,
              (select count(*)::int from public.story_facts) as facts`;
 
-    expect({ pages, facts }).toEqual({ pages: 7, facts: 28 });
+    expect({ pages, facts }).toEqual({ pages: 7, facts: 30 });
   });
 });
