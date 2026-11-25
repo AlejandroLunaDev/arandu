@@ -97,17 +97,17 @@ class LoadTest(unittest.TestCase):
             ],
         )
 
-    def test_load_units_stages_the_page_once_per_city_for_every_unit(self):
+    def test_load_units_stages_the_page_for_the_city_of_sao_paulo_only(self):
         conn = FakeConn([("UNIP, unidades do curso: Medicina",), ("https://unip.br/m.aspx",), (7,), (7,)])
-        unip.units.load(conn, 1, ["CAMPINAS", "SANTOS"])
+        unip.units.load(conn, 1, ["CAMPINAS", "SANTOS", "SÃO PAULO"])
         staged = [c[1] for c in conn.calls if "staging.curriculum_courses" in c[0]]
-        self.assertEqual([p[2:] for p in staged], [("Medicina", "CAMPINAS", None, True, None), ("Medicina", "SANTOS", None, True, None)])
+        self.assertEqual([p[2:] for p in staged], [("Medicina", "SÃO PAULO", None, True, None)])
         self.assertEqual({p[1] for p in staged}, {unip.INEP_CODE})
 
     def test_load_units_without_a_registered_page_raises(self):
         conn = FakeConn([("UNIP, unidades do curso: Medicina",), None])
         with self.assertRaisesRegex(LookupError, "run unip_courses first"):
-            unip.units.load(conn, 1, ["SANTOS"])
+            unip.units.load(conn, 1, ["SÃO PAULO"])
 
 
 if __name__ == "__main__":

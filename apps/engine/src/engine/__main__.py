@@ -6,7 +6,7 @@ import tempfile
 
 import psycopg
 
-from engine import anima, enem_usp, fatec, fetch, fiap, ifsp, inep_census, mackenzie, mec_powerbi, ufabc, ufscar, umc, unifesp, unip, usp
+from engine import anima, enem_usp, fatec, fetch, fiap, inep_census, mackenzie, mec_powerbi, unifesp, unip, usp
 
 # Run order for 'all': each list adapter comes before the level it registers (<x>_courses before <x>_curriculum).
 ADAPTERS = {
@@ -27,19 +27,8 @@ ADAPTERS = {
     "unip_courses": unip.courses,
     "unip_units": unip.units,
     "unip_curriculum": unip.curriculum,
-    "ufabc_courses": ufabc.courses,
-    "ufabc_course_page": ufabc.course_page,
-    "ufabc_curriculum": ufabc.curriculum,
     "unifesp_courses": unifesp.courses,
     "unifesp_curriculum": unifesp.curriculum,
-    "ifsp_courses": ifsp.courses,
-    "ifsp_curriculum": ifsp.curriculum,
-    "ufscar_courses": ufscar.courses,
-    "ufscar_course": ufscar.course,
-    "ufscar_campus": ufscar.campus,
-    "ufscar_curriculum": ufscar.curriculum,
-    "umc_courses": umc.courses,
-    "umc_curriculum": umc.curriculum,
     "fatec_media": fatec.media,
     "fatec_curriculum": fatec.curriculum,
 }

@@ -28,18 +28,23 @@ class ParseTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.tmp = tmp.name
 
-    def test_keeps_only_in_person_sp_courses_and_their_institutions(self):
+    def test_keeps_only_sao_paulo_city_courses_and_their_institutions(self):
         institutions, courses = inep_census.parse(make_zip(self.tmp))
         self.assertEqual(
-            {c[0] for c in courses}, {"614", "615", "621", "7261", "1113804", "5000589", "900003"}
-        )  # no RJ (900001), no EaD (900002)
-        self.assertEqual({i[0] for i in institutions}, {"7", "322", "591", "526"})  # UFRJ has no SP course
+            {c[0] for c in courses}, {"614", "615", "7261", "1113804", "5000589", "900002", "900004"}
+        )  # in person and distance; not São Carlos (621), RJ (900001) nor Campinas (900003)
+        self.assertEqual({i[0] for i in institutions}, {"7", "322", "591", "526"})  # no UFRJ
+
+    def test_keeps_the_modality_of_each_course(self):
+        _, courses = inep_census.parse(make_zip(self.tmp))
+        by_code = {c[0]: c for c in courses}
+        self.assertEqual((by_code["614"][12], by_code["900002"][12]), ("1", "2"))  # in person, distance
 
     def test_decodes_latin1_accents(self):
         institutions, courses = inep_census.parse(make_zip(self.tmp))
         by_code = {c[0]: c for c in courses}
         self.assertEqual(by_code["614"][2], "Ciência Da Computação")
-        self.assertEqual(by_code["614"][11], "São Carlos")
+        self.assertEqual(by_code["614"][11], "São Paulo")
         self.assertEqual({i[0]: i for i in institutions}["7"][1], "UNIVERSIDADE FEDERAL DE SÃO CARLOS")
 
     def test_keeps_the_raw_fields_the_staging_needs(self):

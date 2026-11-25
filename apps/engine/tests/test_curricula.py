@@ -81,29 +81,48 @@ class LoadDescribedTest(unittest.TestCase):
         self.assertEqual(result, 1 + 5)
 
 
+class InCityTest(unittest.TestCase):
+    def test_sao_paulo_in_any_spelling_is_in_the_city(self):
+        for city in ("SÃO PAULO", "São Paulo", " sao paulo "):
+            self.assertTrue(curricula.in_city(city), city)
+
+    def test_other_cities_are_not(self):
+        for city in ("Campinas", "Santo André", "São Paulo do Potengi"):
+            self.assertFalse(curricula.in_city(city), city)
+
+
 class LoadCoursesTest(unittest.TestCase):
     def staged(self, conn):
         return [c[1] for c in conn.calls if "insert into staging.curriculum_courses" in c[0]]
 
     def test_the_same_url_with_two_cities_stages_one_source_in_both(self):
         conn = FakeConn([(42,), (0,), (42,), (0,)])  # source id, normalize count, per course
-        curricula.load_courses(conn, "x_curriculum", 322, "UNIP", [("u", "Medicina", None, "SANTOS"), ("u", "Medicina", None, "CAMPINAS")])
-        self.assertEqual(self.staged(conn), [(42, 322, "Medicina", "SANTOS", None, False, None), (42, 322, "Medicina", "CAMPINAS", None, False, None)])
+        curricula.load_courses(conn, "x_curriculum", 322, "UNIP", [("u", "Medicina", None, "SÃO PAULO"), ("u", "Medicina", None, "São Paulo")])
+        self.assertEqual(self.staged(conn), [(42, 322, "Medicina", "SÃO PAULO", None, False, None), (42, 322, "Medicina", "São Paulo", None, False, None)])
+
+    def test_a_course_page_outside_sao_paulo_is_neither_registered_nor_staged(self):
+        conn = FakeConn([(42,), (0,)])
+        written = curricula.load_courses(
+            conn, "x", 1, "P", [("far", "N", None, "Santo André"), ("near", "N", None, "São Paulo")]
+        )
+        self.assertEqual([c[1][1] for c in conn.calls if c[0].startswith("insert into sources")], ["near"])
+        self.assertEqual(self.staged(conn), [(42, 1, "N", "São Paulo", None, False, None)])
+        self.assertEqual(written, 1 + 1)
 
     def test_every_unit_and_the_shift_are_passed_through_and_the_label_has_the_shift(self):
         conn = FakeConn([(42,), (0,)])
-        curricula.load_courses(conn, "x", 1, "P", [("u", "N", "Noite", "C")], every_unit=True)
-        self.assertEqual(self.staged(conn), [(42, 1, "N", "C", "Noite", True, None)])
+        curricula.load_courses(conn, "x", 1, "P", [("u", "N", "Noite", "São Paulo")], every_unit=True)
+        self.assertEqual(self.staged(conn), [(42, 1, "N", "São Paulo", "Noite", True, None)])
         self.assertEqual(conn.calls[0][1], ("x", "u", "P: N (Noite)"))
 
     def test_units_are_staged_when_given_and_none_when_absent(self):
         conn = FakeConn([(42,), (0,), (43,), (0,)])
-        curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "C", ["Butantã", "Mooca"]), ("v", "N", None, "C")])
-        self.assertEqual(self.staged(conn), [(42, 1, "N", "C", None, False, ["Butantã", "Mooca"]), (43, 1, "N", "C", None, False, None)])
+        curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "São Paulo", ["Butantã", "Mooca"]), ("v", "N", None, "São Paulo")])
+        self.assertEqual(self.staged(conn), [(42, 1, "N", "São Paulo", None, False, ["Butantã", "Mooca"]), (43, 1, "N", "São Paulo", None, False, None)])
 
     def test_a_changed_course_renormalizes_its_page_and_adds_both_counts(self):
         conn = FakeConn([(42,), (5,)])
-        written = curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "C")])
+        written = curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "São Paulo")])
         self.assertEqual(written, 1 + 1 + 5)  # source insert + course upsert + subjects relinked
         self.assertEqual(conn.calls[-1], ("select staging.normalize_curriculum(%s)", (42,)))
 
@@ -116,7 +135,7 @@ class LoadCoursesTest(unittest.TestCase):
                 return result
 
         conn = Unchanged([(42,)])
-        self.assertEqual(curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "C")]), 1)
+        self.assertEqual(curricula.load_courses(conn, "x", 1, "P", [("u", "N", None, "São Paulo")]), 1)
         self.assertFalse(any("normalize_curriculum" in c[0] for c in conn.calls))
 
 
