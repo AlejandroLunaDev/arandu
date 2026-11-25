@@ -527,8 +527,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   let leafTurn: gsap.core.Tween | null = null;
   // The open book's page faces show the pictures of its pages (book-pages.tsx draws them while it flies
   // in), unlit as the print over them is: opening, turning and shutting, the pages are never blank.
-  // Until a page's picture is in, its face stays blank paper.
+  // Until a page's picture is in, its face is blank paper in the print's own dark, never a light flash before it.
   type Face = { mesh: THREE.Mesh; paper: THREE.Material; print: THREE.MeshBasicMaterial };
+  const blankPaper = new THREE.MeshBasicMaterial({ color: tokenColor("ink-900"), toneMapped: false });
   const faces = new Map<"left" | "right" | "front" | "back", Face>();
   let prints: THREE.Texture[] = [];
   /** The spread the book is open at, and the pages its faces show: left, right, the leaf's front and back. */
@@ -553,7 +554,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       const name = (m.material as THREE.Material).name;
       const half = within(m, "BookOpenLeft") ? "left" : "right";
       const side = name === "BookLeafFront" ? "front" : name === "BookLeafBack" ? "back" : name === "BookPage" ? half : null;
-      if (side) faces.set(side, { mesh: m, paper: m.material as THREE.Material, print: new THREE.MeshBasicMaterial({ toneMapped: false }) });
+      if (!side) return;
+      m.material = blankPaper;
+      faces.set(side, { mesh: m, paper: blankPaper, print: new THREE.MeshBasicMaterial({ toneMapped: false }) });
     });
   };
   const unpaper = () => {
@@ -1314,6 +1317,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     removeEventListener(TURN_EVENT, onTurn);
     removeEventListener(PRINT_EVENT, onPrint);
     unpaper();
+    blankPaper.dispose();
     leafTurn?.kill();
     dispatchEvent(new CustomEvent(BOOK_EVENT, { detail: null }));
     removeEventListener("pointermove", onDrag);

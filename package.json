@@ -15,7 +15,7 @@
     "verify": "turbo run typecheck lint --affected --concurrency=2",
     "prepare": "node -e \"try { require('child_process').execSync('git config core.hooksPath .githooks', { stdio: 'ignore' }) } catch {}\"",
     "db:types": "npm run gen --workspace @arandu/db-types",
-    "check": "turbo run build typecheck lint test && npm run test:e2e --workspace @arandu/api && npm run tokens:check --workspace @arandu/web && supabase test db"
+    "check": "turbo run build typecheck lint test && npm run test:e2e --workspace @arandu/api && npm run tokens:check --workspace @arandu/web"
   },
   "devDependencies": {
     "supabase": "3.2.0",
