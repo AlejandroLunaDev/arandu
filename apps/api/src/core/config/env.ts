@@ -26,7 +26,12 @@ const env = z.object({
    * OpenRouter model ids, comma-separated: the first answers and OpenRouter tries the rest in order when it fails
    * (a rate limit included). Unset or empty: the model in core/ai/ai.module.ts.
    */
-  OPENROUTER_MODELS: z.string().default('').transform(list),
+  OPENROUTER_MODELS: z
+    .string()
+    .default('')
+    .transform(list)
+    // OpenRouter answers 400 to every request whose `models` holds more (2026-11-26).
+    .pipe(z.array(z.string()).max(3)),
   /** Firecrawl, for the pages chapters are written from: only the generation script uses it, never a request. */
   FIRECRAWL_API_KEY: z.string().min(1).optional(),
   /** Origins allowed to call the API from a browser, comma-separated (the web app). */
