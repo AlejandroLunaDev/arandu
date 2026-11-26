@@ -1,4 +1,5 @@
 import type { Mock } from 'vitest';
+import { AiModelError, type AiService } from '@nestjs/ai';
 import { NotFoundException } from '@nestjs/common';
 import type { Finish } from './progress.logic.js';
 import type { ProgressRepository } from './progress.repository.js';
@@ -25,6 +26,7 @@ const discipline = { id: 7, name: 'Cálculo', topics: ['a', 'b', 'c'] };
 
 describe('ProgressService', () => {
   let repo: Record<string, ReturnType<typeof vi.fn>>;
+  let ai: { generateObject: Mock };
   let service: ProgressService;
 
   beforeEach(() => {
@@ -45,11 +47,19 @@ describe('ProgressService', () => {
       lessonsDone: vi.fn().mockResolvedValue(new Map()),
       topicCounts: vi.fn().mockResolvedValue(new Map([[7, 3]])),
       discipline: vi.fn().mockResolvedValue(discipline),
-      reflection: vi
-        .fn()
-        .mockResolvedValue({ chapters: [], questions: 0, feeling: null }),
+      reflection: vi.fn().mockResolvedValue({
+        chapters: [],
+        questions: 0,
+        feeling: null,
+        closing: null,
+      }),
+      saveClosing: vi.fn().mockResolvedValue(undefined),
     };
-    service = new ProgressService(repo as unknown as ProgressRepository);
+    ai = { generateObject: vi.fn() };
+    service = new ProgressService(
+      repo as unknown as ProgressRepository,
+      ai as unknown as AiService,
+    );
   });
 
   describe('home', () => {
@@ -189,7 +199,11 @@ describe('ProgressService', () => {
 
       const { chapters } = await service.book('u', 7);
 
-      expect(chapters.map((s) => s.state)).toEqual(['current', 'done', 'locked']);
+      expect(chapters.map((s) => s.state)).toEqual([
+        'current',
+        'done',
+        'locked',
+      ]);
     });
 
     it('counts lessons done per chapter: 4 when the chapter is done, 0 when unknown', async () => {
@@ -219,6 +233,7 @@ describe('ProgressService', () => {
         chapters: [],
         questions: 0,
         feeling: null,
+        closing: null,
         ...over,
       });
 
@@ -240,6 +255,7 @@ describe('ProgressService', () => {
         further: [],
         stuck: null,
         feeling: null,
+        closing: null,
       });
     });
 
@@ -301,6 +317,131 @@ describe('ProgressService', () => {
       expect(r.questions).toBe(6);
       expect(r.feeling).toEqual(feeling);
       expect(repo.reflection).toHaveBeenCalledWith('u', 7);
+    });
+
+    describe('closing', () => {
+      const feeling = { chips: ['difícil'], text: 'gostei das contas' };
+      const draft = (over: object = {}) =>
+        ai.generateObject.mockResolvedValue({
+          object: {
+            suggestion: 'seguir',
+            chapter: 0,
+            text: 'Você foi longe em a. Qual matéria você quer provar agora?',
+            ...over,
+          },
+        });
+
+      beforeEach(() => {
+        // Every chapter of the book done, c the hardest.
+        repo.finishes!.mockResolvedValue(
+          [0, 1, 2].map((t) => finish('2026-03-09', t)),
+        );
+        reading({
+          feeling,
+          questions: 2,
+          chapters: [
+            { topic: 0, mistakes: 0, items: 4 },
+            { topic: 1, mistakes: 1, items: 4 },
+            { topic: 2, mistakes: 3, items: 4 },
+          ],
+        });
+        draft();
+      });
+
+      it('is written once a finished book has its feeling, from its results, and stored', async () => {
+        const r = await service.reflection('u', 7);
+
+        const closing = {
+          text: 'Você foi longe em a. Qual matéria você quer provar agora?',
+          suggestion: 'seguir',
+          chapter: null,
+        };
+        expect(r.closing).toEqual(closing);
+        expect(repo.saveClosing).toHaveBeenCalledWith('u', 7, closing);
+        const call = ai.generateObject.mock.calls[0]![0] as { prompt: string };
+        expect(call.prompt).toBe(
+          'Subject: Cálculo\nChapters (number. topic: mistakes):\n1. a: 0\n2. b: 1\n3. c: 3\n' +
+            'Questions they asked you about the cards: 2\nHow it felt: difícil\nIn their words: gostei das contas',
+        );
+      });
+
+      it('a stored closing comes back without calling the model', async () => {
+        const closing = { text: 't', suggestion: 'seguir', chapter: null };
+        reading({ feeling, closing });
+
+        expect((await service.reflection('u', 7)).closing).toEqual(closing);
+        expect(ai.generateObject).not.toHaveBeenCalled();
+      });
+
+      it('is not written before the feeling, or before the book is finished', async () => {
+        reading({ feeling: null });
+        expect((await service.reflection('u', 7)).closing).toBeNull();
+
+        reading({ feeling });
+        repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
+        expect((await service.reflection('u', 7)).closing).toBeNull();
+
+        expect(ai.generateObject).not.toHaveBeenCalled();
+      });
+
+      it('hides a stored closing while the book is not finished, as when chapters were added after it', async () => {
+        reading({
+          feeling,
+          closing: { text: 't', suggestion: 'seguir', chapter: null },
+        });
+        repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
+
+        expect((await service.reflection('u', 7)).closing).toBeNull();
+      });
+
+      it('keeps the chapter to go back to, as its topic index', async () => {
+        draft({ suggestion: 'rever_capitulo', chapter: 2 });
+
+        expect((await service.reflection('u', 7)).closing).toMatchObject({
+          suggestion: 'rever_capitulo',
+          chapter: 1,
+        });
+      });
+
+      it('a chapter to go back to outside the book becomes the hardest one', async () => {
+        draft({ suggestion: 'rever_capitulo', chapter: 9 });
+
+        expect((await service.reflection('u', 7)).closing).toMatchObject({
+          suggestion: 'rever_capitulo',
+          chapter: 2,
+        });
+      });
+
+      it('with no chapter to go back to and no mistakes, going back becomes seguir', async () => {
+        reading({
+          feeling,
+          chapters: [0, 1, 2].map((topic) => ({
+            topic,
+            mistakes: 0,
+            items: 4,
+          })),
+        });
+        draft({ suggestion: 'rever_capitulo', chapter: 0 });
+
+        expect((await service.reflection('u', 7)).closing).toMatchObject({
+          suggestion: 'seguir',
+          chapter: null,
+        });
+      });
+
+      it('a model failure leaves it null and stores nothing, so the next read tries again', async () => {
+        ai.generateObject.mockRejectedValue(new AiModelError([]));
+
+        expect((await service.reflection('u', 7)).closing).toBeNull();
+        expect(repo.saveClosing).not.toHaveBeenCalled();
+      });
+
+      it('an unsafe text is never stored', async () => {
+        draft({ text: 'vai se foder' });
+
+        expect((await service.reflection('u', 7)).closing).toBeNull();
+        expect(repo.saveClosing).not.toHaveBeenCalled();
+      });
     });
   });
 

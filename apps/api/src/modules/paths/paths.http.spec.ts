@@ -27,6 +27,7 @@ describe('paths and journey routes', () => {
     finishLesson: vi.fn(),
     madeCount: vi.fn(),
     chapterContent: vi.fn(),
+    subjectPieces: vi.fn(),
     saveChapterContent: vi.fn(),
     finishChapter: vi.fn(),
     saveQuestion: vi.fn(),
@@ -41,6 +42,7 @@ describe('paths and journey routes', () => {
       topics: ['a', 'b'],
     });
     paths.madeCount.mockResolvedValue(2);
+    paths.subjectPieces.mockResolvedValue([]);
     progress.finishes.mockResolvedValue([]);
     progress.topicCounts.mockResolvedValue(new Map());
     progress.questionTimes.mockResolvedValue([]);
@@ -117,14 +119,16 @@ describe('paths and journey routes', () => {
   });
 
   describe('GET /chapters/:disciplineId/:topic', () => {
-    it.each(['/chapters/0/0', '/chapters/abc/0', '/chapters/7/-1', '/chapters/7/201'])(
-      '404s for %s',
-      async (url) => {
-        await server().get(url).expect(404);
+    it.each([
+      '/chapters/0/0',
+      '/chapters/abc/0',
+      '/chapters/7/-1',
+      '/chapters/7/201',
+    ])('404s for %s', async (url) => {
+      await server().get(url).expect(404);
 
-        expect(paths.discipline).not.toHaveBeenCalled();
-      },
-    );
+      expect(paths.discipline).not.toHaveBeenCalled();
+    });
 
     it('404s for a topic out of range', async () => {
       await server().get('/chapters/7/2').expect(404);
@@ -235,7 +239,10 @@ describe('paths and journey routes', () => {
       ['topic 201', { missed: [{ topic: 201, index: 0 }] }],
       ['51 misses', { missed: Array(51).fill({ topic: 0, index: 0 }) }],
     ])('POST result 400s for %s', async (_, body) => {
-      await server().post('/chapters/7/1/lessons/1/result').send(body).expect(400);
+      await server()
+        .post('/chapters/7/1/lessons/1/result')
+        .send(body)
+        .expect(400);
 
       expect(paths.finishLesson).not.toHaveBeenCalled();
     });
@@ -273,12 +280,15 @@ describe('paths and journey routes', () => {
       ['ask', { question: 'a'.repeat(501) }],
       ['ask', { question: 'ok', extra: 1 }],
       ['ask', {}],
-    ])('400s for %s with %j without reading the chapter', async (route, body) => {
-      await server().post(`/chapters/7/1/${route}`).send(body).expect(400);
+    ])(
+      '400s for %s with %j without reading the chapter',
+      async (route, body) => {
+        await server().post(`/chapters/7/1/${route}`).send(body).expect(400);
 
-      expect(paths.chapterContent).not.toHaveBeenCalled();
-      expect(paths.saveQuestion).not.toHaveBeenCalled();
-    });
+        expect(paths.chapterContent).not.toHaveBeenCalled();
+        expect(paths.saveQuestion).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(['explain', 'ask'])(
       '%s 404s when the chapter is not open',

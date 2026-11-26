@@ -55,7 +55,10 @@ describe('PathsRepository.careerPaths (ready chapters only)', () => {
   });
 
   it('drops a path whose subjects are all omitted', async () => {
-    const r = repo([row(1, 10, topics), row(2, 11, ['a'])], [chapter(11, 0, 'a')]);
+    const r = repo(
+      [row(1, 10, topics), row(2, 11, ['a'])],
+      [chapter(11, 0, 'a')],
+    );
     const result = await r.careerPaths('prof');
     expect(result?.paths.map((p) => p.courseId)).toEqual([2]);
   });

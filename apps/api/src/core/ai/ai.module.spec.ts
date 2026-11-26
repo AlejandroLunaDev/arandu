@@ -29,14 +29,11 @@ describe('AiModule config', () => {
     return captured.options!.useFactory(config);
   };
 
-  it('keeps data_collection deny and reasoning off on the web model beside the Exa plugin', async () => {
+  it('no model has providerOptions of its own, which would replace the routing below', async () => {
     const { models } = await build();
 
-    expect(models.web!.providerOptions.openrouter).toEqual({
-      provider: { data_collection: 'deny' },
-      reasoning: { enabled: false },
-      plugins: [{ id: 'web', engine: 'exa', max_results: 10 }],
-    });
+    for (const model of Object.values(models))
+      expect(model).not.toHaveProperty('providerOptions');
   });
 
   it('keeps the same routing in the defaults', async () => {

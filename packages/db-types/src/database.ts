@@ -93,14 +93,14 @@ isOneToOne: false
                   ]
                 },"book_reflections": {
                   Row: {
-                    "chips": (string)[],"discipline_id": number,"text": string | null,"updated_at": string,"user_id": string
+                    "chips": (string)[],"closing": Json | null,"discipline_id": number,"text": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "chips"?: (string)[],"discipline_id": number,"text"?: string | null,"updated_at"?: string,"user_id": string
+                    "chips"?: (string)[],"closing"?: Json | null,"discipline_id": number,"text"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "chips"?: (string)[],"discipline_id"?: number,"text"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "chips"?: (string)[],"closing"?: Json | null,"discipline_id"?: number,"text"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {

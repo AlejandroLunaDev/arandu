@@ -19,6 +19,10 @@ import {
 } from '../arandu/arandu.safety.js';
 import { MemoryService } from '../memory/memory.service.js';
 import {
+  ProgressRepository,
+  type Studied,
+} from '../progress/progress.repository.js';
+import {
   careerChatInstructions,
   choosingInstructions,
 } from './career-chat.prompt.js';
@@ -35,6 +39,8 @@ export interface ChatInput {
   /** The conversation so far; the last message is the person's. */
   messages: ChatMessage[];
   memory?: Pick<AranduMemory, 'profile' | 'summary'>;
+  /** The subjects the person already studied in the app. */
+  studied?: Studied[];
 }
 
 /** Arandu inside the career the person chose, grounded on its real first-term subjects (§4.2, §6). */
@@ -44,6 +50,7 @@ export class CareerChatService {
     private readonly ai: AiService,
     private readonly careers: CareersRepository,
     private readonly memory: MemoryService,
+    private readonly progress: ProgressRepository,
   ) {}
 
   /** Answers the person's message, in a new session without sessionId, remembering what Arandu knows of them. */
@@ -82,6 +89,7 @@ export class CareerChatService {
       professionSlug,
       messages: [...history, said],
       memory: await this.memory.read(userId),
+      studied: await this.progress.studied(userId),
     });
     await this.memory.record(id, [said, { role: 'assistant', content: reply }]);
     return {
@@ -143,6 +151,7 @@ export class CareerChatService {
         professions,
         await this.memory.read(userId),
         choices,
+        await this.progress.studied(userId),
       ),
       messages: recent([...history, said]),
     });
@@ -178,11 +187,11 @@ export class CareerChatService {
 
   private async reply(
     profession: ProfessionFirstTerm,
-    { messages, memory }: ChatInput,
+    { messages, memory, studied }: ChatInput,
   ): Promise<{ reply: string; sources: Source[] }> {
     const { text } = await this.ai.generateText({
       label: 'arandu-chat',
-      instructions: careerChatInstructions(profession, memory),
+      instructions: careerChatInstructions(profession, memory, studied),
       messages: recent(messages),
     });
     return {
