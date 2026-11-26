@@ -687,14 +687,14 @@ isOneToOne: true
                   ]
                 },"wallets": {
                   Row: {
-                    "marcadores": number,"novelos": number,"novelos_at": string,"novelos_bought": number,"novelos_bought_on": string | null,"peixinhos": number,"updated_at": string,"user_id": string
+                    "currency": number,"marcadores": number,"novelos": number,"novelos_at": string,"novelos_bought": number,"novelos_bought_on": string | null,"peixinhos": number,"peixinhos_on": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"updated_at"?: string,"user_id": string
+                    "currency"?: number,"marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"peixinhos_on"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"updated_at"?: string,"user_id"?: string
+                    "currency"?: number,"marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"peixinhos_on"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
