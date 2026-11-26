@@ -11,8 +11,9 @@ export const LEAGUES: { id: LeagueId; name: string }[] = [
   { id: 'filosofo', name: 'Filósofo' },
   { id: 'sabio', name: 'Sábio' },
 ];
-export const LEAGUE_SIZE = 12;
-export const PROMOTE_TOP = 7;
+// Small for the demo, so a few test accounts fill a league (#150).
+export const LEAGUE_SIZE = 6;
+export const PROMOTE_TOP = 3;
 
 const RIVALS = [
   'Coruja Noturna',

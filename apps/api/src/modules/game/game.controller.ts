@@ -50,7 +50,7 @@ const wardrobeUpdate = z
 export class GameController {
   constructor(private readonly game: GameRepository) {}
 
-  /** L1: this round's league of 12; reading it settles a finished round. */
+  /** L1: this round's league of LEAGUE_SIZE; reading it settles a finished round. */
   @Get('league')
   league(@UserId() userId: string): Promise<League> {
     return this.game.league(userId);

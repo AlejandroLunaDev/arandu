@@ -406,7 +406,8 @@ export type LessonExercise = Exercise & { topic: number; index: number };
 /**
  * POST /chapters/:disciplineId/:topic/lessons/:lesson/start (1-3): enters one lesson of a chapter, for this person,
  * built from the chapter's pieces: 1 recognises, 2 applies, 3 solves and produces. Entering costs `Wallet.lessonPrice`
- * peixinhos, every time: 409 `not_enough_peixinhos` with too few, and nothing is spent. Lessons 1 and 2 open in any
+ * peixinhos until the lesson is done: 409 `not_enough_peixinhos` with too few, and nothing is spent. A done lesson, and
+ * every lesson of a finished chapter, is practice: free, and it gives no rewards. Lessons 1 and 2 open in any
  * order, 3 once both are done: 409 `lesson_locked` before. The same person gets the same lesson again; another person
  * gets another variant. Each lesson is a full pass: its cards, its exercises, then its misses again until right.
  */
@@ -560,7 +561,7 @@ export interface BookProgress {
 export type LeagueId =
   "calouro" | "veterano" | "monitor" | "mestre" | "filosofo" | "sabio";
 
-/** GET /me/league (L1): this week's league of 12 by weekly sabedoria. Others show only a nickname and sabedoria. */
+/** GET /me/league (L1): this round's league of 6 (LEAGUE_SIZE) by the round's sabedoria. Others show only a nickname and sabedoria. */
 export interface League {
   league: { id: LeagueId; name: string; rank: number };
   /** The round in progress (its length is a game setting, 1 day in the demo): first São Paulo day, days, end. */

@@ -125,7 +125,7 @@ export class GameRepository {
     return row;
   }
 
-  /** A league's room for a round: the person, the best others in that league, and demo rivals up to 12; best first. */
+  /** A league's room for a round: the person, the best others in that league, and demo rivals up to LEAGUE_SIZE; best first. */
   // shortcut: membership is the others' league now, not the one they had that round; fine while promotions are rare.
   private async room(
     tx: Tx,
@@ -180,7 +180,7 @@ export class GameRepository {
   }
 
   /**
-   * Once per round, settles the last finished round: the top 7 move up, keep the new outfit and get a caixa (L7).
+   * Once per round, settles the last finished round: the top PROMOTE_TOP move up, keep the new outfit and get a caixa (L7).
    * shortcut: only that round counts; earlier unread rounds are not replayed, fine for a demo.
    */
   private async settle(
