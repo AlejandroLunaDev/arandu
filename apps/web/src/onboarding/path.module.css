@@ -198,32 +198,6 @@
   inset: -6px;
 }
 
-.progress {
-  flex: 1;
-  height: 10px;
-  overflow: hidden;
-  border: 0;
-  border-radius: 99px;
-  background: var(--ink-800);
-  appearance: none;
-}
-
-.progress::-webkit-progress-bar {
-  background: var(--ink-800);
-}
-
-.progress::-webkit-progress-value {
-  border-radius: 99px;
-  background: var(--amber-400);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--amber-400) 50%, transparent);
-  transition: width 0.3s;
-}
-
-.progress::-moz-progress-bar {
-  border-radius: 99px;
-  background: var(--amber-400);
-}
-
 .first {
   flex: none;
   padding: 3px 8px;
@@ -272,25 +246,9 @@
   text-wrap: balance;
 }
 
-/* O14's page: Arandu reads perched on its top edge. */
-.page {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 72px 0 0;
-  padding: 24px 22px 20px;
-  border: 2px solid var(--violet-400);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
-  box-shadow: 0 0 28px color-mix(in srgb, var(--violet-400) 18%, transparent);
-}
-
-.page p {
-  margin: 0;
-  font-size: 16px;
-  line-height: 25px;
-  white-space: pre-line;
+/* O14: the card's caption and title, over Arandu's words. */
+.cardHead {
+  padding: 12px 16px 0;
 }
 
 /* 28px, its hit area grown to 44px by an invisible ring. */

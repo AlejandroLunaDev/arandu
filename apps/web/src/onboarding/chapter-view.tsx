@@ -1,12 +1,18 @@
 "use client";
 
-import type { Exercise, ChapterContent, Wallet } from "@arandu/contracts";
+import type { AskReply, Exercise, ChapterContent, Wallet } from "@arandu/contracts";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { OutOfLives } from "@/caminho/out-of-lives";
 import { safeUrl } from "@/landing/book/book-data";
 import { Cat } from "@/ui/cat";
+import { Composer } from "@/ui/composer";
 import { MainButton } from "@/ui/main-button";
+import { PawSteps } from "@/ui/paw-steps";
+import ui from "@/ui/ui.module.css";
+import { useAttempt } from "@/ui/use-attempt";
+import { askAboutChapter } from "./actions";
+import { Answer } from "./course-view";
 import styles from "./onboarding.module.css";
 import p from "./path.module.css";
 import { afterAnswer, sentenceRight, shuffled } from "./chapter";
@@ -117,7 +123,12 @@ export function ChapterView({ chapter, caption, busy, failed, lives, onClose, on
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
-        <progress className={p.progress} aria-label={inCards ? "Leitura" : `Exercício ${total - left + 1} de ${total}`} value={inCards ? 0.04 : Math.max(total - left, 0.04)} max={inCards ? 1 : total} />
+        {/* A print per card and per exercise: the cards first, then the exercises as they are got right. */}
+        <PawSteps
+          total={chapter.cards.length + total}
+          at={inCards ? card + 1 : chapter.cards.length + Math.min(total, total - left + 1)}
+          label={inCards ? `Leitura ${card + 1} de ${chapter.cards.length}` : `Exercício ${Math.min(total, total - left + 1)} de ${total}`}
+        />
         {lives ? (
           <span className={p.lives} aria-label={`${hearts} ${hearts === 1 ? "vida" : "vidas"}`}>
             <svg viewBox="0 0 24 24" aria-hidden="true" data-off={hearts === 0 || undefined}>
@@ -144,7 +155,7 @@ export function ChapterView({ chapter, caption, busy, failed, lives, onClose, on
           }}
         />
       ) : inCards ? (
-        <Card card={chapter.cards[card]!} caption={caption} onNext={() => setCard(card + 1)} />
+        <Card key={card} chapter={chapter} card={chapter.cards[card]!} caption={caption} onNext={() => setCard(card + 1)} />
       ) : (
         exercise && (
           <>
@@ -194,31 +205,55 @@ export function ChapterView({ chapter, caption, busy, failed, lives, onClose, on
   );
 }
 
-function Card({ card, caption, onNext }: { card: ChapterContent["cards"][number]; caption: string; onNext: () => void }) {
-  const url = safeUrl(card.source.url);
+// O14: a card of the chapter. Its words are Arandu's thought, as everything he tells: he sits low, over the buttons,
+// and reads. This is where the person can ask him about what they read (T1): his answer takes the words' place, with
+// the sources it rests on, until the person goes back to the text or on to the next card.
+function Card({ chapter, card, caption, onNext }: { chapter: ChapterContent; card: ChapterContent["cards"][number]; caption: string; onNext: () => void }) {
+  const talk = useAttempt();
+  const [answer, setAnswer] = useState<AskReply | null>(null);
+  const text = answer?.reply ?? card.text;
   return (
     <>
-      <div className={styles.body}>
-        <div className={p.chapter}>
+      <div className={`${styles.body} ${styles.low}`}>
+        <div className={p.cardHead}>
           <p className={p.caption}>{caption}</p>
           <h1 className={p.title}>{card.title}</h1>
-          <div className={p.page}>
-            <Cat mood="read" size={120} label="Arandu lendo" className={p.readCat} />
-            <p>{card.text}</p>
-            {url && (
-              <a className={p.source} href={url} target="_blank" rel="noreferrer">
-                {card.source.label}
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-                </svg>
-              </a>
-            )}
-          </div>
         </div>
+        <Answer key={text} text={text} busy={talk.busy} pose="read">
+          {(answer?.sources ?? [card.source]).map((source) => {
+            const url = safeUrl(source.url);
+            return (
+              url && (
+                <a key={url} className={p.source} href={url} target="_blank" rel="noreferrer">
+                  {source.label}
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+                  </svg>
+                </a>
+              )
+            );
+          })}
+        </Answer>
       </div>
-      <footer className={`${styles.foot} ${styles.last}`}>
-        <MainButton onClick={onNext}>Entendi</MainButton>
-      </footer>
+      <Composer
+        placeholder="Ficou com dúvida? Pergunte ao Arandu"
+        busy={talk.busy}
+        onSend={(question) => talk.attempt(async () => setAnswer(await askAboutChapter(chapter.discipline.id, chapter.topic.index, question)))}
+      >
+        <footer className={styles.foot}>
+          {talk.failed && (
+            <p className={styles.error} role="alert">
+              Não consegui responder agora. Pergunta de novo?
+            </p>
+          )}
+          <MainButton onClick={onNext}>Entendi</MainButton>
+          {answer && (
+            <button type="button" className={ui.ghost} onClick={() => setAnswer(null)}>
+              Voltar ao texto
+            </button>
+          )}
+        </footer>
+      </Composer>
     </>
   );
 }

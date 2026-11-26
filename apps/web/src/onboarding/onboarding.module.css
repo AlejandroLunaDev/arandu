@@ -72,47 +72,6 @@
   padding: 12px 16px 0;
 }
 
-/* The onboarding's progress: a trail of seven paw prints walking to the right, a left foot then a right one. */
-.trail {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px;
-}
-
-.trail svg {
-  width: 20px;
-  height: 20px;
-  fill: var(--ink-600);
-  translate: 0 -3px;
-  rotate: 78deg;
-}
-
-.trail svg:nth-child(even) {
-  translate: 0 3px;
-  rotate: 102deg;
-}
-
-.trail svg[data-on] {
-  fill: var(--amber-400);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--amber-400) 45%, transparent));
-}
-
-/* The newest print lands. */
-@media (prefers-reduced-motion: no-preference) {
-  .trail svg[data-now] {
-    animation: step 0.35s ease-out both;
-  }
-}
-
-@keyframes step {
-  from {
-    opacity: 0;
-    scale: 0.4;
-  }
-}
-
 .body {
   flex: 1;
   min-height: 0;

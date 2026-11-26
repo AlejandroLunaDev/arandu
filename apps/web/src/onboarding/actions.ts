@@ -1,6 +1,7 @@
 "use server";
 
 import type {
+  AskReply,
   AranduChatReply,
   AranduProfile,
   CareerPaths,
@@ -59,6 +60,14 @@ export async function getCareerPaths(slug: string): Promise<CareerPaths> {
 export async function getChapter(disciplineId: number, topic: number): Promise<ChapterContent> {
   if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a chapter");
   return chapterContent(disciplineId, topic);
+}
+
+/** T1: a question about a chapter's cards, asked while reading them (never during the exercises). */
+export async function askAboutChapter(disciplineId: number, topic: number, question: string): Promise<AskReply> {
+  if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a chapter");
+  const asked = typeof question === "string" ? question.trim().slice(0, 1000) : "";
+  if (!asked) throw new Error("No question");
+  return api<AskReply>(`/chapters/${disciplineId}/${topic}/ask`, { method: "POST", body: { question: asked } });
 }
 
 /** O20: whether the person still has to link Google (O21), or already came in with it. */

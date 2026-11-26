@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Cat } from "./cat";
 import type { CatMood } from "./cat-scene";
 import styles from "./ui.module.css";
@@ -60,7 +60,22 @@ export function Trail({ on }: { on: boolean }) {
  * his own: the 3D cat taps, stretches, turns and watches the pointer until the answer comes. `low`, on a screen that is
  * only a talk and its buttons: he sits under his words from the start, as on the first screen.
  */
-export function AranduSays({ text, shown, pose, free = false, low = false }: { text: string; shown: number; pose: Pose; free?: boolean; low?: boolean }) {
+export function AranduSays({
+  text,
+  shown,
+  pose,
+  free = false,
+  low = false,
+  children,
+}: {
+  text: string;
+  shown: number;
+  pose: Pose;
+  free?: boolean;
+  low?: boolean;
+  /** What goes under the words, inside their line: the sources they rest on. */
+  children?: ReactNode;
+}) {
   const done = shown >= text.split(" ").length;
   const said = free && done;
   const [arrived, setArrived] = useState(false);
@@ -74,6 +89,7 @@ export function AranduSays({ text, shown, pose, free = false, low = false }: { t
       <Cat mood={!said ? pose : arrived ? "sit" : "walk"} size={104} className={styles.talkCat} />
       <div className={styles.bubble} role="status">
         <Said text={text} shown={shown} />
+        {children && <div className={styles.under}>{children}</div>}
         {(free || low) && <Trail on={done} />}
       </div>
     </section>

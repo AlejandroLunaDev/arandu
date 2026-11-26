@@ -29,6 +29,16 @@
   background: var(--cloud);
   font-size: 16px;
   line-height: 22px;
+  white-space: pre-line;
+}
+
+/* Under the words, inside their line: where they come from. */
+.under {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  white-space: normal;
 }
 
 /* A cat does not talk: the words are his thought, so no tail points at him. Where he sits under them, a trail of
@@ -168,6 +178,49 @@
 
   .talk[data-said] .bubble {
     animation: none;
+  }
+}
+
+/* The way through a run of steps (paw-steps.tsx): a trail of paw prints walking to the right, a left foot then a
+   right one. With many steps the prints get smaller, never fewer. */
+.steps {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.steps svg {
+  flex: 0 1 20px;
+  min-width: 0;
+  height: 20px;
+  fill: var(--ink-600);
+  translate: 0 -3px;
+  rotate: 78deg;
+}
+
+.steps svg:nth-child(even) {
+  translate: 0 3px;
+  rotate: 102deg;
+}
+
+.steps svg[data-on] {
+  fill: var(--amber-400);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--amber-400) 45%, transparent));
+}
+
+/* The newest print lands. */
+@media (prefers-reduced-motion: no-preference) {
+  .steps svg[data-now] {
+    animation: step 0.35s ease-out both;
+  }
+}
+
+@keyframes step {
+  from {
+    opacity: 0;
+    scale: 0.4;
   }
 }
 

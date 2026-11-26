@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { AranduSays, useReveal } from "@/ui/arandu-says";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AranduSays, type Pose, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Composer } from "@/ui/composer";
 import { MainButton } from "@/ui/main-button";
@@ -16,9 +16,9 @@ const READ_MS = 1200;
 
 /**
  * Arandu's words, one by one, each answer anew; dimmed while he thinks of the next. With onRead, it is called once
- * the words are out and the person had a moment to read them.
+ * the words are out and the person had a moment to read them. Its children go under the words (their sources).
  */
-export function Answer({ text, busy, onRead }: { text: string; busy: boolean; onRead?: () => void }) {
+export function Answer({ text, busy, onRead, pose = "sit", children }: { text: string; busy: boolean; onRead?: () => void; pose?: Pose; children?: ReactNode }) {
   const { shown, done } = useReveal(text);
   // Once: the save onRead starts re-renders with a new onRead, which must not call it again.
   const fired = useRef(false);
@@ -33,7 +33,9 @@ export function Answer({ text, busy, onRead }: { text: string; busy: boolean; on
   }, [done, onRead]);
   return (
     <div className={busy ? styles.thinking : undefined}>
-      <AranduSays text={text} shown={shown} pose="sit" low />
+      <AranduSays text={text} shown={shown} pose={pose} low>
+        {children}
+      </AranduSays>
     </div>
   );
 }
