@@ -26,9 +26,10 @@ function dictationClass(): DictationClass | null {
 // nothing typed it is the mic, whose voice becomes text in the field for the person to read and send. Without
 // dictation in the browser there is no mic.
 // While Arandu is answering (busy) the field is read-only: its answer brings a new question and a new, empty composer,
-// so words typed in the meantime would be lost.
+// so words typed in the meantime would be lost. What the person last sent stays over the field, so they see it went.
 export function Composer({ placeholder, busy, onSend }: { placeholder: string; busy: boolean; onSend: (text: string) => void }) {
   const [draft, setDraft] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const dictation = useRef<Dictation | null>(null);
   const text = draft.trim();
@@ -53,60 +54,64 @@ export function Composer({ placeholder, busy, onSend }: { placeholder: string; b
   };
 
   return (
-    <form
-      className={styles.compose}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (busy || !text) return;
-        // Sent: a late dictation result must not write the message back into the field.
-        if (dictation.current) dictation.current.onresult = null;
-        dictation.current?.stop();
-        onSend(text);
-        setDraft("");
-      }}
-    >
-      {listening && (
-        <p className={styles.listening} role="status">
-          Ouvindo… vira texto no campo
-        </p>
-      )}
-      <div className={styles.field}>
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={placeholder}
-          aria-label="Mensagem para o Arandu"
-          enterKeyHint="send"
-          autoComplete="off"
-          readOnly={busy}
-          // The API takes up to 1000 characters of the person's own words.
-          maxLength={1000}
-        />
-        {text ? (
-          <button type="submit" className={styles.send} aria-label="Enviar" disabled={busy}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 19V5M6 11l6-6 6 6" />
-            </svg>
-          </button>
-        ) : (
-          canDictate && (
-            <button
-              type="button"
-              className={styles.mic}
-              data-on={listening || undefined}
-              aria-label={listening ? "Parar de ouvir" : "Falar com o Arandu"}
-              aria-pressed={listening}
-              disabled={busy}
-              onClick={listen}
-            >
+    <>
+      {sent && <p className={`${styles.you} ${styles.echo}`}>{sent}</p>}
+      <form
+        className={styles.compose}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (busy || !text) return;
+          // Sent: a late dictation result must not write the message back into the field.
+          if (dictation.current) dictation.current.onresult = null;
+          dictation.current?.stop();
+          onSend(text);
+          setSent(text);
+          setDraft("");
+        }}
+      >
+        {listening && (
+          <p className={styles.listening} role="status">
+            Ouvindo… vira texto no campo
+          </p>
+        )}
+        <div className={styles.field}>
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={placeholder}
+            aria-label="Mensagem para o Arandu"
+            enterKeyHint="send"
+            autoComplete="off"
+            readOnly={busy}
+            // The API takes up to 1000 characters of the person's own words.
+            maxLength={1000}
+          />
+          {text ? (
+            <button type="submit" className={styles.send} aria-label="Enviar" disabled={busy}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="9" y="3" width="6" height="11" rx="3" />
-                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+                <path d="M12 19V5M6 11l6-6 6 6" />
               </svg>
             </button>
-          )
-        )}
-      </div>
-    </form>
+          ) : (
+            canDictate && (
+              <button
+                type="button"
+                className={styles.mic}
+                data-on={listening || undefined}
+                aria-label={listening ? "Parar de ouvir" : "Falar com o Arandu"}
+                aria-pressed={listening}
+                disabled={busy}
+                onClick={listen}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+                </svg>
+              </button>
+            )
+          )}
+        </div>
+      </form>
+    </>
   );
 }

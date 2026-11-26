@@ -4,7 +4,6 @@ import { AranduSays, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Composer } from "@/ui/composer";
 import { MainButton } from "@/ui/main-button";
-import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
 import type { Question } from "./questions";
 
@@ -15,7 +14,6 @@ type Props = {
   say: string;
   /** The question's number, of seven. */
   step: number;
-  said: string | null;
   busy: boolean;
   failed: boolean;
   onSay: (text: string) => void;
@@ -25,8 +23,8 @@ type Props = {
 };
 
 // One of the seven questions (O02-O08): Arandu asks, and the person answers in their own words, writing or talking.
-export function QuestionView({ question, say, step, said, busy, failed, onSay, onContinue, onBack }: Props) {
-  const { shown, done } = useReveal(say);
+export function QuestionView({ question, say, step, busy, failed, onSay, onContinue, onBack }: Props) {
+  const { shown } = useReveal(say);
   return (
     <main className={styles.screen}>
       <header className={styles.bar}>
@@ -41,11 +39,6 @@ export function QuestionView({ question, say, step, said, busy, failed, onSay, o
         <div className={busy ? styles.thinking : undefined}>
           <AranduSays text={say} shown={shown} pose={question?.pose ?? "sit"} />
         </div>
-        {done && question && said && (
-          <div className={ui.after}>
-            <p className={ui.you}>{said}</p>
-          </div>
-        )}
       </div>
       <footer className={styles.foot}>
         {failed && (

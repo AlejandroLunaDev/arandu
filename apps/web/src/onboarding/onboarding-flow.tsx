@@ -26,7 +26,6 @@ const heard = (p: AranduProfile) =>
 export function OnboardingFlow() {
   const [turn, setTurn] = useState<OnboardingReply | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswer[]>([]);
-  const [said, setSaid] = useState<string | null>(null);
   const [profileShown, setProfileShown] = useState(false);
   const [fixed, setFixed] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
@@ -98,7 +97,6 @@ export function OnboardingFlow() {
       const next = await answerOnboarding(turn.sessionId, text);
       setAnswers(all);
       setTurn(next);
-      setSaid(null);
     });
 
   return (
@@ -108,19 +106,14 @@ export function OnboardingFlow() {
       question={question}
       say={turn.reply}
       step={question ? Math.min(turn.progress.answered + 1, 7) : 7}
-      said={said}
       busy={busy}
       failed={failed}
-      onSay={(text) => {
-        setSaid(text);
-        answer(text);
-      }}
+      onSay={answer}
       onContinue={() => answer(null)}
       // Only before the first answer: a conversation with Arandu cannot be taken back, so later questions go on.
       onBack={
         answers.length === 0
           ? () => {
-              setSaid(null);
               setTurn(null);
             }
           : undefined

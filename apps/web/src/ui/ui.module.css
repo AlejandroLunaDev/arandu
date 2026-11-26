@@ -73,6 +73,19 @@
   line-height: 18px;
 }
 
+/* Over the composer, the last line sent: a few lines of it at most, so a long answer does not push the screen up. */
+.echo {
+  display: -webkit-box;
+  flex: none;
+  margin-bottom: 4px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow-wrap: anywhere;
+  animation: fade-in 0.35s ease both;
+}
+
 /* The main button: ink with a violet rim and two cat ears on top. */
 .button {
   position: relative;
