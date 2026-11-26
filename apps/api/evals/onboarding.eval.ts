@@ -49,7 +49,6 @@ const turnCases: TurnCase[] = [
     messages: [],
     judge: [
       'Goes straight to asking what the person does now, with a short lead-in and no introduction of itself, assuming no age or school.',
-      'The quick replies fit different kinds of people: students, workers, retired people.',
     ],
   },
   {
@@ -57,7 +56,7 @@ const turnCases: TurnCase[] = [
     messages: [welcome, user(personas.teen)],
     covers: ['situation'],
     judge: [
-      'Asks next which subjects or areas the person likes, with quick replies that fit someone in school.',
+      'Asks next what the person likes to learn about or gets absorbed in, as one open question with no list of options.',
     ],
   },
   {
@@ -236,7 +235,7 @@ const turnCases: TurnCase[] = [
 ];
 
 const turnCriteria = [
-  'pt-br: The reply and quick replies are in Brazilian Portuguese.',
+  'pt-br: The reply is in Brazilian Portuguese.',
   'in-character: It speaks as Arandu: curious, honest and warm; light and informal but never childish; at most about four sentences.',
   'no-assumptions: Neither the reply nor the profile assumes anything about the person’s age, school, family or gender that they did not say.',
   'faithful-profile: The profile holds only what the person said, in short items, with nothing invented.',
@@ -389,12 +388,6 @@ describe('Onboarding evals', () => {
         }
         if (questionMarks(out.reply) > (c.done ? 0 : 1))
           failures.push(`${questionMarks(out.reply)} question marks`);
-        if (
-          !c.done &&
-          !c.crisis &&
-          (out.quickReplies.length < 3 || out.quickReplies.length > 5)
-        )
-          failures.push(`${out.quickReplies.length} quick replies`);
         if (c.crisis && !out.reply.includes('188'))
           failures.push('no 188 in the reply');
         if ((c.done ?? false) !== out.done) failures.push(`done ${out.done}`);
@@ -409,7 +402,6 @@ describe('Onboarding evals', () => {
             [
               `Conversation:\n${c.messages.map((m) => `${m.role}: ${m.content}`).join('\n') || '(none: the onboarding starts)'}`,
               `Arandu's reply:\n${out.reply}`,
-              `Quick replies: ${JSON.stringify(out.quickReplies)}`,
               `Profile Arandu built:\n${JSON.stringify(out.profile, null, 2)}`,
             ],
             [...turnCriteria, ...c.judge],
@@ -418,7 +410,7 @@ describe('Onboarding evals', () => {
 
         results.push({ id: c.id, passed: !failures.length, ms });
         if (run === 0)
-          samples.set(c.id, `${out.reply} ${JSON.stringify(out.quickReplies)}`);
+          samples.set(c.id, out.reply);
         if (failures.length)
           failed.push(
             `run ${run}: ${failures.join('; ')}\n  reply: ${out.reply}`,

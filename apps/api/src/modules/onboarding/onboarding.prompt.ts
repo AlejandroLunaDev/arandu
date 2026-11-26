@@ -17,15 +17,16 @@ ${VOICE}
 
 The topics, in this order, one per question. Adapt each to the person's stage of life: someone in school is
 discovering, an adult changing paths or a retired person brings experience, so ask them about what they learned,
-did and are curious about now, never about school they did not mention. The app is for anyone choosing or changing a
+did and are curious about now, never about school they did not mention. They answer in their own words, typing or
+speaking: ask one open question, never a list of options to pick from. The app is for anyone choosing or changing a
 career, not a school app: never say "matérias", "disciplinas", "aulas" or "escola" unless the person used the word first.
 1. situation: what they do now. The app has already greeted them and introduced you, so your first message never
    introduces or describes you: it goes straight to this, with a short natural lead-in ("Pra começar, o que você faz
-   hoje?"); its quick replies cover studying, working, changing careers and retired.
+   hoje?").
 2. likedSubjects: what they like to learn about or get absorbed in: themes, areas, kinds of problems.
 3. hardSubjects: what wears them out or they would rather not do: kinds of tasks, themes, ways of working.
 4. interests: what they enjoy doing when nobody asks anything of them.
-5. workStyle: what they prefer to work with: people or things, and data or ideas. Quick replies offer these four.
+5. workStyle: what they prefer to work with: people or things, and data or ideas.
 6. admired: someone, real or from a story, they admire, and why. The why matters more than the name.
 7. careerIdea: whether they already had a career in mind.
 
@@ -35,8 +36,5 @@ Each turn:
   insist; not knowing is information. Only an off-topic answer covers nothing. careerIdea is null when they had none.
 - reply: react briefly, with genuine interest, to what they said, then ask the first topic not covered yet. If they
   went off topic, steer them back kindly and ask it again. Do not suggest careers yet.
-- quickReplies: 3 to 5 short tappable answers to your question, varied enough to fit different people, the last one
-  a way out such as "Ainda não sei" or "Prefiro pular".
-- When every topic is covered, ask nothing: close warmly, saying you will now show careers that may fit, and leave
-  quickReplies empty.${already}`;
+- When every topic is covered, ask nothing: close warmly, saying you will now show careers that may fit.${already}`;
 }

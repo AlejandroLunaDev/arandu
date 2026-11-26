@@ -9,27 +9,23 @@ import styles from "./onboarding.module.css";
 import type { Question } from "./questions";
 
 type Props = {
-  /** null once Arandu is done: its closing words, nothing to pick. */
+  /** null once Arandu is done: its closing words, nothing to answer. */
   question: Question | null;
   /** What Arandu says: its reaction to the last answer and this question, in its own words. */
   say: string;
-  /** Arandu's quick replies to its own question, so what there is to tap always fits what it asked. */
-  options: string[];
   /** The question's number, of seven. */
   step: number;
-  picks: string[];
   said: string | null;
   busy: boolean;
   failed: boolean;
-  onToggle: (pick: string) => void;
   onSay: (text: string) => void;
   onContinue: () => void;
   /** Only on the first question: back to the greeting. */
   onBack?: () => void;
 };
 
-// One of the seven questions (O02-O08): Arandu asks, the person taps its quick replies, writes, talks, or mixes them.
-export function QuestionView({ question, say, options, step, picks, said, busy, failed, onToggle, onSay, onContinue, onBack }: Props) {
+// One of the seven questions (O02-O08): Arandu asks, and the person answers in their own words, writing or talking.
+export function QuestionView({ question, say, step, said, busy, failed, onSay, onContinue, onBack }: Props) {
   const { shown, done } = useReveal(say);
   return (
     <main className={styles.screen}>
@@ -45,18 +41,9 @@ export function QuestionView({ question, say, options, step, picks, said, busy, 
         <div className={busy ? styles.thinking : undefined}>
           <AranduSays text={say} shown={shown} pose={question?.pose ?? "sit"} />
         </div>
-        {done && question && (
+        {done && question && said && (
           <div className={ui.after}>
-            {options.length > 0 && (
-              <div className={styles.chips}>
-                {options.map((pick) => (
-                  <button key={pick} type="button" className={styles.chip} aria-pressed={picks.includes(pick)} onClick={() => onToggle(pick)}>
-                    {pick}
-                  </button>
-                ))}
-              </div>
-            )}
-            {said && <p className={ui.you}>{said}</p>}
+            <p className={ui.you}>{said}</p>
           </div>
         )}
       </div>
@@ -73,7 +60,7 @@ export function QuestionView({ question, say, options, step, picks, said, busy, 
           </MainButton>
         )}
       </footer>
-      {question && <Composer placeholder={question.placeholder} busy={busy} onSend={onSay} onNext={picks.length > 0 ? onContinue : undefined} />}
+      {question && <Composer placeholder={question.placeholder} busy={busy} onSend={onSay} />}
     </main>
   );
 }

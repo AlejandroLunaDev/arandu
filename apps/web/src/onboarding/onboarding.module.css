@@ -119,45 +119,14 @@
   cursor: pointer;
 }
 
-.option[aria-pressed="true"],
-.chip[aria-pressed="true"] {
+.option[aria-pressed="true"] {
   border-color: var(--violet-400);
   background: var(--violet-900);
 }
 
-.option:focus-visible,
-.chip:focus-visible {
+.option:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 16px 0;
-}
-
-/* At least 34px tall, its hit area grown to 44px by an invisible ring (34 - 3 + 2 x 7 = 45). Arandu writes the quick
- * replies, so a long one wraps instead of running out of the screen. */
-.chip {
-  position: relative;
-  max-width: 100%;
-  min-height: 34px;
-  padding: 7px 12px;
-  text-align: left;
-  border: 1.5px solid var(--ink-700);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
-  color: var(--text);
-  font: 500 13px/17px var(--font-body);
-  cursor: pointer;
-}
-
-.chip::after {
-  content: "";
-  position: absolute;
-  inset: -7px -3px;
 }
 
 /* O10, one course: where, then its name, over Arandu's words. */

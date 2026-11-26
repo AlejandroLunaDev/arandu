@@ -185,9 +185,8 @@ export type OnboardingRequest =
 
 export interface OnboardingReply {
   sessionId: string;
+  /** Arandu's reaction and its next question, which the person answers in their own words. */
   reply: string;
-  /** Tappable answers to the question in `reply`; the person can always write freely. Empty when done. */
-  quickReplies: string[];
   profile: AranduProfile;
   /** Topics answered, of all of them: "3 de 7". */
   progress: { answered: number; total: number };
