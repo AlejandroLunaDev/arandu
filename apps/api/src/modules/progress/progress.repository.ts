@@ -17,7 +17,11 @@ import {
   nextMidnight,
   TIME_ZONE,
 } from './progress.logic.js';
-import { notEnoughCurrency, notEnoughPeixinhos } from './progress.errors.js';
+import {
+  notEnoughCurrency,
+  notEnoughPeixinhos,
+  notEnoughVidas,
+} from './progress.errors.js';
 import { one } from '../../core/database/one.js';
 
 export { TIME_ZONE };
@@ -47,7 +51,7 @@ export const sabedoriaRows = (sql: Tx) => sql`(
 
 /** The wallet columns every query returns, for toWallet; `giftDue` while the São Paulo day's gift is not given. */
 export const walletColumns = (sql: Tx) => sql`peixinhos, currency, marcadores,
-  peixinhos_on is distinct from (now() at time zone ${TIME_ZONE})::date as "giftDue"`;
+  vidas, peixinhos_on is distinct from (now() at time zone ${TIME_ZONE})::date as "giftDue"`;
 
 /** The day's gift: what is missing to reach DAILY_PEIXINHOS, while it is due; more than that is kept. */
 const giftOf = (row: WalletRow) =>
@@ -106,6 +110,7 @@ export interface WalletRow {
   peixinhos: number;
   currency: number;
   marcadores: number;
+  vidas: number;
   giftDue: boolean;
 }
 
@@ -119,6 +124,7 @@ export function toWallet(row: WalletRow, now: Date): Wallet {
     currency: row.currency,
     continuePrice: CONTINUE_PRICE,
     marcadores: row.marcadores,
+    vidas: row.vidas,
   };
 }
 
@@ -159,6 +165,7 @@ export class ProgressRepository {
         peixinhos: DAILY_PEIXINHOS,
         currency: 0,
         marcadores: 0,
+        vidas: 0,
         giftDue: false,
       },
       new Date(),
@@ -176,21 +183,23 @@ export class ProgressRepository {
   }
 
   /**
-   * Takes peixinhos (entering a lesson) or currency (going on after a lesson's last life). 409 `not_enough_peixinhos`
-   * or `not_enough_currency` with too few, and nothing is taken.
+   * Takes peixinhos (entering a lesson), currency (going on after a lesson's last life) or an extra life (1 life back).
+   * 409 `not_enough_peixinhos`, `not_enough_currency` or `not_enough_vidas` with too few, and nothing is taken.
    */
   pay(
     userId: string,
-    what: 'peixinhos' | 'currency',
+    what: 'peixinhos' | 'currency' | 'vidas',
     amount: number,
   ): Promise<Wallet> {
     return asPerson(
       this.sql.begin(async (tx) => {
         const row = await this.lockWallet(tx, userId);
         if (row[what] < amount)
-          throw what === 'peixinhos'
-            ? notEnoughPeixinhos()
-            : notEnoughCurrency();
+          throw {
+            peixinhos: notEnoughPeixinhos,
+            currency: notEnoughCurrency,
+            vidas: notEnoughVidas,
+          }[what]();
         const updated = one(
           await tx<WalletRow[]>`
           update public.wallets set ${tx(what)} = ${tx(what)} - ${amount}, updated_at = now()

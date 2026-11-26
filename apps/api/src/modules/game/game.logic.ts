@@ -1,5 +1,11 @@
 import { createHash, randomInt } from 'node:crypto';
-import type { CaixaContents, LeagueId, SeasonReward } from '@arandu/contracts';
+import type {
+  CaixaContents,
+  LeagueId,
+  SeasonReward,
+  ShopItem,
+} from '@arandu/contracts';
+import { addDays } from '../progress/progress.logic.js';
 
 // Demo values (issue #65): every reward comes from studying, never from paying.
 
@@ -133,9 +139,122 @@ export function rollCaixa(
     sabedoria: 1 + roll(5),
     marcador: roll(100) < 35,
     roomItem: roll(100) < 12 ? 'planta' : null,
+    vidas: 0,
   };
 }
 
-/** The page marker's price, in peixinhos. */
-export const SHOP = { marcador: 50 } as const;
 export const MAX_MARCADORES = 2;
+
+type Gives = ShopItem['gives'];
+const span = (min: number, max = min) => ({ min, max });
+const gives = (g: Partial<Gives>): Gives => ({
+  peixinhos: span(0),
+  vidas: span(0),
+  marcador: 0,
+  planta: 0,
+  ...g,
+});
+
+// #153, Alejandro's prices. While caixas are bought with the currency, the currency is never sold for money (ECA
+// Digital, art. 20).
+export const SHOP_ITEMS: ShopItem[] = [
+  {
+    id: 'marcador',
+    price: 50,
+    pays: 'peixinhos',
+    caixa: false,
+    gives: gives({ marcador: 100 }),
+  },
+  {
+    id: 'peixinhos',
+    price: 2,
+    pays: 'currency',
+    caixa: false,
+    gives: gives({ peixinhos: span(15) }),
+  },
+  {
+    id: 'vida',
+    price: 2,
+    pays: 'currency',
+    caixa: false,
+    gives: gives({ vidas: span(1) }),
+  },
+  {
+    id: 'caixa_comum',
+    price: 3,
+    pays: 'currency',
+    caixa: true,
+    gives: gives({ peixinhos: span(10, 20), vidas: span(0, 1) }),
+  },
+  {
+    id: 'caixa_media',
+    price: 6,
+    pays: 'currency',
+    caixa: true,
+    gives: gives({ peixinhos: span(25, 40), vidas: span(1), marcador: 20 }),
+  },
+  {
+    id: 'caixa_premium',
+    price: 10,
+    pays: 'currency',
+    caixa: true,
+    gives: gives({
+      peixinhos: span(40, 60),
+      vidas: span(1, 2),
+      marcador: 40,
+      planta: 10,
+    }),
+  },
+];
+
+/** The week's promotions, one per São Paulo week in turn. */
+const PROMOTIONS: Gives[] = [
+  gives({ vidas: span(10) }),
+  gives({ peixinhos: span(45) }),
+];
+
+/** The promotion of the São Paulo week starting on `monday`, and when it ends. */
+export function promotionOf(monday: string): {
+  item: ShopItem;
+  endsAt: string;
+} {
+  const week = Math.round(
+    (Date.parse(monday) - SEASON_EPOCH) / (7 * 86_400_000),
+  );
+  const n = PROMOTIONS.length;
+  return {
+    item: {
+      id: 'promotion',
+      price: 4,
+      pays: 'currency',
+      caixa: false,
+      gives: PROMOTIONS[((week % n) + n) % n]!,
+    },
+    // shortcut: São Paulo midnight is 03:00 UTC with no daylight saving (as nextMidnight); use a tz library if it returns.
+    endsAt: `${addDays(monday, 7)}T03:00:00.000Z`,
+  };
+}
+
+/** The shop item of a bought caixa's reason, "shop:<tier>:<uuid>"; undefined for an earned caixa. */
+export const shopTier = (reason: string) =>
+  reason.startsWith('shop:')
+    ? SHOP_ITEMS.find((i) => i.caixa && i.id === reason.split(':')[1])
+    : undefined;
+
+/** What a bought caixa holds: rolled within its tier's ranges, never the currency or sabedoria. */
+export function rollShopCaixa(
+  tier: ShopItem,
+  roll: (max: number) => number = randomInt,
+): CaixaContents {
+  const within = ({ min, max }: { min: number; max: number }) =>
+    min + roll(max - min + 1);
+  const { peixinhos, vidas, marcador, planta } = tier.gives;
+  return {
+    peixinhos: within(peixinhos),
+    currency: 0,
+    sabedoria: 0,
+    vidas: within(vidas),
+    marcador: roll(100) < marcador,
+    roomItem: roll(100) < planta ? 'planta' : null,
+  };
+}

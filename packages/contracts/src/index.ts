@@ -419,7 +419,9 @@ export interface Lesson {
   exercises: LessonExercise[];
   /**
    * Mistakes the lesson allows: each one costs a life, and the last one loses the lesson's progress, unless the person
-   * goes on with POST /chapters/:disciplineId/:topic/lessons/:lesson/continue.
+   * goes on with POST /chapters/:disciplineId/:topic/lessons/:lesson/continue (all lives back, for `Wallet.continuePrice`
+   * currency) or POST /chapters/:disciplineId/:topic/lessons/:lesson/extra-life (1 life back, for one of `Wallet.vidas`:
+   * 409 `not_enough_vidas` with none). Both return the Wallet.
    */
   lives: number;
 }
@@ -510,6 +512,11 @@ export interface Wallet {
   /** Currency to go on with a lesson after its last life (POST /chapters/:d/:t/lessons/:n/continue). */
   continuePrice: number;
   marcadores: number;
+  /**
+   * Extra lives kept for later, from the shop and caixas. After a lesson's last life, one of them gives 1 life back
+   * (POST /chapters/:d/:t/lessons/:n/extra-life).
+   */
+  vidas: number;
 }
 
 /** POST /me/daily-gift: the peixinhos the day's gift gave (0 when already given today), and the wallet after it. */
@@ -610,15 +617,63 @@ export interface CaixaContents {
   marcador: boolean;
   /** A room item, e.g. "planta"; null when none. */
   roomItem: string | null;
+  /** Extra lives, added to `Wallet.vidas`. */
+  vidas: number;
 }
 
 export interface Caixa {
   id: number;
-  /** Why it was earned: "lesson:<disciplineId>:<topic>:<lesson>", "season:1:2", "promotion:veterano" or "demo_finished". */
+  /**
+   * Why it was earned: "lesson:<disciplineId>:<topic>:<lesson>", "season:1:2", "promotion:veterano", "demo_finished",
+   * or "shop:<tier>:<uuid>" when bought (the tier is a caixa ShopItemId).
+   */
   reason: string;
   createdAt: string;
   openedAt: string | null;
   contents: CaixaContents | null;
+}
+
+/** What the shop sells; "promotion" is the week's promotion. */
+export type ShopItemId =
+  | "marcador"
+  | "peixinhos"
+  | "vida"
+  | "caixa_comum"
+  | "caixa_media"
+  | "caixa_premium"
+  | "promotion";
+
+/** A shop item. Caixas are a surprise: what they hold is rolled within `gives` when opened, and never has currency. */
+export interface ShopItem {
+  id: ShopItemId;
+  price: number;
+  /** What the price is paid in. */
+  pays: "currency" | "peixinhos";
+  caixa: boolean;
+  /** A fixed amount has min = max; chances are percents (100 = always). */
+  gives: {
+    peixinhos: { min: number; max: number };
+    vidas: { min: number; max: number };
+    marcador: number;
+    planta: number;
+  };
+}
+
+/** GET /me/shop: the items, and this São Paulo week's promotion, once per person per week. */
+export interface Shop {
+  items: ShopItem[];
+  promotion: ShopItem & { endsAt: string; bought: boolean };
+}
+
+/**
+ * POST /me/shop/:item: the wallet after it, and the new caixa's id when a caixa was bought (open it with
+ * POST /me/caixas/:id/open). 409 `not_enough_currency` or `not_enough_peixinhos` with too few, and nothing is taken;
+ * 409 `promotion_bought` for a second purchase of the week's promotion; 409 `marcadores_full` for a page marker with
+ * every one held.
+ */
+export interface ShopPurchase {
+  wallet: Wallet;
+  caixaId: number | null;
 }
 
 /** GET /me/wardrobe (L6): owned league outfits and room items, and what Arandu wears. */

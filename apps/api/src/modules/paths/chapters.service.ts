@@ -310,6 +310,18 @@ export class ChaptersService {
     return this.wallet.pay(userId, 'currency', CONTINUE_PRICE);
   }
 
+  /** Gets 1 life back after a lesson's last life, for one stored extra life: 409 `not_enough_vidas`. */
+  async extraLife(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    index: number,
+  ): Promise<Wallet> {
+    await this.opened(disciplineId, topic);
+    await this.mustBeOpen(userId, disciplineId, topic, index);
+    return this.wallet.pay(userId, 'vidas', 1);
+  }
+
   /**
    * Whether the lesson is practice: done already, or in a finished chapter. 409 `lesson_locked` while it is neither
    * practice nor open.

@@ -16,6 +16,7 @@ describe('game routes', () => {
     caixas: vi.fn(),
     open: vi.fn(),
     buy: vi.fn(),
+    shop: vi.fn(),
     wardrobe: vi.fn(),
     updateWardrobe: vi.fn(),
   };
@@ -86,8 +87,22 @@ describe('game routes', () => {
     });
   });
 
+  it('GET /me/shop returns the shop of the user', async () => {
+    await server().get('/me/shop').expect(200);
+
+    expect(repo.shop).toHaveBeenCalledWith(USER_ID);
+  });
+
   describe('POST /me/shop/:item', () => {
-    it.each(['marcador'])('buys %s', async (item) => {
+    it.each([
+      'marcador',
+      'peixinhos',
+      'vida',
+      'caixa_comum',
+      'caixa_media',
+      'caixa_premium',
+      'promotion',
+    ])('buys %s', async (item) => {
       await server().post(`/me/shop/${item}`).expect(200);
 
       expect(repo.buy).toHaveBeenCalledWith(USER_ID, item);
