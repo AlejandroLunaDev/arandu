@@ -3,7 +3,7 @@
 import type { CareerPath } from "@arandu/contracts";
 import Image from "next/image";
 import { type ReactNode, useState } from "react";
-import { AranduSays, Cloud, type Pose, Said, useReveal } from "@/ui/arandu-says";
+import { AranduSays, type Pose, Said, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Cat } from "@/ui/cat";
 import { Shelf } from "@/ui/shelf";
@@ -150,7 +150,6 @@ export function DoneView({ course, subject, ...next }: Next & { course: string; 
           <p className={p.meta}>{subject}</p>
         </section>
         <div className={`${ui.bubble} ${p.loose}`} role="status">
-          <Cloud />
           <Said text={say} shown={shown} />
         </div>
       </div>
@@ -203,7 +202,6 @@ export function GoogleView({ busy, failed, onGoogle, onLater, onBack }: { busy: 
       </div>
       <div className={styles.body}>
         <div className={`${ui.bubble} ${p.loose}`} role="status">
-          <Cloud />
           <Said text={say} shown={shown} />
         </div>
         <div className="flex justify-center pt-6">

@@ -6,7 +6,7 @@
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  padding: 24px 26px 20px;
+  padding: 12px 16px 8px;
 }
 
 .talkCat {
@@ -14,56 +14,30 @@
   margin: 0 -8px -6px -10px;
 }
 
-/* Arandu's words sit in a thought cloud (Cloud in arandu-says.tsx draws it, reaching 16px past this box). Until it
-   is drawn the box's own rounded background holds the words; after, it is hidden under the cloud. */
+/* Arandu's words, in one plain line: nothing in it pulls the eye off them. */
 .bubble {
   --cloud: var(--ink-850);
 
   position: relative;
-  isolation: isolate;
   box-sizing: border-box;
   flex: 1;
   min-height: 56px;
   margin: 0;
-  padding: 14px 18px;
-  border-radius: 26px;
+  padding: 10px 14px;
+  border: 2px solid var(--violet-400);
+  border-radius: 20px;
   background: var(--cloud);
   font-size: 16px;
   line-height: 22px;
 }
 
-/* Drawn, the cloud is the words' ground: the box's own would show past it at the corners. */
-.bubble:has(.cloudFill) {
-  background: none;
-}
-
-.cloud {
-  position: absolute;
-  inset: -16px;
-  z-index: -1;
-  width: calc(100% + 32px);
-  height: calc(100% + 32px);
-  overflow: visible;
-}
-
-.cloudFill {
-  fill: var(--cloud);
-}
-
-.cloudLine {
-  fill: none;
-  stroke: var(--violet-400);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
-
-/* The thought's trail: three small bubbles from the cloud toward the cat, each smaller than the last. They start on
-   its lower left, where he is while he is beside it. */
+/* A cat does not talk: the words are his thought, so no tail points at him. A trail of three small bubbles goes from
+   them toward him, each smaller than the last. It starts on their lower left, where he is while he is beside them. */
 .talk .bubble::after {
   content: "";
   position: absolute;
-  bottom: 2px;
-  left: -50px;
+  bottom: 4px;
+  left: -40px;
   width: 36px;
   height: 40px;
   background:
@@ -72,14 +46,14 @@
     radial-gradient(circle 3.5px at 5px 36px, var(--cloud) 1.3px, var(--violet-400) 1.7px 3.1px, transparent 3.5px);
 }
 
-/* A talk that frees the cat (arandu-says.tsx): room above for the cloud to float into and below for him to wait in,
-   so neither leaves the talk's own box. The cloud ends in the middle of the screen (it starts 90px to the right of
+/* A talk that frees the cat (arandu-says.tsx): room above for his words to float into and below for him to wait in,
+   so neither leaves the talk's own box. The words end in the middle of the screen (it starts 90px to the right of
    the talk's left edge, so half of that to the left), and he ends under it: 50cqi is half the talk's width, and his
    box's middle starts 42px from its left. */
 .talk[data-free] {
   container-type: inline-size;
-  padding-top: 64px;
-  padding-bottom: 156px;
+  padding-top: 48px;
+  padding-bottom: 130px;
 }
 
 .talk[data-free] .talkCat {
@@ -92,7 +66,7 @@
     bottom 2.6s cubic-bezier(0.37, 0, 0.63, 1) 0.35s;
 }
 
-/* The cloud lets go of him and drifts up and to the middle like a thought: a slow lift-off, a little past its place,
+/* His words let go of him and drift up and to the middle like a thought: a slow lift-off, a little past its place,
    back down into it. Then it stays still: words that move are hard to read. */
 .talk[data-said] .bubble {
   translate: -45px -40px;
@@ -115,12 +89,12 @@
 
 /* Its trail comes round under it, down to him. */
 .talk[data-said] .bubble::after {
-  bottom: -60px;
+  bottom: -48px;
   left: calc(50% - 22px);
 }
 
 .talk[data-said] .talkCat {
-  translate: calc(50cqi - 42px) 124px;
+  translate: calc(50cqi - 42px) 110px;
 }
 
 @media (prefers-reduced-motion: reduce) {
