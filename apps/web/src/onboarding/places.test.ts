@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { CareerOption, Institution } from "@arandu/contracts";
-import { byInstitution, placeName } from "./places.ts";
+import { byCareer, byInstitution, placeName } from "./places.ts";
 
 const inst = (name: string, shortName: string | null = null): Institution => ({
   name,
@@ -84,4 +84,16 @@ describe("byInstitution", () => {
     assert.deepEqual(out.map((p) => placeName(p.institution)), ["UFSCar", "Unifesp", "USP"]);
   });
   it("returns [] without careers", () => assert.deepEqual(byInstitution([]), []));
+});
+
+describe("byCareer", () => {
+  const places = byInstitution([
+    career("psicologia", [offering(1, "Psicologia", usp, "São Paulo"), offering(2, "Psicologia", inst("Anhanguera"), "São Paulo")]),
+    career("pedagogia", [offering(3, "Pedagogia", inst("Anhanguera"), "São Paulo")]),
+  ]);
+  const out = byCareer(places);
+  it("lists each career once, Arandu's best first", () => assert.deepEqual(out.map((c) => c.profession.slug), ["psicologia", "pedagogia"]));
+  it("puts under a career every place that has it, in alphabetical order", () =>
+    assert.deepEqual(out[0]?.at.map(({ place, course }) => [placeName(place.institution), course.courseId]), [["Anhanguera", 2], ["USP", 1]]));
+  it("returns [] without places", () => assert.deepEqual(byCareer([]), []));
 });

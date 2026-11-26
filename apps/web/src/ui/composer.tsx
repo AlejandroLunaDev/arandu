@@ -32,11 +32,16 @@ export function Composer({ placeholder, busy, onSend }: { placeholder: string; b
   const [sent, setSent] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const dictation = useRef<Dictation | null>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   const text = draft.trim();
 
   // False on the server and while hydrating, so both renders agree; read from the browser after that.
   const canDictate = useSyncExternalStore(noChanges, () => dictationClass() !== null, () => false);
   useEffect(() => () => dictation.current?.stop(), []);
+  // Dictation writes past the field's last line: keep the newest words in sight.
+  useEffect(() => {
+    if (listening && field.current) field.current.scrollTop = field.current.scrollHeight;
+  }, [draft, listening]);
 
   const listen = () => {
     if (listening) return dictation.current?.stop();
@@ -55,7 +60,11 @@ export function Composer({ placeholder, busy, onSend }: { placeholder: string; b
 
   return (
     <>
-      {sent && <p className={`${styles.you} ${styles.echo}`}>{sent}</p>}
+      {sent && (
+        <p className={`${styles.you} ${styles.echo}`}>
+          <span>{sent}</span>
+        </p>
+      )}
       <form
         className={styles.compose}
         onSubmit={(event) => {
@@ -75,17 +84,29 @@ export function Composer({ placeholder, busy, onSend }: { placeholder: string; b
           </p>
         )}
         <div className={styles.field}>
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={placeholder}
-            aria-label="Mensagem para o Arandu"
-            enterKeyHint="send"
-            autoComplete="off"
-            readOnly={busy}
-            // The API takes up to 1000 characters of the person's own words.
-            maxLength={1000}
-          />
+          {/* The field grows with what is written or said, up to a few lines, then scrolls: a hidden copy of the text
+              (data-text, drawn by CSS) sits under it and gives it its height. */}
+          <div className={styles.grow} data-text={draft}>
+            <textarea
+              ref={field}
+              rows={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              // Enter sends, as in a chat; Shift+Enter breaks the line. Not while an IME is still composing a word.
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }}
+              placeholder={placeholder}
+              aria-label="Mensagem para o Arandu"
+              enterKeyHint="send"
+              autoComplete="off"
+              readOnly={busy}
+              // The API takes up to 1000 characters of the person's own words.
+              maxLength={1000}
+            />
+          </div>
           {text ? (
             <button type="submit" className={styles.send} aria-label="Enviar" disabled={busy}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
