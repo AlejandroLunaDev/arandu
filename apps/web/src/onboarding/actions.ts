@@ -13,7 +13,8 @@ import type {
   Recommendations,
   ChapterContent,
 } from "@arandu/contracts";
-import { api } from "@/app-shell/api";
+import { updateTag } from "next/cache";
+import { MINE, api } from "@/app-shell/api";
 import { ensureGuest } from "@/auth/sign-in";
 import { careerPaths, chapterContent } from "./catalog";
 
@@ -33,8 +34,13 @@ export async function answerOnboarding(sessionId: string, message: string): Prom
   return api<OnboardingReply>("/arandu/onboarding", { method: "POST", body: { sessionId, message } });
 }
 
+/** The journey is what the app's door reads (app-shell/entry-gate.tsx): a change drops the cached copy. */
 export async function saveJourney(update: JourneyUpdate): Promise<void> {
-  await api<Journey>("/me/journey", { method: "PATCH", body: update });
+  try {
+    await api<Journey>("/me/journey", { method: "PATCH", body: update });
+  } finally {
+    updateTag(MINE);
+  }
 }
 
 export async function recommend(profile: AranduProfile): Promise<Recommendations> {

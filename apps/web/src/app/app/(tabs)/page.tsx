@@ -1,6 +1,6 @@
 import type { Home } from "@arandu/contracts";
 import { Suspense } from "react";
-import { api } from "@/app-shell/api";
+import { mine } from "@/app-shell/api";
 import { HomeView } from "@/room/home";
 import { Loading } from "@/ui/loading";
 
@@ -14,5 +14,5 @@ export default function QuartoPage() {
 }
 
 async function Room() {
-  return <HomeView home={await api<Home>("/me")} />;
+  return <HomeView home={await mine<Home>("/me")} />;
 }

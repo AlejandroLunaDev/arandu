@@ -1,7 +1,7 @@
 import type { BookProgress, Home, Journey } from "@arandu/contracts";
 import Link from "next/link";
 import { Suspense } from "react";
-import { api } from "@/app-shell/api";
+import { mine } from "@/app-shell/api";
 import c from "@/caminho/caminho.module.css";
 import { PathMap } from "@/caminho/path-map";
 import { careerPaths } from "@/onboarding/catalog";
@@ -17,7 +17,7 @@ export default function CaminhoPage() {
 }
 
 async function Path() {
-  const home = await api<Home>("/me");
+  const home = await mine<Home>("/me");
   if (!home.current)
     return (
       <main className={c.empty}>
@@ -25,7 +25,7 @@ async function Path() {
         <Link href="/app/estante">Escolher na estante</Link>
       </main>
     );
-  const [book, journey] = await Promise.all([api<BookProgress>(`/me/books/${home.current.disciplineId}`), api<Journey>("/me/journey")]);
+  const [book, journey] = await Promise.all([mine<BookProgress>(`/me/books/${home.current.disciplineId}`), mine<Journey>("/me/journey")]);
   // The career the person chose (O10-O11), through the course that stands for it: it names the path, and holds the
   // semester's next book.
   const course = journey.professionSlug ? (await careerPaths(journey.professionSlug)).paths.find((path) => path.courseId === journey.courseId) : undefined;

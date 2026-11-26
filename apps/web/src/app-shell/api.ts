@@ -1,4 +1,5 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { internalHeaders, readAuthConfig } from "@/auth/config";
@@ -46,6 +47,20 @@ export async function api<T>(path: string, init: Init = {}): Promise<T> {
     if (error instanceof ApiError && (error.status === 401 || error.code === "user_banned")) redirect("/app/onboarding");
     throw error;
   }
+}
+
+/** The tag on every read of the person's own data: each action that changes it calls updateTag(MINE). */
+export const MINE = "mine";
+
+/**
+ * A read of the person's own data that a page can show again without waiting: the router keeps the page for five
+ * minutes, and an action that changes the data drops it (updateTag(MINE)). Never kept on the server across requests.
+ */
+export async function mine<T>(path: string): Promise<T> {
+  "use cache: private";
+  cacheLife({ stale: 300 });
+  cacheTag(MINE);
+  return api<T>(path);
 }
 
 /**
