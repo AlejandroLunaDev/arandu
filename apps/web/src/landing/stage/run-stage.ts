@@ -22,6 +22,7 @@ import { makeCat } from "./cat";
 import { CARRY, HELD_SCALE, makeLife, OPEN_HEIGHT, openTo, SHUT } from "./cat-life";
 import { tokenColor } from "./palette";
 import { loadRapier, roomPhysics, type RoomPhysics } from "./physics";
+import { GET_APP_EVENT } from "@/install/download-button";
 import { GITHUB_URL } from "../links";
 import { FRAME_PHOTOS, makeKit, type Kit } from "./props";
 import { heroRoom, TILT, type Room } from "./rooms";
@@ -51,6 +52,7 @@ const TABLE_LIGHT = { color: "amber-200", power: 4, from: [8.2, 2.8, 2], to: [6.
  */
 const GLOWS: Record<string, { color: string; power: number; reach: number; out: number; at?: RegExp }> = {
   NeonSign: { color: "error", power: 1.4, reach: 1.8, out: 0.3 },
+  NeonApp: { color: "error", power: 0.6, reach: 1.1, out: 0.2 },
   StringLights: { color: "amber-300", power: 0.9, reach: 1.5, out: 0.2, at: /^StringLightsLight\d$/ },
   Tv: { color: "violet-400", power: 0.8, reach: 2.2, out: 0.4 },
 };
@@ -419,7 +421,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const pokeBox = new THREE.Box3();
   const pokeSize = new THREE.Vector3();
   // A press on the GitHub plaque opens the repo when it lifts: a touch only lets a page open a tab on pointerup.
+  // The app's neon opens the ways into the app the same way.
   let plaquePressed = false;
+  let appPressed = false;
   const onDown = (e: PointerEvent) => {
     lastInput = performance.now() / 1000;
     const target = e.target instanceof Element ? e.target : null;
@@ -474,6 +478,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     }
     if (overPlaque(e.clientX, e.clientY)) {
       plaquePressed = true;
+      return;
+    }
+    if (overApp(e.clientX, e.clientY)) {
+      appPressed = true;
       return;
     }
     const hit = pick(e.clientX, e.clientY);
@@ -756,6 +764,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       plaquePressed = false;
       if (e.type === "pointerup" && overPlaque(e.clientX, e.clientY)) window.open(GITHUB_URL, "_blank", "noopener,noreferrer");
     }
+    if (appPressed) {
+      appPressed = false;
+      if (e.type === "pointerup" && overApp(e.clientX, e.clientY)) dispatchEvent(new Event(GET_APP_EVENT));
+    }
     if (!holding) return;
     worlds[holding.i]!.release();
     life.fetch(holding.i, holding.prop);
@@ -891,6 +903,21 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       }),
     );
   let plaqueHover = false;
+  // The small neon under it, the way into the app: it shines steady, brighter and a little bigger under the
+  // pointer. Its tubes get their own materials, or the big neon's flicker would run in them too.
+  const apps = rooms.flatMap((r) => r.content.children.filter((o) => o.userData.prop === "NeonApp"));
+  const appTubes = new Map<THREE.MeshStandardMaterial, number>();
+  for (const a of apps)
+    a.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = (o.material as THREE.MeshStandardMaterial).clone();
+      o.material = m;
+      glows.push(m);
+      if (m.emissiveIntensity > 0) appTubes.set(m, m.emissiveIntensity);
+    });
+  const overApp = (sx: number, sy: number) => over(apps, sx, sy);
+  let appHover = false;
+  let appHot = 0;
   const tvs = rooms[0]!.content.children.filter((o) => o.userData.prop === "Tv");
   const overTv = (sx: number, sy: number) => over(tvs, sx, sy);
   const shine = (t: number, dt: number) => {
@@ -902,6 +929,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     const flicker = burst ? 0.15 : reduce || neonHover || zoomed ? 1 : f < 0.08 || (f > 0.16 && f < 0.22) ? 0.35 : 1;
     for (const [m, base] of neonTubes) m.emissiveIntensity = base * (1 + NEON_HOT.glow * neonHot) * flicker;
     for (const n of neons) n.scale.setScalar(1 + NEON_HOT.grow * neonHot);
+    appHot = lerp(appHot, appHover ? 1 : 0, 1 - 0.0001 ** dt);
+    for (const [m, base] of appTubes) m.emissiveIntensity = base * (1 + NEON_HOT.glow * appHot);
+    for (const a of apps) a.scale.setScalar(1 + NEON_HOT.grow * appHot);
     nbShot?.color.setScalar(nbHover ? 1.1 : 0.78);
   };
 
@@ -1233,12 +1263,13 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       frameHover = !holding && !over && !!overFrame(pointer.x, pointer.y);
       const onPlaque = !holding && !over && overPlaque(pointer.x, pointer.y);
       if (onPlaque !== plaqueHover) plaqueGlow((plaqueHover = onPlaque));
+      appHover = !holding && !over && overApp(pointer.x, pointer.y);
       tvHover = !holding && !over && overTv(pointer.x, pointer.y);
       document.body.style.cursor = holding
         ? "grabbing"
         : TOYS.has(String(over?.prop.userData.prop))
           ? "grab"
-          : over || neonHover || nbHover || tvHover || frameHover || plaqueHover || overCat(pointer.x, pointer.y)
+          : over || neonHover || nbHover || tvHover || frameHover || plaqueHover || appHover || overCat(pointer.x, pointer.y)
             ? "pointer"
             : "";
     }

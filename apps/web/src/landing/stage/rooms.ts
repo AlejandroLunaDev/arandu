@@ -230,7 +230,7 @@ function base(anchor: HTMLElement, face: number) {
 /** The furniture: it holds what falls on it, like the shelves, and never moves. */
 const FURNITURE = new Set<PropName>(["Desk", "ChairGamer", "Sofa", "SideTable", "PaperBin", "Mug", "Notebook"]);
 /** What only dresses the room: on the wall, or on the desk, out of the physics. */
-const DECOR = new Set<PropName>(["NeonSign", "StringLights", "Tv", "FrameTall", "FrameSquare", "GithubPlaque", "MottoSign"]);
+const DECOR = new Set<PropName>(["NeonSign", "NeonApp", "StringLights", "Tv", "FrameTall", "FrameSquare", "GithubPlaque", "MottoSign"]);
 /** The frames hang larger than they were modelled, to read from across the room. */
 const FRAME_SCALE = 1.3;
 
@@ -382,7 +382,7 @@ function shelves(kit: Kit, content: THREE.Object3D, low: [number, number], mid: 
 /** The wide room: the desk under the TV on the left, the neon, then the shelves over the sofa. */
 const WIDE = { width: 7.45, height: 3.35 };
 /** The phone's room: the TV on top, the neon, then the shelves. */
-const TALL = { width: 2, height: 4.1 };
+const TALL = { width: 2, height: 4.36 };
 
 /**
  * The pencils in the cup, one to each quarter of it (sx, sz), leaning out toward its rim: they never
@@ -419,11 +419,13 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
   let row: ReturnType<typeof shelves>;
   if (phone) {
     row = shelves(kit, content, [1, 0.35], [1, 1.1], [1, 1.85], true);
-    // High enough that its panel (0.56 m) clears the grand books' tops on the shelf under it.
-    place(content, kit, "NeonSign", 1, 2.68, ON_WALL);
-    place(content, kit, "Tv", 1, 3.55, ON_WALL).scale.setScalar(1.75 / 2.2);
+    // The way into the app high enough that its panel (0.21 m) clears the grand books' tops on the shelf under
+    // it, and the neon over it.
+    place(content, kit, "NeonApp", 1, 2.5, ON_WALL);
+    place(content, kit, "NeonSign", 1, 2.94, ON_WALL);
+    place(content, kit, "Tv", 1, 3.81, ON_WALL).scale.setScalar(1.75 / 2.2);
     // The link to Arandu's code hangs from a nail under the TV's right corner.
-    place(content, kit, "GithubPlaque", 1.62, 2.86, ON_WALL);
+    place(content, kit, "GithubPlaque", 1.62, 3.12, ON_WALL);
   } else {
     place(content, kit, "ChairGamer", 0.85, 0, 0.72, 60);
     place(content, kit, "Desk", 2.15, 0, 0.32);
@@ -454,6 +456,8 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     // The link to Arandu's code hangs from a nail under the TV's right corner, past the desk's end.
     place(content, kit, "GithubPlaque", 3.22, 1.4, ON_WALL);
     place(content, kit, "NeonSign", 4.05, 2.5, ON_WALL);
+    // The way into the app, under the neon.
+    place(content, kit, "NeonApp", 4.05, 2.05, ON_WALL);
     place(content, kit, "StringLights", 3.55, 3.22, ON_WALL);
     row = shelves(kit, content, [5.3, 1.45], [6.5, 2.2], [5.15, 2.85], false);
     sideTable(kit, content);

@@ -36,6 +36,7 @@ export type PropName =
   | "PencilCup"
   | "Mug"
   | "NeonSign"
+  | "NeonApp"
   | "StringLights"
   | "FarolSantander"
   | "FrameTall"

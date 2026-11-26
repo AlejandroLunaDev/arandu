@@ -755,6 +755,7 @@ DESK_TOP = 0.98  # the desk's top: the trophy, cap, pencil cup and mug stand her
 DESK_MAT = DESK_TOP + 0.006  # the felt mat on it, where the notebook stands
 FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "Outfit.ttf")  # the brand's display face
 NEON_TEXT = ("Abra", "um livro")  # two lines: the book and the first, then the second
+NEON_APP = "Baixe o app"  # the small sign under it: a phone and one line, the way into the app
 FRAMES = {"FrameTall": (0.34, 0.44), "FrameSquare": (0.3, 0.3)}  # name: width, height
 
 
@@ -1138,30 +1139,49 @@ def motto_sign(coll):
     return face_front(p.build("MottoSign", coll, uv=True), "SignArt")
 
 
+def neon_line(coll, text, size, spacing=1.0, tube_r=0.008):
+    """One line of text bent in neon tube in the brand's face: its verts (left edge at X = 0, flat on
+    Z = 0), faces and width. Small text needs `spacing` (between letters; words get more): the tube is as
+    thick at any size, and would run its letters together; or a thinner `tube_r`, as thin for its size as the big sign's."""
+    font = bpy.data.fonts.load(FONT, check_existing=True)
+    cu = bpy.data.curves.new("NeonText", "FONT")
+    cu.body, cu.font, cu.size = text, font, size
+    cu.align_x, cu.align_y = "LEFT", "CENTER"
+    cu.fill_mode, cu.bevel_depth, cu.bevel_resolution, cu.resolution_u = "NONE", tube_r, 1, 4
+    cu.space_character, cu.space_word = spacing, spacing ** 2
+    tmp = bpy.data.objects.new("NeonText", cu)
+    coll.objects.link(tmp)
+    bpy.context.view_layer.update()
+    evaluated = tmp.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    me = evaluated.to_mesh()
+    verts, faces = [tuple(v.co) for v in me.vertices], [tuple(f.vertices) for f in me.polygons]
+    evaluated.to_mesh_clear()
+    bpy.data.objects.remove(tmp)
+    bpy.data.curves.remove(cu)
+    left = min(v[0] for v in verts)
+    return [(x - left, y, z) for x, y, z in verts], faces, max(v[0] for v in verts) - left
+
+
+def neon_panel(p, total, ph, inset, r):
+    """The smoked acrylic panel a neon is bent on, held off the wall by four standoffs, and the coral
+    tube framing it, `inset` in from its edge with corners of radius `r`. Centred on X = Z = 0."""
+    add_box(p, (total, 0.012, ph), (0, -0.034, 0), "NeonBacking", 0.03, seg=4)
+    hx, hz = total / 2 - inset, ph / 2 - inset
+    border = []
+    for cx, cz, a0 in ((hx - r, hz - r, 0), (-hx + r, hz - r, 90), (-hx + r, -hz + r, 180), (hx - r, -hz + r, 270)):
+        border += [(cx + r * math.cos(math.radians(a0 + d)), -0.05, cz + r * math.sin(math.radians(a0 + d))) for d in range(0, 90, 10)]
+    p.add(*tube(border, 0.007, sides=8, closed=True), "NeonBorder")
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            at = Matrix.Translation((sx * (total / 2 - inset - 0.015), 0, sz * (ph / 2 - inset - 0.015))) @ Matrix.Rotation(math.radians(90), 4, "X")
+            add_lathe(p, [(0.0, 0.0), (0.009, 0.0), (0.009, 0.042), (0.0, 0.042)], "LampMetal", at, seg=12)
+
+
 def neon_sign(coll):
     """An open book drawn in tube and 'Abra' on the first line, 'um livro' on the second starting left of
     'Abra', bent in neon tube in the brand's face, on a smoked acrylic panel held off the wall, a coral tube
     framing it. The tubes are "NeonTube" and "NeonBorder", for the web to light."""
-    font = bpy.data.fonts.load(FONT, check_existing=True)
-
-    def line(text):
-        cu = bpy.data.curves.new("NeonText", "FONT")
-        cu.body, cu.font, cu.size = text, font, 0.2
-        cu.align_x, cu.align_y = "LEFT", "CENTER"
-        cu.fill_mode, cu.bevel_depth, cu.bevel_resolution, cu.resolution_u = "NONE", 0.008, 1, 4
-        tmp = bpy.data.objects.new("NeonText", cu)
-        coll.objects.link(tmp)
-        bpy.context.view_layer.update()
-        evaluated = tmp.evaluated_get(bpy.context.evaluated_depsgraph_get())
-        me = evaluated.to_mesh()
-        verts, faces = [tuple(v.co) for v in me.vertices], [tuple(f.vertices) for f in me.polygons]
-        evaluated.to_mesh_clear()
-        bpy.data.objects.remove(tmp)
-        bpy.data.curves.remove(cu)
-        left = min(v[0] for v in verts)
-        return [(x - left, y, z) for x, y, z in verts], faces, max(v[0] for v in verts) - left
-
-    (v1, f1, w1), (v2, f2, w2) = line(NEON_TEXT[0]), line(NEON_TEXT[1])
+    (v1, f1, w1), (v2, f2, w2) = neon_line(coll, NEON_TEXT[0], 0.2), neon_line(coll, NEON_TEXT[1], 0.2)
     # The first line is the book, a gap and the first word; the second starts INDENT in, left of that word.
     # Everything is moved so the panel centres on X = 0.
     book_w, gap, pad, indent, lead = 0.17, 0.05, 0.09, 0.1, 0.115
@@ -1177,19 +1197,30 @@ def neon_sign(coll):
         page = [(0, -0.07), (0.04 * side, -0.055), (0.085 * side, -0.06), (0.085 * side, 0.06), (0.04 * side, 0.07), (0, 0.055)]
         p.add(*tube([(bx + c.x, -0.05, lead + c.y) for c in spline([(x, z, 0) for x, z in page], 24)], 0.008, sides=8), "NeonTube")
     p.add(*tube([(bx, -0.05, lead - 0.07), (bx, -0.05, lead + 0.055)], 0.008, sides=8), "NeonTube")
-    ph = 0.56
-    add_box(p, (total, 0.012, ph), (0, -0.034, 0), "NeonBacking", 0.03, seg=4)
-    # a border tube in coral around the panel, inset from its edge, corners rounded
-    hx, hz, r = total / 2 - 0.035, ph / 2 - 0.035, 0.045
-    border = []
-    for cx, cz, a0 in ((hx - r, hz - r, 0), (-hx + r, hz - r, 90), (-hx + r, -hz + r, 180), (hx - r, -hz + r, 270)):
-        border += [(cx + r * math.cos(math.radians(a0 + d)), -0.05, cz + r * math.sin(math.radians(a0 + d))) for d in range(0, 90, 10)]
-    p.add(*tube(border, 0.007, sides=8, closed=True), "NeonBorder")
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            at = Matrix.Translation((sx * (total / 2 - 0.05), 0, sz * (ph / 2 - 0.05))) @ Matrix.Rotation(math.radians(90), 4, "X")
-            add_lathe(p, [(0.0, 0.0), (0.009, 0.0), (0.009, 0.042), (0.0, 0.042)], "LampMetal", at, seg=12)
+    neon_panel(p, total, 0.56, 0.035, 0.045)
     return p.build("NeonSign", coll)
+
+
+def neon_app(coll):
+    """The small sign that hangs under NeonSign: a phone drawn in tube and NEON_APP on one line, in the
+    same tube, panel and coral frame, built small rather than scaled, so its tube is as thick as the big
+    sign's. The web makes it open the ways into the app."""
+    # A tube as thin for its letters as the big sign's (0.008 for 0.2), or they fill in and blur.
+    v, f, w = neon_line(coll, NEON_APP, 0.12, 1.04, 0.0048)
+    phone_w, phone_h, cr, gap, pad = 0.055, 0.09, 0.013, 0.035, 0.06
+    total = pad + phone_w + gap + w + pad
+    x0 = -total / 2 + pad
+    p = Part()
+    p.add(moved(v, Matrix.Translation((x0 + phone_w + gap, -0.05, -0.004)) @ Matrix.Rotation(math.radians(90), 4, "X")), f, "NeonTube")
+    # The phone: a rounded outline, and its home bar near the bottom.
+    cx, hx, hz = x0 + phone_w / 2, phone_w / 2, phone_h / 2
+    outline = []
+    for ox, oz, a0 in ((hx - cr, hz - cr, 0), (-hx + cr, hz - cr, 90), (-hx + cr, -hz + cr, 180), (hx - cr, -hz + cr, 270)):
+        outline += [(cx + ox + cr * math.cos(math.radians(a0 + d)), -0.05, oz + cr * math.sin(math.radians(a0 + d))) for d in range(0, 91, 15)]
+    p.add(*tube(outline, 0.0048, sides=8, closed=True), "NeonTube")
+    p.add(*tube([(cx - 0.012, -0.05, -hz + 0.018), (cx + 0.012, -0.05, -hz + 0.018)], 0.004, sides=8), "NeonTube")
+    neon_panel(p, total, 0.21, 0.025, 0.03)
+    return p.build("NeonApp", coll)
 
 
 def string_lights(coll):
@@ -1277,6 +1308,7 @@ LAYOUT = {  # where each prop stands in the Blender scene; the export puts every
     "FrameTall": (3.4, 3.0, 1.2),
     "FrameSquare": (3.85, 3.0, 1.2),
     "NeonSign": (-0.4, 3.0, 2.2),
+    "NeonApp": (-0.4, 3.0, 1.75),
     "StringLights": (-2.2, 3.0, 2.8),
     "FarolSantander": (4.3, 3.0, 0),
     "Tv": (-1.5, 4.5, 1.6),
@@ -1310,7 +1342,7 @@ def build():
     props += [shelf(coll, name) for name in SHELVES]
     props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball, paw, fish, mouse)]
     props += [f(coll) for f in (desk, notebook, chair_gamer, sofa, paper_bin, trophy, grad_cap,
-                                pencil_cup, mug, neon_sign, string_lights, farol_santander, tv, side_table)]
+                                pencil_cup, mug, neon_sign, neon_app, string_lights, farol_santander, tv, side_table)]
     props += [paper_ball(coll, name) for name in PAPER_BALLS] + [pencil(coll, name) for name in PENCILS]
     props += [frame(coll, name) for name in FRAMES] + [github_plaque(coll), motto_sign(coll)]
     for obj in props:
