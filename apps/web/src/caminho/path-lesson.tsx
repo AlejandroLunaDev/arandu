@@ -13,18 +13,19 @@ import { Loading } from "@/ui/loading";
 import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
 import { continueLesson, finishLesson, openCaixa } from "./actions";
-import { type LessonEntry, enteredLesson, leaveLesson, readEntry } from "./lesson-entry";
+import { type LessonEntry, enteredLesson, keepLesson, leaveLesson, readEntry } from "./lesson-entry";
 import c from "./caminho.module.css";
 
 const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 const never = () => () => {};
 
 // P2-P7: the lesson the person entered from the path (lesson-entry.ts). Its cards and exercises are the onboarding's
-// (ChapterView), with the lives the API gave it; at the end P7 shows what it gave and opens its caixa.
+// (ChapterView), with the lives the API gave it; at the end P7 shows what it gave and opens its caixa. The tab keeps the
+// lives left and the result, so a reload gives back neither the lives nor a lesson to finish again.
 export function PathLesson({ wallet }: { wallet: Wallet }) {
   const router = useRouter();
   const { busy, failed, attempt } = useAttempt();
-  const [done, setDone] = useState<{ result: LessonResult; home: Home } | null>(null);
+  const [done, setDone] = useState<Finished | null>(null);
   // null on the server and while hydrating; "" when the tab holds no lesson.
   const raw = useSyncExternalStore(never, enteredLesson, () => null);
   const entry = useMemo(() => (raw ? readEntry(raw) : null), [raw]);
@@ -35,42 +36,54 @@ export function PathLesson({ wallet }: { wallet: Wallet }) {
   if (!entry) return <Loading />;
 
   const { disciplineId, topic, lesson } = entry;
+  const finished = done ?? entry.finished;
   const back = () => {
     leaveLesson();
     router.push("/app/caminho");
   };
-  if (done) return <LessonDone entry={entry} {...done} onNext={back} />;
+  if (finished) return <LessonDone entry={entry} finished={finished} onNext={back} />;
   return (
     <ChapterView
       chapter={{ discipline: { id: disciplineId, name: entry.discipline }, topic: { index: topic, text: entry.text, total: entry.total }, cards: lesson.cards, exercises: lesson.exercises }}
       caption={`Arandu explica · capítulo ${entry.number} · lição ${lesson.index} de ${lesson.total}`}
       busy={busy}
       failed={failed}
-      lives={{ count: lesson.lives, wallet, goOn: () => continueLesson(disciplineId, topic, lesson.index) }}
+      lives={{
+        count: lesson.lives,
+        left: entry.left,
+        onLeft: (left) => keepLesson({ left }),
+        wallet,
+        goOn: () => continueLesson(disciplineId, topic, lesson.index),
+      }}
       onClose={back}
       onDone={(_, missed) =>
-        attempt(async () =>
-          setDone(
-            await finishLesson(
-              disciplineId,
-              topic,
-              lesson.index,
-              missed.flatMap((i) => {
-                const exercise = lesson.exercises[i];
-                return exercise ? [{ topic: exercise.topic, index: exercise.index }] : [];
-              }),
-            ),
-          ),
-        )
+        attempt(async () => {
+          const saved = await finishLesson(
+            disciplineId,
+            topic,
+            lesson.index,
+            missed.flatMap((i) => {
+              const exercise = lesson.exercises[i];
+              return exercise ? [{ topic: exercise.topic, index: exercise.index }] : [];
+            }),
+          );
+          const now = { ...saved, caixa: null };
+          keepLesson({ finished: now });
+          setDone(now);
+        })
       }
     />
   );
 }
 
-// P7: the lesson is done, with what it gave, its caixa to open and the week's ratinhos.
-function LessonDone({ entry, result, home, onNext }: { entry: LessonEntry; result: LessonResult; home: Home; onNext: () => void }) {
+type Finished = { result: LessonResult; home: Home; caixa: CaixaContents | null };
+
+// P7: the lesson is done, with what it gave, its caixa to open and the week's ratinhos. The way on shows once the caixa
+// is open: an unopened caixa is never left behind (finishing the lesson again gives none).
+function LessonDone({ entry, finished, onNext }: { entry: LessonEntry; finished: Finished; onNext: () => void }) {
+  const { result, home } = finished;
   const { busy, failed, attempt } = useAttempt();
-  const [caixa, setCaixa] = useState<CaixaContents | null>(null);
+  const [caixa, setCaixa] = useState(finished.caixa);
   // An achievement or an opened caixa surprises him first; then he jumps for joy.
   const [mood, setMood] = useState<"surprised" | "hop">(result.achievements.length > 0 ? "surprised" : "hop");
   useEffect(() => {
@@ -128,7 +141,9 @@ function LessonDone({ entry, result, home, onNext }: { entry: LessonEntry; resul
               disabled={busy}
               onClick={() =>
                 attempt(async () => {
-                  setCaixa(await openCaixa(caixaId));
+                  const opened = await openCaixa(caixaId);
+                  keepLesson({ finished: { ...finished, caixa: opened } });
+                  setCaixa(opened);
                   setMood("surprised");
                 })
               }
@@ -156,9 +171,11 @@ function LessonDone({ entry, result, home, onNext }: { entry: LessonEntry; resul
           ))}
         </div>
       </div>
-      <footer className={`${styles.foot} ${styles.last}`}>
-        <MainButton onClick={onNext}>Continuar o caminho</MainButton>
-      </footer>
+      {caixaId === null && (
+        <footer className={`${styles.foot} ${styles.last}`}>
+          <MainButton onClick={onNext}>Continuar o caminho</MainButton>
+        </footer>
+      )}
     </main>
   );
 }
