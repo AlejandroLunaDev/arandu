@@ -33,7 +33,7 @@ export function Answer({ text, busy, onRead }: { text: string; busy: boolean; on
   }, [done, onRead]);
   return (
     <div className={busy ? styles.thinking : undefined}>
-      <AranduSays text={text} shown={shown} pose="sit" />
+      <AranduSays text={text} shown={shown} pose="sit" low />
     </div>
   );
 }
@@ -81,23 +81,24 @@ export function CourseView({
       <div className={ui.backBar}>
         <Back onBack={onBack} />
       </div>
-      <div className={styles.body}>
+      <div className={`${styles.body} ${styles.low}`}>
         <header className={styles.courseHead}>
           <h1>{career}</h1>
         </header>
         <Answer key={chat?.reply ?? WAIT} text={chat?.reply ?? WAIT} busy={talk.busy} onRead={chosen === null ? undefined : () => onChoose(chosen)} />
       </div>
-      <footer className={styles.foot}>
-        {(failed || talk.failed) && (
-          <p className={styles.error} role="alert">
-            {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
-          </p>
-        )}
-        <MainButton disabled={busy} onClick={() => onChoose(course.courseId)}>
-          Escolher {career}
-        </MainButton>
-      </footer>
-      <Composer placeholder="Pergunte sobre a carreira" busy={talk.busy} onSend={(text) => ask(text, chat?.sessionId)} />
+      <Composer placeholder="Pergunte sobre a carreira" busy={talk.busy} onSend={(text) => ask(text, chat?.sessionId)}>
+        <footer className={styles.foot}>
+          {(failed || talk.failed) && (
+            <p className={styles.error} role="alert">
+              {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
+            </p>
+          )}
+          <MainButton disabled={busy} onClick={() => onChoose(course.courseId)}>
+            Escolher {career}
+          </MainButton>
+        </footer>
+      </Composer>
     </main>
   );
 }

@@ -47,20 +47,37 @@ export function QuestionView({ question, say, step, busy, failed, onSay, onConti
           <AranduSays text={say} shown={shown} pose={question?.pose ?? "sit"} free />
         </div>
       </div>
-      <footer className={styles.foot}>
-        {failed && (
-          <p className={styles.error} role="alert">
-            Não consegui seguir agora. Tenta de novo?
-          </p>
-        )}
-        {/* With a question, going on lives in the composer's button; Arandu's closing words have no composer. */}
-        {!question && (
-          <MainButton disabled={busy} onClick={onContinue}>
-            Continuar
-          </MainButton>
-        )}
-      </footer>
-      {question && <Composer placeholder={question.placeholder} busy={busy} onSend={onSay} />}
+      {question ? (
+        <Composer placeholder={question.placeholder} busy={busy} onSend={onSay}>
+          <footer className={styles.foot}>
+            {failed && (
+              <p className={styles.error} role="alert">
+                Não consegui seguir agora. Tenta de novo?
+              </p>
+            )}
+            {/* With a question, going on lives in the composer's button; Arandu's closing words have no composer. */}
+            {!question && (
+              <MainButton disabled={busy} onClick={onContinue}>
+                Continuar
+              </MainButton>
+            )}
+          </footer>
+        </Composer>
+      ) : (
+        <footer className={styles.foot}>
+          {failed && (
+            <p className={styles.error} role="alert">
+              Não consegui seguir agora. Tenta de novo?
+            </p>
+          )}
+          {/* With a question, going on lives in the composer's button; Arandu's closing words have no composer. */}
+          {!question && (
+            <MainButton disabled={busy} onClick={onContinue}>
+              Continuar
+            </MainButton>
+          )}
+        </footer>
+      )}
     </main>
   );
 }

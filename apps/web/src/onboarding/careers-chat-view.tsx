@@ -55,31 +55,32 @@ export function CareersChatView({
       <div className={ui.backBar}>
         <Back onBack={onBack} />
       </div>
-      <div className={styles.body}>
+      <div className={`${styles.body} ${styles.low}`}>
         {chat ? (
           <Answer key={chat.reply} text={chat.reply} busy={talk.busy} onRead={chosen === null ? undefined : () => onChoose(chosen)} />
         ) : (
-          <AranduSays text={SAY} shown={shown} pose="sit" />
+          <AranduSays text={SAY} shown={shown} pose="sit" low />
         )}
       </div>
-      <footer className={styles.foot}>
-        {(failed || talk.failed) && (
-          <p className={styles.error} role="alert">
-            {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
-          </p>
-        )}
-        {failed && chosen !== null && (
-          <MainButton disabled={busy} onClick={() => onChoose(chosen)}>
-            Tentar de novo
-          </MainButton>
-        )}
-        {about && !talk.busy && (
-          <MainButton disabled={busy} onClick={() => onChoose(about.courseId)}>
-            Experimentar {about.profession.name}
-          </MainButton>
-        )}
-      </footer>
-      <Composer placeholder="Pergunte sobre as carreiras" busy={talk.busy} onSend={ask} />
+      <Composer placeholder="Pergunte sobre as carreiras" busy={talk.busy} onSend={ask}>
+        <footer className={styles.foot}>
+          {(failed || talk.failed) && (
+            <p className={styles.error} role="alert">
+              {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
+            </p>
+          )}
+          {failed && chosen !== null && (
+            <MainButton disabled={busy} onClick={() => onChoose(chosen)}>
+              Tentar de novo
+            </MainButton>
+          )}
+          {about && !talk.busy && (
+            <MainButton disabled={busy} onClick={() => onChoose(about.courseId)}>
+              Experimentar {about.profession.name}
+            </MainButton>
+          )}
+        </footer>
+      </Composer>
     </main>
   );
 }

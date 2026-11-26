@@ -93,6 +93,25 @@
   }
 }
 
+/* A talk with nothing under it but the screen's buttons: as on the first screen, he sits low, just over them, and his
+   words stand over him, with room between for the thought's trail. */
+.talk[data-low] {
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 50px;
+}
+
+.talk[data-low] .talkCat {
+  width: clamp(104px, 18dvh, 150px);
+  margin: 0;
+}
+
+.talk[data-low] .bubble {
+  flex: none;
+  width: 100%;
+  max-width: 330px;
+}
+
 /* A talk that frees the cat (arandu-says.tsx): room above for his words to float into and below for him to wait in,
    so neither leaves the talk's own box. The words end in the middle of the screen (it starts 90px to the right of
    the talk's left edge, so half of that to the left), and he ends under it: 50cqi is half the talk's width, and his

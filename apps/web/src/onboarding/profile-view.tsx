@@ -73,17 +73,31 @@ export function ProfileView({
           </div>
         )}
       </div>
-      <footer className={`${styles.foot} ${styles.last}`}>
-        {failed && (
-          <p className={styles.error} role="alert">
-            Não consegui buscar as carreiras agora. Tenta de novo?
-          </p>
-        )}
-        <MainButton disabled={busy} onClick={onNext}>
-          Ver onde dá pra estudar
-        </MainButton>
-      </footer>
-      {done && <Composer placeholder="Corrigir ou acrescentar algo" busy={busy} onSend={onFix} />}
+      {done ? (
+        <Composer placeholder="Corrigir ou acrescentar algo" busy={busy} onSend={onFix}>
+          <footer className={`${styles.foot} ${styles.last}`}>
+            {failed && (
+              <p className={styles.error} role="alert">
+                Não consegui buscar as carreiras agora. Tenta de novo?
+              </p>
+            )}
+            <MainButton disabled={busy} onClick={onNext}>
+              Ver onde dá pra estudar
+            </MainButton>
+          </footer>
+        </Composer>
+      ) : (
+        <footer className={`${styles.foot} ${styles.last}`}>
+          {failed && (
+            <p className={styles.error} role="alert">
+              Não consegui buscar as carreiras agora. Tenta de novo?
+            </p>
+          )}
+          <MainButton disabled={busy} onClick={onNext}>
+            Ver onde dá pra estudar
+          </MainButton>
+        </footer>
+      )}
     </main>
   );
 }

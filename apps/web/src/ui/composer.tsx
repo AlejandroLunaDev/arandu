@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import styles from "./ui.module.css";
 
 /** The browser's dictation (Web Speech API): Chrome, Edge and Safari have it, prefixed in some; Firefox does not. */
@@ -26,8 +26,19 @@ function dictationClass(): DictationClass | null {
 // nothing typed it is the mic, whose voice becomes text in the field for the person to read and send. Without
 // dictation in the browser there is no mic.
 // While Arandu is answering (busy) the field is read-only: its answer brings a new question and a new, empty composer,
-// so words typed in the meantime would be lost. What the person last sent stays over the field, so they see it went.
-export function Composer({ placeholder, busy, onSend }: { placeholder: string; busy: boolean; onSend: (text: string) => void }) {
+// so words typed in the meantime would be lost. What the person last sent stays over the field, so they see it went;
+// a screen's own button goes in as children, and sits between that line and the field.
+export function Composer({
+  placeholder,
+  busy,
+  onSend,
+  children,
+}: {
+  placeholder: string;
+  busy: boolean;
+  onSend: (text: string) => void;
+  children?: ReactNode;
+}) {
   const [draft, setDraft] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -65,6 +76,7 @@ export function Composer({ placeholder, busy, onSend }: { placeholder: string; b
           <span>{sent}</span>
         </p>
       )}
+      {children}
       <form
         className={styles.compose}
         onSubmit={(event) => {

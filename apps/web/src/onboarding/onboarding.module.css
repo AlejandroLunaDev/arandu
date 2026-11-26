@@ -130,6 +130,17 @@
   margin-block: auto;
 }
 
+/* A screen that is a talk and its buttons: the talk sits at the bottom of what is left, right over the buttons, so no
+   empty stretch is left under it. Auto margin: a long answer starts at the top and scrolls. */
+.low {
+  display: flex;
+  flex-direction: column;
+}
+
+.low > :last-child {
+  margin-top: auto;
+}
+
 /* Arandu thinking: the bubble dims until the answer is in. */
 .thinking {
   opacity: 0.45;

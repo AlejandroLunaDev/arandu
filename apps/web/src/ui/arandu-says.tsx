@@ -57,10 +57,12 @@ export function Trail({ on }: { on: boolean }) {
 /**
  * Arandu's thought, the cat at its trail: a cat does not talk, so what he tells is what goes through his head. `free`, on a screen where the person answers in the field below: once he has
  * said it all the bubble floats up a little and he walks out from beside it to wait under it. Sitting there he is on
- * his own: the 3D cat taps, stretches, turns and watches the pointer until the answer comes.
+ * his own: the 3D cat taps, stretches, turns and watches the pointer until the answer comes. `low`, on a screen that is
+ * only a talk and its buttons: he sits under his words from the start, as on the first screen.
  */
-export function AranduSays({ text, shown, pose, free = false }: { text: string; shown: number; pose: Pose; free?: boolean }) {
-  const said = free && shown >= text.split(" ").length;
+export function AranduSays({ text, shown, pose, free = false, low = false }: { text: string; shown: number; pose: Pose; free?: boolean; low?: boolean }) {
+  const done = shown >= text.split(" ").length;
+  const said = free && done;
   const [arrived, setArrived] = useState(false);
   useEffect(() => {
     if (!said) return;
@@ -68,11 +70,11 @@ export function AranduSays({ text, shown, pose, free = false }: { text: string; 
     return () => clearTimeout(id);
   }, [said]);
   return (
-    <section className={styles.talk} data-free={free || undefined} data-said={said || undefined}>
+    <section className={styles.talk} data-free={free || undefined} data-said={said || undefined} data-low={low || undefined}>
       <Cat mood={!said ? pose : arrived ? "sit" : "walk"} size={104} className={styles.talkCat} />
       <div className={styles.bubble} role="status">
         <Said text={text} shown={shown} />
-        {free && <Trail on={said} />}
+        {(free || low) && <Trail on={done} />}
       </div>
     </section>
   );
