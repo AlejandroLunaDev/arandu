@@ -122,10 +122,10 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
           </div>
         </div>
         <div className={p.row}>
-          <Image src="/img/props/yarn.webp" alt="" width={46} height={46} />
+          <Image src="/img/props/fish.webp" alt="" width={46} height={46} />
           <div>
-            <strong>Novelos</strong>
-            <span>São 3 por dia: errou, gasta um. Eles voltam à meia-noite. Nesta amostra, errar não gasta.</span>
+            <strong>Peixinhos</strong>
+            <span>Entrar numa lição custa peixinhos, e todo dia o Arandu te dá mais. Nesta amostra, é por conta dele.</span>
           </div>
         </div>
         <div className={p.row}>

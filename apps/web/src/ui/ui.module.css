@@ -363,3 +363,20 @@
 .shelf[data-live] > canvas {
   opacity: 1;
 }
+
+/* The currency's stand-in coin (coin.tsx). */
+.coin {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.coin circle:first-child {
+  fill: var(--amber-400);
+}
+
+.coin circle:last-child {
+  fill: none;
+  stroke: var(--amber-800);
+  stroke-width: 2;
+}

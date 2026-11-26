@@ -2,24 +2,14 @@
 .map {
   position: relative;
   padding-bottom: 32px;
-  overflow: hidden;
-}
-
-/* The amber glow behind the chapter the person is on. */
-.map::before {
-  content: "";
-  position: absolute;
-  top: 120px;
-  right: -230px;
-  width: 520px;
-  height: 520px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--amber-300) 20%, transparent), transparent);
-  pointer-events: none;
+  /* clip, not hidden: hidden would make this the box the sticky stage sticks to. */
+  overflow: clip;
 }
 
 .stats {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -108,146 +98,108 @@ a.stat::after {
   line-height: 18px;
 }
 
-/* The chapters wind down the screen in five columns, in turn. */
-.path {
+/* The path is a cat tower, drawn on a stage that stays put while the page scrolls behind it: each .bay of scroll is a
+   bay of the tower. tower-scene.ts measures the scroll box and sets --stage and --bay, in pixels. */
+.tower {
   position: relative;
-  margin: 18px 0 0;
-  padding: 0;
+}
+
+.stage {
+  position: sticky;
+  top: 0;
+  height: calc(var(--stage, 560) * 1px);
+}
+
+/* A glow behind the tower lifts its violet off the dark page. */
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: 10% -40%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--amber-300) 13%, transparent), transparent);
+  pointer-events: none;
+}
+
+.stage canvas {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.stage canvas[data-hot] {
+  cursor: pointer;
+}
+
+/* The same path as a list, over the stage: what the keyboard and a screen reader move through. */
+.bays {
+  position: relative;
+  margin: calc(var(--stage, 560) * -1px) 0 0;
+  padding: 0 0 calc((var(--stage, 560) - var(--bay, 220)) * 1px);
   list-style: none;
+  pointer-events: none;
 }
 
-.row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 92px;
+.bay {
+  height: calc(var(--bay, 220) * 1px);
 }
 
-.row[data-col="0"] {
-  padding-left: 40px;
+.bay button {
+  pointer-events: auto;
 }
 
-.row[data-col="1"] {
-  padding-left: 150px;
+/* Without 3D the list is the path. */
+.tower[data-plain] .stage {
+  display: none;
 }
 
-.row[data-col="2"] {
-  padding-left: 84px;
+.tower[data-plain] .bays {
+  margin: 16px 0 0;
+  padding: 0 20px 16px;
+  pointer-events: auto;
 }
 
-.row[data-col="3"] {
-  padding-left: 190px;
+.tower[data-plain] .bay {
+  height: auto;
 }
 
-.row[data-col="4"] {
-  padding-left: 96px;
-}
-
-/* The chapter the person is on leaves room above it for its card. */
-.row[data-state="current"] {
-  margin-top: 132px;
-}
-
-.node {
-  box-sizing: border-box;
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  font: 800 22px/1 var(--font-bricolage), var(--font-display);
-  text-decoration: none;
-}
-
-.row[data-state="current"] .node {
-  background: var(--amber-400);
-  box-shadow:
-    0 5px 0 var(--amber-800),
-    0 0 0 6px color-mix(in srgb, var(--amber-400) 18%, transparent),
-    0 0 40px color-mix(in srgb, var(--amber-300) 45%, transparent);
-  color: var(--ink-900);
-}
-
-.row[data-state="done"] .node {
-  background: var(--amber-700);
-  box-shadow: 0 5px 0 var(--amber-900);
-  color: var(--cream-50);
-}
-
-.row[data-state="locked"] .node {
-  border: 2px solid var(--ink-700);
+.plain {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-700);
+  border-radius: 12px;
   background: var(--ink-850);
-  box-shadow: 0 5px 0 var(--ink-950);
-  color: var(--ink-500);
+  color: var(--text);
+  font: 500 14px/18px var(--font-body);
+  text-align: left;
 }
 
-.node svg {
-  width: 30px;
-  height: 30px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.plain[aria-pressed="true"] {
+  border-color: var(--violet-400);
 }
 
-.node:focus-visible,
-.go:focus-visible {
+.plain:focus-visible {
   outline: 2px solid var(--primary);
-  outline-offset: 4px;
+  outline-offset: 2px;
 }
 
-.label {
-  max-width: 170px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 17px;
-}
-
-.row[data-state="locked"] .label {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.sitter {
-  position: absolute;
-  top: -14px;
-  left: 150px;
-  width: 118px;
-}
-
-/* The current chapter's card, its tail pointing down at the node. */
+/* What the person picked on the tower, pinned over the bottom of the stage. */
 .pop {
-  position: absolute;
-  top: -128px;
-  right: 20px;
-  left: 20px;
+  position: sticky;
+  bottom: 12px;
   z-index: 3;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin: 0 16px;
   padding: 14px 14px 16px;
   border: 1px solid var(--ink-600);
   border-radius: 18px;
   background: var(--ink-850);
-}
-
-.pop::after {
-  content: "";
-  position: absolute;
-  bottom: -8px;
-  left: 56px;
-  width: 14px;
-  height: 14px;
-  border-right: 1px solid var(--ink-600);
-  border-bottom: 1px solid var(--ink-600);
-  background: var(--ink-850);
-  rotate: 45deg;
+  outline: none;
 }
 
 .popTitle {
@@ -257,52 +209,17 @@ a.stat::after {
   line-height: 20px;
 }
 
-/* The main button's look (ui MainButton), as a link into the chapter. */
-.go {
-  position: relative;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 50px;
-  border-radius: 14px;
-  background: var(--ink-950);
-  color: var(--text);
-  font: 600 15px/1 var(--font-body);
-  text-decoration: none;
-  filter: drop-shadow(1.5px 0 0 var(--violet-400)) drop-shadow(-1.5px 0 0 var(--violet-400)) drop-shadow(0 -1.5px 0 var(--violet-400))
-    drop-shadow(0 3px 0 var(--violet-400));
+.note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 18px;
 }
 
-.go::before,
-.go::after {
-  content: "";
-  position: absolute;
-  top: -9px;
-  width: 12px;
-  height: 10px;
-  background: inherit;
-}
-
-.go::before {
-  left: 16px;
-  clip-path: polygon(0 100%, 25% 0, 100% 100%);
-}
-
-.go::after {
-  left: 32px;
-  clip-path: polygon(0 100%, 75% 0, 100% 100%);
-}
-
-.go svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: var(--amber-400);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.fish {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .empty {
@@ -328,7 +245,7 @@ a.stat::after {
   font-weight: 600;
 }
 
-/* P6: no novelos left. */
+/* P6: no lives left. */
 .out {
   display: flex;
   flex-direction: column;
@@ -355,18 +272,6 @@ a.stat::after {
   width: 150px;
 }
 
-.timer {
-  margin-top: 4px;
-  padding: 6px 12px;
-  border-radius: 99px;
-  background: var(--ink-850);
-  box-shadow: inset 0 0 0 1.5px var(--ink-700);
-  color: var(--amber-300);
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 .ways {
   display: flex;
   flex-direction: column;
@@ -391,7 +296,8 @@ a.stat::after {
   opacity: 0.5;
 }
 
-.way img {
+.way img,
+.way svg {
   flex: none;
   width: 40px;
   height: 40px;

@@ -1,15 +1,18 @@
 import type { Home } from "@arandu/contracts";
 import Image from "next/image";
+import Link from "next/link";
 import { Cat } from "@/ui/cat";
+import { Coin, coinWord } from "@/ui/coin";
+import { DailyGift } from "./daily-gift";
 import styles from "./room.module.css";
 
 const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 // The API counts the week in São Paulo time (progress.repository TIME_ZONE), so "today" is that date there.
 const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
 
-// S1, the room: the wallet, this week's patinhas and the book the person is on (GET /me).
-// shortcut: the 3D room and cat, Arandu's talk and "Continuar" into the next chapter come with the room step; for now it
-// shows where the person stands.
+// S1, the room: the wallet, the day's gift, this week's patinhas and the book the person is on (GET /me), which leads
+// to its path.
+// shortcut: the 3D room and Arandu's talk come with the room step; for now it shows where the person stands.
 export function HomeView({ home }: { home: Home }) {
   const { wallet, week, current } = home;
   const today = dayFormat.format(new Date());
@@ -18,9 +21,9 @@ export function HomeView({ home }: { home: Home }) {
       <h1 className="sr-only">Quarto</h1>
       <header className={styles.top}>
         <p>
-          <Image src="/img/props/yarn.webp" alt="" width={26} height={17} />
-          {wallet.novelos}
-          <span className="sr-only"> de {wallet.maxNovelos} novelos</span>
+          <Coin />
+          {wallet.currency}
+          <span className="sr-only"> {coinWord(wallet.currency)}</span>
         </p>
         <p>
           <Image src="/img/props/fish.webp" alt="" width={26} height={17} />
@@ -45,15 +48,22 @@ export function HomeView({ home }: { home: Home }) {
           esta semana
         </p>
       </section>
+      {wallet.dailyGift > 0 && <DailyGift amount={wallet.dailyGift} />}
       <div className={styles.cat}>
         <Cat mood="sit" size={220} className={styles.catModel} />
       </div>
       {current && (
-        <section className={styles.book}>
+        <Link className={styles.book} href="/app/caminho">
           <p>Seu livro</p>
           <strong>{current.name}</strong>
           <span>{current.nextTopic === null ? "Livro completo!" : `Próximo: capítulo ${current.nextTopic + 1} de ${current.total}`}</span>
-        </section>
+          <b>
+            {current.nextTopic === null ? "Ver o caminho" : "Continuar"}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </b>
+        </Link>
       )}
     </main>
   );

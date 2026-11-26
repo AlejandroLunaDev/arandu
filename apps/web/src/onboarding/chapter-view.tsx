@@ -3,7 +3,7 @@
 import type { Exercise, ChapterContent, Wallet } from "@arandu/contracts";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { OutOfNovelos } from "@/caminho/out-of-novelos";
+import { OutOfLives } from "@/caminho/out-of-lives";
 import { safeUrl } from "@/landing/book/book-data";
 import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
@@ -43,17 +43,17 @@ const KIND: Partial<Record<Exercise["kind"], string>> = {
   ordene: "ordene",
 };
 
-/** Off the onboarding a chapter is paid in novelos: a wrong answer spends one (P5), and with none left it waits (P6). */
-export type Novelos = {
+/** Off the onboarding a lesson has lives: a missed exercise costs one (P5), and after the last one the lesson stops (P6). */
+export type Lives = {
+  /** Mistakes the lesson allows (Lesson.lives). */
+  count: number;
   wallet: Wallet;
-  spend: () => Promise<Wallet>;
-  /** null: the API refused (this chapter already gave its novelo, or there are not enough peixinhos). */
-  reread: () => Promise<Wallet | null>;
-  refill: () => Promise<Wallet | null>;
+  /** Pays to go on after the last life: the wallet after it, or null when the currency is short. */
+  goOn: () => Promise<Wallet | null>;
 };
 
 // O14-O18: the chapter's cards, then its exercises. A missed exercise comes back at the end until it is right; in the
-// first chapter mistakes spend no novelo. Every word on screen comes from the chapter (GET /chapters/:disciplineId/:topic).
+// first chapter mistakes cost no life. Every word on screen comes from the chapter or the lesson the API served.
 // shortcut: the onboarding's first chapters hold only the first four kinds (measured: all 125 of them) and P4 adds
 // ordene; the other six are skipped as right until the R01-R12 screens are built.
 type Props = {
@@ -61,12 +61,13 @@ type Props = {
   caption: string;
   busy: boolean;
   failed: boolean;
-  novelos?: Novelos;
+  lives?: Lives;
   onClose: () => void;
-  onDone: (mistakes: number) => void;
+  /** `missed`: the exercises missed at least once, by their place in the chapter's list. */
+  onDone: (mistakes: number, missed: number[]) => void;
 };
 
-export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, onDone }: Props) {
+export function ChapterView({ chapter, caption, busy, failed, lives, onClose, onDone }: Props) {
   const [card, setCard] = useState(0);
   const [queue, setQueue] = useState(() => chapter.exercises.map((_, i) => i));
   const [attempt, setAttempt] = useState(0);
@@ -74,7 +75,9 @@ export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, 
   const [sheet, setSheet] = useState<{ right: boolean; title: string } | null>(null);
   // Every exercise is right: the result is being saved, or failed to and waits for another try.
   const [ended, setEnded] = useState(false);
-  const [wallet, setWallet] = useState(novelos?.wallet ?? null);
+  const [hearts, setHearts] = useState(lives?.count ?? 0);
+  const [wallet, setWallet] = useState(lives?.wallet ?? null);
+  const [missed, setMissed] = useState<number[]>([]);
 
   const inCards = card < chapter.cards.length;
   const total = chapter.exercises.length;
@@ -85,14 +88,12 @@ export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, 
   const finish: Done = (right, more, title) => {
     setMistakes(mistakes + more);
     setSheet({ right, title: title ?? (right ? "Isso!" : "Quase.") });
-    if (!right && novelos && wallet) {
-      setWallet({ ...wallet, novelos: Math.max(0, wallet.novelos - 1) });
-      // The API's count wins; if the spend fails, the person keeps learning.
-      novelos.spend().then(setWallet, () => {});
-    }
+    if (right) return;
+    if (current !== undefined && !missed.includes(current)) setMissed([...missed, current]);
+    if (lives) setHearts(Math.max(0, hearts - 1));
   };
   // The API takes up to 100 mistakes a chapter.
-  const save = () => onDone(Math.min(mistakes, 100));
+  const save = () => onDone(Math.min(mistakes, 100), missed);
   /** `reread`: back to the cards first, then on with the exercises. */
   const next = (reread = false) => {
     const rest = afterAnswer(queue, sheet!.right);
@@ -106,7 +107,7 @@ export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, 
     setQueue(rest);
     if (reread) setCard(0);
   };
-  const out = novelos && wallet?.novelos === 0 && !sheet && !inCards && !ended;
+  const out = lives && wallet && hearts === 0 && !sheet && !inCards && !ended;
 
   return (
     <main className={styles.screen}>
@@ -117,10 +118,12 @@ export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, 
           </svg>
         </button>
         <progress className={p.progress} aria-label={inCards ? "Leitura" : `Exercício ${total - left + 1} de ${total}`} value={inCards ? 0.04 : Math.max(total - left, 0.04)} max={inCards ? 1 : total} />
-        {wallet ? (
-          <span className={p.lives} aria-label={`${wallet.novelos} ${wallet.novelos === 1 ? "novelo" : "novelos"}`}>
-            <Image src="/img/props/yarn.webp" alt="" width={30} height={30} data-off={wallet.novelos === 0 || undefined} />
-            <b>{wallet.novelos}</b>
+        {lives ? (
+          <span className={p.lives} aria-label={`${hearts} ${hearts === 1 ? "vida" : "vidas"}`}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" data-off={hearts === 0 || undefined}>
+              <path d="M12 20.5C5 15.5 3 12 3 8.8a4.8 4.8 0 0 1 9-2.3 4.8 4.8 0 0 1 9 2.3c0 3.2-2 6.7-9 11.7z" />
+            </svg>
+            <b>{hearts}</b>
           </span>
         ) : (
           <span className={p.first}>amostra</span>
@@ -128,21 +131,16 @@ export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, 
       </header>
 
       {out ? (
-        <OutOfNovelos
-          wallet={wallet!}
+        <OutOfLives
+          wallet={wallet}
           onClose={onClose}
-          onReread={async () => {
-            const back = await novelos.reread();
-            if (back) {
-              setWallet(back);
-              setCard(0);
+          onGoOn={async () => {
+            const paid = await lives.goOn();
+            if (paid) {
+              setWallet(paid);
+              setHearts(lives.count);
             }
-            return back !== null;
-          }}
-          onRefill={async () => {
-            const full = await novelos.refill();
-            if (full) setWallet(full);
-            return full !== null;
+            return paid !== null;
           }}
         />
       ) : inCards ? (
@@ -166,15 +164,11 @@ export function ChapterView({ chapter, caption, busy, failed, novelos, onClose, 
                 <h2>{sheet.title}</h2>
                 <p>
                   {exercise.why}
-                  {!sheet.right && (wallet ? " Essa volta no fim, até você acertar." : " Tudo bem: essa volta no fim, até você acertar. Aqui errar não gasta novelo.")}
+                  {!sheet.right && (lives ? " Essa volta no fim, até você acertar." : " Tudo bem: essa volta no fim, até você acertar. Aqui errar não custa vida.")}
                 </p>
-                {!sheet.right && wallet && (
-                  <p className={p.spent}>
-                    Menos 1 novelo · você tem {wallet.novelos}
-                  </p>
-                )}
+                {!sheet.right && lives && <p className={p.spent}>Menos 1 vida · {hearts === 0 ? "era a última" : hearts === 1 ? "resta 1" : `restam ${hearts}`}</p>}
                 <MainButton onClick={() => next()}>Continuar</MainButton>
-                {!sheet.right && wallet && (
+                {!sheet.right && lives && hearts > 0 && (
                   <button type="button" className={p.ghost} onClick={() => next(true)}>
                     Reler os cards
                   </button>

@@ -157,7 +157,7 @@
   line-height: 18px;
 }
 
-/* The chapter's header: close, progress, the "primeira parada" tag. */
+/* The chapter's header: close, progress, and the lives or the "amostra" tag. */
 .top {
   display: flex;
   flex: none;
@@ -685,7 +685,7 @@
   margin: 12px 16px 0;
 }
 
-/* The novelos left, in a chapter off the onboarding (P4-P6). */
+/* The lives left, in a lesson off the onboarding (P4-P6). */
 .lives {
   display: flex;
   flex: none;
@@ -693,15 +693,14 @@
   gap: 2px;
 }
 
-.lives img {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
+.lives svg {
+  width: 26px;
+  height: 26px;
+  fill: var(--amber-400);
 }
 
-.lives img[data-off] {
-  opacity: 0.2;
-  filter: grayscale(1);
+.lives svg[data-off] {
+  fill: var(--ink-600);
 }
 
 .lives b {
