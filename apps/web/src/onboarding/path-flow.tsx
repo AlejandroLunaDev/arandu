@@ -106,7 +106,7 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
       <ChapterView
         {...next}
         chapter={chapter}
-        caption={`${course.course} · ${name} · ${chapter.discipline.name}`}
+        caption={`${career} · ${chapter.discipline.name}`}
         onClose={() => setStep("how")}
         onDone={() => setStep("done")}
       />
