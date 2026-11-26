@@ -135,6 +135,23 @@ export class PathsController {
     );
   }
 
+  /** The lesson's last life is gone: one stored extra life gives 1 life back. */
+  @Post('chapters/:disciplineId/:topic/lessons/:lesson/extra-life')
+  @HttpCode(200)
+  extraLife(
+    @UserId() userId: string,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, chapterNotFound)) lessonNumber: number,
+  ): Promise<Wallet> {
+    return this.chapters.extraLife(
+      userId,
+      disciplineId,
+      topicIndex,
+      lessonNumber,
+    );
+  }
+
   /** A lesson is done; lesson 3 finishes the chapter (O19). */
   @Post('chapters/:disciplineId/:topic/lessons/:lesson/result')
   @HttpCode(200)

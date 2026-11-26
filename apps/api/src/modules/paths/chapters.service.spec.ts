@@ -953,12 +953,30 @@ describe('ChaptersService', () => {
         expect(titles).toEqual([['a', 'b'], ['c'], ['d']]);
       });
 
-      it('charges the lesson price in peixinhos each time, after composing it', async () => {
+      it('charges the lesson price in peixinhos on every entry until the lesson is done', async () => {
         await service.start('u', 7, 1, 1);
         await service.start('u', 7, 1, 1);
 
         expect(wallet.pay).toHaveBeenCalledTimes(2);
         expect(wallet.pay).toHaveBeenCalledWith('u', 'peixinhos', LESSON_PRICE);
+      });
+
+      it('charges nothing to practise a done lesson, or any lesson of a finished chapter', async () => {
+        paths.lessons.mockResolvedValue(done(1, 2, 3));
+        await Promise.all([1, 2, 3].map((n) => service.start('u', 7, 1, n)));
+
+        paths.lessons.mockResolvedValue([]);
+        paths.chapterFinished.mockResolvedValue(true);
+        await service.start('u', 7, 1, 3);
+
+        expect(wallet.pay).not.toHaveBeenCalled();
+      });
+
+      it('still charges a lesson not done yet when the others are', async () => {
+        paths.lessons.mockResolvedValue(done(1));
+        await service.start('u', 7, 1, 2);
+
+        expect(wallet.pay).toHaveBeenCalledOnce();
       });
 
       it('serves nothing when the peixinhos are too few', async () => {
@@ -1012,6 +1030,19 @@ describe('ChaptersService', () => {
 
       it('refuses a locked lesson with 409 lesson_locked, and charges nothing', async () => {
         await locked(service.continue('u', 7, 1, 3));
+        expect(wallet.pay).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('extraLife', () => {
+      it('spends one stored extra life', async () => {
+        await service.extraLife('u', 7, 1, 2);
+
+        expect(wallet.pay).toHaveBeenCalledWith('u', 'vidas', 1);
+      });
+
+      it('refuses a locked lesson with 409 lesson_locked, and spends nothing', async () => {
+        await locked(service.extraLife('u', 7, 1, 3));
         expect(wallet.pay).not.toHaveBeenCalled();
       });
     });

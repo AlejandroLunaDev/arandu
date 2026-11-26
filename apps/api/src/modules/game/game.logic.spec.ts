@@ -4,10 +4,14 @@ import {
   LEAGUES,
   leagueAt,
   levelOf,
+  promotionOf,
   rewardAt,
   rivals,
   rollCaixa,
+  rollShopCaixa,
   seasonOf,
+  SHOP_ITEMS,
+  shopTier,
 } from './game.logic.js';
 import { LESSON_PRICE } from '../progress/progress.logic.js';
 
@@ -149,6 +153,83 @@ describe('rollCaixa', () => {
       expect(sabedoria).toBeGreaterThanOrEqual(1);
       expect(sabedoria).toBeLessThanOrEqual(5);
     }
+  });
+});
+
+describe('shop caixas', () => {
+  const tier = (id: string) => SHOP_ITEMS.find((i) => i.id === id)!;
+  const lows = () => 0;
+  const highs = (max: number) => max - 1;
+
+  it.each([
+    ['caixa_comum', { peixinhos: 10, vidas: 0 }, { peixinhos: 20, vidas: 1 }],
+    ['caixa_media', { peixinhos: 25, vidas: 1 }, { peixinhos: 40, vidas: 1 }],
+    ['caixa_premium', { peixinhos: 40, vidas: 1 }, { peixinhos: 60, vidas: 2 }],
+  ])('rolls %s within its ranges, never the currency', (id, low, high) => {
+    expect(rollShopCaixa(tier(id), lows)).toMatchObject({
+      ...low,
+      currency: 0,
+      sabedoria: 0,
+    });
+    expect(rollShopCaixa(tier(id), highs)).toMatchObject({
+      ...high,
+      currency: 0,
+      sabedoria: 0,
+    });
+  });
+
+  it.each([
+    ['caixa_comum', 0, 0],
+    ['caixa_media', 20, 0],
+    ['caixa_premium', 40, 10],
+  ])(
+    'gives %s a marcador below %i and the planta below %i only',
+    (id, marcador, planta) => {
+      const at = (m: number, p: number) => {
+        const queue = [0, 0, m, p];
+        return rollShopCaixa(tier(id), () => queue.shift() ?? 0);
+      };
+      // A roll is 0-99, so a 0% chance is checked at 0.
+      expect(at(Math.max(0, marcador - 1), 99).marcador).toBe(marcador > 0);
+      expect(at(marcador, 99).marcador).toBe(false);
+      expect(at(99, Math.max(0, planta - 1)).roomItem).toBe(
+        planta > 0 ? 'planta' : null,
+      );
+      expect(at(99, planta).roomItem).toBeNull();
+    },
+  );
+
+  it('reads the tier back from a bought caixa only', () => {
+    expect(shopTier('shop:caixa_media:3f1c')?.id).toBe('caixa_media');
+    expect(shopTier('shop:marcador:3f1c')).toBeUndefined();
+    expect(shopTier('season:1:2')).toBeUndefined();
+  });
+
+  it('never sells the currency', () => {
+    expect(SHOP_ITEMS.every((i) => i.id !== 'promotion')).toBe(true);
+    for (const i of SHOP_ITEMS)
+      expect(Object.keys(i.gives)).not.toContain('currency');
+  });
+});
+
+describe('promotionOf', () => {
+  it('turns weekly between the two promotions, ending the next São Paulo Monday', () => {
+    const a = promotionOf('2026-11-23');
+    const b = promotionOf('2026-11-30');
+
+    expect(a.endsAt).toBe('2026-11-30T03:00:00.000Z');
+    expect(a.item).toMatchObject({
+      id: 'promotion',
+      price: 4,
+      pays: 'currency',
+    });
+    expect([a.item.gives, b.item.gives]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ vidas: { min: 10, max: 10 } }),
+        expect.objectContaining({ peixinhos: { min: 45, max: 45 } }),
+      ]),
+    );
+    expect(promotionOf('2026-12-07').item.gives).toEqual(a.item.gives);
   });
 });
 

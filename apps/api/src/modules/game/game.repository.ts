@@ -3,7 +3,9 @@ import type {
   CaixaContents,
   League,
   Season,
-  Wallet,
+  Shop,
+  ShopItemId,
+  ShopPurchase,
   Wardrobe,
   WardrobeUpdate,
 } from '@arandu/contracts';
@@ -33,11 +35,14 @@ import {
   PLUS_TRACK,
   PROMOTE_TOP,
   defaultNickname,
+  promotionOf,
   rewardAt,
   rivals,
   rollCaixa,
+  rollShopCaixa,
   seasonOf,
-  SHOP,
+  SHOP_ITEMS,
+  shopTier,
 } from './game.logic.js';
 import {
   caixaNotFound,
@@ -46,8 +51,12 @@ import {
   levelNotReached,
   marcadoresFull,
   outfitNotOwned,
+  promotionBought,
 } from './game.errors.js';
-import { notEnoughPeixinhos } from '../progress/progress.errors.js';
+import {
+  notEnoughCurrency,
+  notEnoughPeixinhos,
+} from '../progress/progress.errors.js';
 import { one } from '../../core/database/one.js';
 
 type Tx = Sql | TransactionSql;
@@ -73,7 +82,8 @@ const toCaixa = (r: CaixaRow): Caixa => ({
   reason: r.reason,
   createdAt: r.created_at.toISOString(),
   openedAt: r.opened_at?.toISOString() ?? null,
-  contents: r.contents,
+  // Caixas opened before #153 have no vidas.
+  contents: r.contents && { ...r.contents, vidas: r.contents.vidas ?? 0 },
 });
 
 /** The game around studying (L1-L7, K1): league, season, caixas, shop and wardrobe. */
@@ -125,7 +135,7 @@ export class GameRepository {
     return row;
   }
 
-  /** A league's room for a round: the person, the best others in that league, and demo rivals up to 12; best first. */
+  /** A league's room for a round: the person, the best others in that league, and demo rivals up to LEAGUE_SIZE; best first. */
   // shortcut: membership is the others' league now, not the one they had that round; fine while promotions are rare.
   private async room(
     tx: Tx,
@@ -180,7 +190,7 @@ export class GameRepository {
   }
 
   /**
-   * Once per round, settles the last finished round: the top 7 move up, keep the new outfit and get a caixa (L7).
+   * Once per round, settles the last finished round: the top PROMOTE_TOP move up, keep the new outfit and get a caixa (L7).
    * shortcut: only that round counts; earlier unread rounds are not replayed, fine for a demo.
    */
   private async settle(
@@ -274,17 +284,23 @@ export class GameRepository {
       .sql`update public.players set promoted_from = null, updated_at = now() where user_id = ${userId}`;
   }
 
-  /** Adds a reward to the wallet: peixinhos, the currency, a page marker (max 2). A caixa's sabedoria stays in it. */
+  /** Adds a reward to the wallet: peixinhos, the currency, extra lives, a page marker (max 2). A caixa's sabedoria stays in it. */
   private async reward(
     tx: Tx,
     userId: string,
-    r: { peixinhos?: number; currency?: number; marcador?: boolean },
+    r: {
+      peixinhos?: number;
+      currency?: number;
+      vidas?: number;
+      marcador?: boolean;
+    },
   ): Promise<void> {
     await this.progress.lockWallet(tx, userId);
     await tx`
       update public.wallets set
         peixinhos = peixinhos + ${r.peixinhos ?? 0},
         currency = currency + ${r.currency ?? 0},
+        vidas = vidas + ${r.vidas ?? 0},
         -- At the max a won page marker is not kept: the person already has every one they can hold.
         marcadores = least(${MAX_MARCADORES}, marcadores + ${r.marcador ? 1 : 0}),
         updated_at = now()
@@ -367,16 +383,20 @@ export class GameRepository {
     );
   }
 
-  /** Opens a caixa: its contents are rolled here and added at once. 404 when not theirs, 409 when already open. */
+  /**
+   * Opens a caixa: its contents are rolled here (a bought one within its tier's ranges) and added at once. 404 when not
+   * theirs, 409 when already open.
+   */
   open(userId: string, id: number): Promise<Caixa> {
     return asPerson(
       this.sql.begin(async (tx) => {
-        const [caixa] = await tx<{ opened: boolean }[]>`
-          select opened_at is not null as opened from public.caixas
+        const [caixa] = await tx<{ opened: boolean; reason: string }[]>`
+          select opened_at is not null as opened, reason from public.caixas
           where id = ${id} and user_id = ${userId} for update`;
         if (!caixa) throw caixaNotFound();
         if (caixa.opened) throw caixaOpen();
-        const contents = rollCaixa();
+        const tier = shopTier(caixa.reason);
+        const contents = tier ? rollShopCaixa(tier) : rollCaixa();
         await this.reward(tx, userId, contents);
         if (contents.roomItem)
           await tx`insert into public.owned_items (user_id, item) values (${userId}, ${`room:${contents.roomItem}`})
@@ -391,20 +411,79 @@ export class GameRepository {
     );
   }
 
-  /** The shop takes only peixinhos: a page marker. 409 when unaffordable or with every page marker held. */
-  buy(userId: string, item: 'marcador'): Promise<Wallet> {
+  /** The Monday of this São Paulo week. */
+  private async monday(tx: Tx): Promise<string> {
+    const row = one(
+      await tx<{ monday: string }[]>`
+      select to_char(date_trunc('week', now() at time zone ${TIME_ZONE}), 'YYYY-MM-DD') as monday`,
+    );
+    return row.monday;
+  }
+
+  /** The shop (#153): its items, and this week's promotion with whether the person bought it. */
+  async shop(userId: string): Promise<Shop> {
+    const monday = await this.monday(this.sql);
+    const { item, endsAt } = promotionOf(monday);
+    const bought = await this.sql`
+      select 1 from public.shop_promotions where user_id = ${userId} and week = ${monday}`;
+    return {
+      items: SHOP_ITEMS,
+      promotion: { ...item, endsAt, bought: bought.length > 0 },
+    };
+  }
+
+  /**
+   * Buys a shop item: its price is taken and what it gives added, or, for a caixa, a caixa to open. 409 with too few
+   * peixinhos or currency (nothing is taken), a second promotion of the week, or a page marker with every one held.
+   */
+  buy(userId: string, id: ShopItemId): Promise<ShopPurchase> {
     return asPerson(
       this.sql.begin(async (tx) => {
         const row = await this.progress.lockWallet(tx, userId);
-        if (row.marcadores >= MAX_MARCADORES) throw marcadoresFull();
-        const price = SHOP[item];
-        if (row.peixinhos < price) throw notEnoughPeixinhos();
+        const monday = id === 'promotion' ? await this.monday(tx) : null;
+        const item = monday
+          ? promotionOf(monday).item
+          : SHOP_ITEMS.find((i) => i.id === id);
+        if (!item) throw new Error(`No shop item ${id}`);
+        if (item.gives.marcador === 100 && row.marcadores >= MAX_MARCADORES)
+          throw marcadoresFull();
+        if (row[item.pays] < item.price)
+          throw item.pays === 'peixinhos'
+            ? notEnoughPeixinhos()
+            : notEnoughCurrency();
+        if (monday) {
+          const inserted = await tx`
+            insert into public.shop_promotions (user_id, week) values (${userId}, ${monday})
+            on conflict do nothing returning 1`;
+          if (!inserted.length) throw promotionBought();
+        }
+        // A caixa's gives are rolled when it is opened; any other item gives its fixed amounts (min = max) now.
+        const fixed = item.caixa ? null : item.gives;
+        const caixa = item.caixa
+          ? one(
+              await tx<{ id: number }[]>`
+              insert into public.caixas (user_id, reason)
+              values (${userId}, ${`shop:${item.id}:`}::text || gen_random_uuid()::text) returning id::int`,
+            )
+          : null;
+        const change = {
+          peixinhos: fixed?.peixinhos.min ?? 0,
+          currency: 0,
+          vidas: fixed?.vidas.min ?? 0,
+          marcadores: fixed?.marcador === 100 ? 1 : 0,
+        };
+        change[item.pays] -= item.price;
         const updated = one(
           await tx<WalletRow[]>`
-          update public.wallets set peixinhos = peixinhos - ${price}, marcadores = marcadores + 1, updated_at = now()
+          update public.wallets set peixinhos = peixinhos + ${change.peixinhos},
+            currency = currency + ${change.currency}, vidas = vidas + ${change.vidas},
+            marcadores = marcadores + ${change.marcadores}, updated_at = now()
           where user_id = ${userId} returning ${walletColumns(tx)}`,
         );
-        return toWallet(updated, new Date());
+        return {
+          wallet: toWallet(updated, new Date()),
+          caixaId: caixa?.id ?? null,
+        };
       }),
     );
   }

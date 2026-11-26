@@ -91,7 +91,10 @@ function txRepo(answers: Answers) {
     ['into public.chapter_results', [{}]],
     ['sum(sabedoria)', [{ earned: 0 }]],
     ['as today', [{ today: 1 }]],
-    ['wallets', [{ peixinhos: 0, currency: 0, marcadores: 0, giftDue: false }]],
+    [
+      'wallets',
+      [{ peixinhos: 0, currency: 0, marcadores: 0, vidas: 0, giftDue: false }],
+    ],
   ];
   const tx = Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => {

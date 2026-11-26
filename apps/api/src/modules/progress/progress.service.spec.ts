@@ -22,6 +22,7 @@ const wallet = {
   currency: 0,
   continuePrice: 5,
   marcadores: 0,
+  vidas: 0,
 };
 const discipline = { id: 7, name: 'Cálculo', topics: ['a', 'b', 'c'] };
 

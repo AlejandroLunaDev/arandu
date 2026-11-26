@@ -272,8 +272,8 @@ export class ChaptersService {
 
   /**
    * Enters one lesson of a chapter for this person (#123, #145), composed from its pieces: lessons 1-3 recognise, apply
-   * and solve. 409 `lesson_locked` before it opens; otherwise it costs LESSON_PRICE peixinhos, 409 `not_enough_peixinhos`
-   * with too few. Each lesson brings its share of the chapter's cards.
+   * and solve. 409 `lesson_locked` before it opens. The first entry costs LESSON_PRICE peixinhos, 409
+   * `not_enough_peixinhos` with too few; practice is free (#150). Each lesson brings its share of the chapter's cards.
    */
   async start(
     userId: string,
@@ -282,9 +282,9 @@ export class ChaptersService {
     index: number,
   ): Promise<Lesson> {
     const { chapter, topics } = await this.opened(disciplineId, topic);
-    await this.mustBeOpen(userId, disciplineId, topic, index);
+    const practice = await this.mustBeOpen(userId, disciplineId, topic, index);
     const composed = await this.composed(userId, chapter, topics, index);
-    await this.wallet.pay(userId, 'peixinhos', LESSON_PRICE);
+    if (!practice) await this.wallet.pay(userId, 'peixinhos', LESSON_PRICE);
     return {
       index,
       total: LESSONS,
@@ -310,19 +310,40 @@ export class ChaptersService {
     return this.wallet.pay(userId, 'currency', CONTINUE_PRICE);
   }
 
-  /** 409 `lesson_locked` while the lesson is not open, unless the chapter was finished (its lessons are practice). */
+  /** Gets 1 life back after a lesson's last life, for one stored extra life: 409 `not_enough_vidas`. */
+  async extraLife(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    index: number,
+  ): Promise<Wallet> {
+    await this.opened(disciplineId, topic);
+    await this.mustBeOpen(userId, disciplineId, topic, index);
+    return this.wallet.pay(userId, 'vidas', 1);
+  }
+
+  /**
+   * Whether the lesson is practice: done already, or in a finished chapter. 409 `lesson_locked` while it is neither
+   * practice nor open.
+   */
   private async mustBeOpen(
     userId: string,
     disciplineId: number,
     topic: number,
     index: number,
-  ): Promise<void> {
-    const done = await this.paths.lessons(userId, disciplineId, topic);
+  ): Promise<boolean> {
+    const done = new Set(
+      (await this.paths.lessons(userId, disciplineId, topic)).map(
+        (d) => d.lesson,
+      ),
+    );
     if (
-      !lessonOpen(index, new Set(done.map((d) => d.lesson))) &&
-      !(await this.paths.chapterFinished(userId, disciplineId, topic))
+      done.has(index) ||
+      (await this.paths.chapterFinished(userId, disciplineId, topic))
     )
-      throw lessonLocked();
+      return true;
+    if (!lessonOpen(index, done)) throw lessonLocked();
+    return false;
   }
 
   /** Records a lesson; only the misses that were in it count, each with the kind it was missed in. Lesson 3 finishes the chapter. */

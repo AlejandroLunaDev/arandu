@@ -216,7 +216,7 @@ describe('paths and journey routes', () => {
   });
 
   describe('lesson routes', () => {
-    it.each(['start', 'continue'])(
+    it.each(['start', 'continue', 'extra-life'])(
       'POST lesson 0, 4 and abc %s 404',
       async (action) => {
         for (const n of ['0', '4', 'abc'])

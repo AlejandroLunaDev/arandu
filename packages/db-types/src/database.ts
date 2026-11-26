@@ -603,6 +603,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"shop_promotions": {
+                  Row: {
+                    "created_at": string,"user_id": string,"week": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"user_id": string,"week": string
+                  }
+                  Update: {
+                    "created_at"?: string,"user_id"?: string,"week"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"sources": {
                   Row: {
                     "adapter": string,"created_at": string,"id": number,"label": string,"last_content_hash": string | null,"last_fetched_at": string | null,"refresh_interval": string,"url": string
@@ -687,14 +701,14 @@ isOneToOne: true
                   ]
                 },"wallets": {
                   Row: {
-                    "currency": number,"marcadores": number,"novelos": number,"novelos_at": string,"novelos_bought": number,"novelos_bought_on": string | null,"peixinhos": number,"peixinhos_on": string | null,"updated_at": string,"user_id": string
+                    "currency": number,"marcadores": number,"novelos": number,"novelos_at": string,"novelos_bought": number,"novelos_bought_on": string | null,"peixinhos": number,"peixinhos_on": string | null,"updated_at": string,"user_id": string,"vidas": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "currency"?: number,"marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"peixinhos_on"?: string | null,"updated_at"?: string,"user_id": string
+                    "currency"?: number,"marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"peixinhos_on"?: string | null,"updated_at"?: string,"user_id": string,"vidas"?: number
                   }
                   Update: {
-                    "currency"?: number,"marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"peixinhos_on"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "currency"?: number,"marcadores"?: number,"novelos"?: number,"novelos_at"?: string,"novelos_bought"?: number,"novelos_bought_on"?: string | null,"peixinhos"?: number,"peixinhos_on"?: string | null,"updated_at"?: string,"user_id"?: string,"vidas"?: number
                   }
                   Relationships: [
                     {

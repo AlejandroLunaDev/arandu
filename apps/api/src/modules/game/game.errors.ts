@@ -41,3 +41,9 @@ export const outfitNotOwned = () =>
     code: 'outfit_not_owned',
     message: 'This outfit is not owned yet',
   });
+
+export const promotionBought = () =>
+  new ConflictException({
+    code: 'promotion_bought',
+    message: "This week's promotion was already bought",
+  });

@@ -17,3 +17,9 @@ export const notEnoughCurrency = () =>
     code: 'not_enough_currency',
     message: 'Not enough currency',
   });
+
+export const notEnoughVidas = () =>
+  new ConflictException({
+    code: 'not_enough_vidas',
+    message: 'No extra lives',
+  });
