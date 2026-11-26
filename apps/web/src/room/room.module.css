@@ -120,6 +120,22 @@
   width: 220px;
 }
 
+/* Going on to the path: he gathers himself, then leaps up and off the screen. */
+.cat[data-leaving] .catModel {
+  animation: leap-out 0.62s cubic-bezier(0.5, 0, 0.8, 0.5) forwards;
+}
+
+@keyframes leap-out {
+  22% {
+    translate: 0 10px;
+  }
+
+  100% {
+    opacity: 0;
+    translate: 60vw -75vh;
+  }
+}
+
 .book {
   position: relative;
   display: block;

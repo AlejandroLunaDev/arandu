@@ -7,6 +7,7 @@ import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
 import { getCareerPaths, getChapter, isGuest, saveJourney } from "./actions";
 import { AgeView, DoneView, GoogleView, HowView, RhythmView, SemesterView } from "./path-steps";
+import { Loading } from "@/ui/loading";
 import type { PlaceCourse } from "./places";
 import { ChapterView } from "./chapter-view";
 
@@ -51,7 +52,9 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
       <p className="type-body p-4 text-center text-error" role="alert">
         Não consegui abrir esse caminho agora. Tenta de novo mais tarde?
       </p>
-    ) : null;
+    ) : (
+      <Loading />
+    );
 
   if (step === "semester")
     return (

@@ -5,11 +5,12 @@ import { api } from "@/app-shell/api";
 import c from "@/caminho/caminho.module.css";
 import { PathMap } from "@/caminho/path-map";
 import { careerPaths } from "@/onboarding/catalog";
+import { Loading } from "@/ui/loading";
 
 // Caminho (P1): the path of the book the person is on.
 export default function CaminhoPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<Loading />}>
       <Path />
     </Suspense>
   );

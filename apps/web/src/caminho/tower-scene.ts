@@ -43,6 +43,9 @@ const FOV = 30;
 /** How far above its floor a bay is looked at, and how far above that the camera rides (a share of its distance). */
 const EYE = 0.62;
 const LIFT = 0.2;
+/** Arandu's way in: seconds from off the screen to his spot, and where he comes from (to the viewer's right, and up). */
+const LEAP = 0.95;
+const FROM = [2.1, 1.5] as const;
 /** The crown's top over the first floor, and the air the camera leaves above it when the page is at its top. */
 const CROWN = 1.93;
 const AIR = 0.45;
@@ -214,7 +217,14 @@ export async function runTower(
   const cat = makeCat({ ...catModel, scene: clone(catModel.scene) as THREE.Group }, "ink-400");
   const home = (book.at && seats.get(book.at)) || { at: bay.localToWorld(new THREE.Vector3(...END_SEAT)), bay: bays.length - 1 };
   cat.root.position.copy(home.at);
-  cat.yaw.rotation.y = (Math.PI / 2) * home.bay - Math.PI / 2 + 0.45;
+  const facing = (Math.PI / 2) * home.bay - Math.PI / 2 + 0.45;
+  cat.yaw.rotation.y = facing;
+  // He arrives with the tower: a leap in from off the screen, on the right of whoever looks at his bay, down to his
+  // spot. `arrived` runs 0 to 1; with reduced motion he is already there.
+  const side = (Math.PI / 2) * home.bay;
+  const fromX = home.at.x + Math.cos(side) * FROM[0];
+  const fromZ = home.at.z - Math.sin(side) * FROM[0];
+  let arrived = reduce ? 1 : 0;
   scene.add(cat.root);
   const pose: CatPose = { sit: 1, leap: 0, air: 0, stride: 0, tap: 0, lids: 0, ears: 0, hold: 0, lie: 0, look: null };
 
@@ -264,6 +274,17 @@ export async function runTower(
       const sign = turning[i]!;
       sign.rotation.y = yaw;
       sign.scale.setScalar(sign === hot ? 1.3 : 1);
+    }
+    if (arrived < 1) {
+      arrived = Math.min(1, arrived + dt / LEAP);
+      const e = arrived * arrived * (3 - 2 * arrived);
+      // A straight run across, and an arc over it that ends on the seat.
+      cat.root.position.set(fromX + (home.at.x - fromX) * e, home.at.y + FROM[1] * (1 - e) + Math.sin(Math.PI * arrived) * 0.5, fromZ + (home.at.z - fromZ) * e);
+      // In the air he faces the way he flies (to the viewer's left), and turns to the viewer as he lands.
+      cat.yaw.rotation.y = side + Math.PI + (facing - side - Math.PI) * e * e;
+      pose.leap = arrived;
+      pose.air = Math.sin(Math.PI * arrived);
+      pose.sit = arrived < 0.8 ? 0 : (arrived - 0.8) / 0.2;
     }
     cat.update(pose, dt, (now - start) / 1000);
     renderer.render(scene, camera);

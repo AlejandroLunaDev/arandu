@@ -9,6 +9,7 @@ import p from "@/onboarding/path.module.css";
 import { ChapterView } from "@/onboarding/chapter-view";
 import { Cat } from "@/ui/cat";
 import { Patinha, patinhaWord } from "@/ui/patinha";
+import { Loading } from "@/ui/loading";
 import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
 import { continueLesson, finishLesson, openCaixa } from "./actions";
@@ -31,7 +32,7 @@ export function PathLesson({ wallet }: { wallet: Wallet }) {
   useEffect(() => {
     if (raw !== null && !entry) router.replace("/app/caminho");
   }, [raw, entry, router]);
-  if (!entry) return null;
+  if (!entry) return <Loading />;
 
   const { disciplineId, topic, lesson } = entry;
   const back = () => {

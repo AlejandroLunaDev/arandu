@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import styles from "@/onboarding/onboarding.module.css";
+import { Loading } from "@/ui/loading";
 import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
 import { type LessonRefusal, startLesson } from "./actions";
@@ -52,6 +53,7 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
 
   const [picked, setPicked] = useState(at);
   const [plain, setPlain] = useState(false);
+  const [live, setLive] = useState(false);
   const [refused, setRefused] = useState<LessonRefusal | null>(null);
   const input = JSON.stringify({ seed: book.discipline.id, chapters, at } satisfies TowerBook);
   useEffect(() => {
@@ -66,8 +68,9 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
         }),
       )
       .then((r) => {
-        if (cancelled) r.stop();
-        else run.current = r;
+        if (cancelled) return r.stop();
+        run.current = r;
+        setLive(true);
       })
       .catch((error: unknown) => {
         console.error("The 3D tower could not load", error);
@@ -130,7 +133,13 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
 
   return (
     <div ref={box} className={c.tower} data-plain={plain || undefined}>
-      <div ref={stage} className={c.stage} />
+      <div ref={stage} className={c.stage}>
+        {!live && !plain && (
+          <div className={c.wait}>
+            <Loading />
+          </div>
+        )}
+      </div>
       <ol ref={track} className={c.bays} aria-label="Caminho da matéria">
         {towerPlan(total).map(({ hung, floor }, b) => (
           <li key={b} className={c.bay}>
