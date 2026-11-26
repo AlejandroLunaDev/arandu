@@ -46,6 +46,9 @@ const AHEAD = 0.12;
 const LEAP_UP = 1.5;
 /** How far (m) from the screen's sides he keeps his feet. */
 const ROOM = 0.25;
+/** How much faster than his stroll he trots off the screen, and how far (m) past its right side he goes. */
+const HURRY = 5;
+const PAST = 0.5;
 
 const FACE_CAMERA = -Math.PI / 2;
 const RIGHT = 0;
@@ -92,6 +95,10 @@ export type Life = {
   poke(): void;
   /** His toy was thrown, in room i: he goes to fetch it. */
   fetch(room: number, toy: THREE.Object3D): void;
+  /** He gets down to the floor and trots off the screen's right side; then done. Nothing stops him. */
+  exit(done: () => void): void;
+  /** Just entered: he trots in from off the screen's right side, the way he left, to his seat. */
+  comeIn(): void;
   /** One frame: idle is how long the page has been quiet, in seconds. */
   update(dt: number, idle: number): void;
   dispose(): void;
@@ -152,6 +159,8 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
   let stop = false;
   let leaving = false;
   let busy = false;
+  let exiting = false;
+  let speed = SPEED;
   let rest = 0;
   let last = "";
   let sitTo = 1;
@@ -252,7 +261,7 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     yield* stand();
     yield* face(dx >= 0 ? RIGHT : LEFT);
     for (let done = 0; done < far;) {
-      const step = Math.min(SPEED * dt, far - done);
+      const step = Math.min(speed * dt, far - done);
       done += step;
       pose.pos.x += (dx * step) / far;
       pose.pos.z += (dz * step) / far;
@@ -652,6 +661,30 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
     }
   }
 
+  function* trotOff(r: Room, done: () => void): Doing {
+    try {
+      speed = SPEED * HURRY;
+      const floor = new THREE.Vector3(pose.pos.x, r.ground ?? 0, r.front ?? pose.pos.z);
+      if (Math.abs(pose.pos.y - floor.y) > 0.05) yield* goTo(r, floor);
+      const right = world(room)?.edges().right ?? pose.pos.x + 4;
+      yield* walkTo(right + PAST, pose.pos.z);
+      // Something in his way he could not hop: he goes on past it, out of sight.
+      yield* plod(right + PAST, pose.pos.z);
+    } finally {
+      speed = SPEED;
+      done();
+    }
+  }
+
+  function* trotIn(r: Room): Doing {
+    try {
+      speed = SPEED * HURRY;
+      yield* home(r);
+    } finally {
+      speed = SPEED;
+    }
+  }
+
   /** What he does next, never the same twice in a row; off the plank, he first climbs back. */
   const choose = (): Doing => {
     const r = rooms[room]!;
@@ -701,17 +734,39 @@ export function makeLife(rooms: Room[], world: (room: number) => RoomPhysics | n
       if (job && calm) stop = true;
     },
     poke() {
-      if (room < 0 || busy || leaving) return;
+      if (room < 0 || busy || leaving || exiting) return;
       end();
       job = startle();
       calm = false;
     },
     fetch(i, toy) {
       const w = world(i);
-      if (i !== room || !w || busy || leaving || still) return;
+      if (i !== room || !w || busy || leaving || still || exiting) return;
       end();
       job = fetch(rooms[i]!, w, toy);
       // The pointer that threw it does not call him off it.
+      calm = false;
+    },
+    exit(done) {
+      if (exiting) return;
+      if (room < 0 || still) {
+        done();
+        return;
+      }
+      exiting = true;
+      end();
+      job = trotOff(rooms[room]!, done);
+      calm = false;
+    },
+    comeIn() {
+      if (room < 0 || still) return;
+      const r = rooms[room]!;
+      const right = world(room)?.edges().right ?? pose.pos.x + 4;
+      // Placed now, before a frame shows him on his seat.
+      pose.pos.set(right + PAST, r.ground ?? 0, r.front ?? pose.pos.z);
+      pose.sit = 0;
+      end();
+      job = trotIn(r);
       calm = false;
     },
     update(step, idle) {

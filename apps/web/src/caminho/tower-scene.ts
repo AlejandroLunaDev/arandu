@@ -3,15 +3,21 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { type GLTF, GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { type CatPose, makeCat } from "@/landing/stage/cat";
+import { catUrl, leagueOf } from "@/landing/stage/cat-url";
 import { tokenColor, tokenValue } from "@/landing/stage/palette";
+import { LEAVE_EVENT, type Leave } from "@/app-shell/walk-off";
 import { type SpotState, chapterKey, lessonKey, seeded, specialKey, towerPlan } from "./tower-plan";
 
 // One download of the kit (blender/tower/export.py) and of Arandu for every tower on the page.
 let models: Promise<[GLTF, GLTF]> | null = null;
-const load = () => {
+const load = (catAt: string) => {
   const loader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
-  return (models ??= Promise.all([loader.loadAsync("/models/tower.glb"), loader.loadAsync("/models/arandu.glb")]));
+  // shortcut: the first tower's cat model serves the page; a page has one league.
+  return (models ??= Promise.all([loader.loadAsync("/models/tower.glb"), loader.loadAsync(catAt)]));
 };
+
+/** Starts the tower's downloads ahead, for a page with `league`: on the way here they load while Arandu walks off. */
+export const preloadTower = (league: string | null) => load(catUrl(league));
 
 // The kit's measures, in metres, as in blender/tower/build.py. The GLB is Y-up: a bay's front faces +Z.
 const BAY = 1.5;
@@ -76,7 +82,8 @@ export async function runTower(
   onPick: (key: string | null) => void,
 ) {
   // The signs print in the page's display font: wait for it, or they print in a fallback.
-  const [[kit, catModel]] = await Promise.all([load(), document.fonts.ready]);
+  const league = leagueOf(box);
+  const [[kit, catModel]] = await Promise.all([load(catUrl(league)), document.fonts.ready]);
   const scroller = scrollParent(box);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const canvas = stage.appendChild(document.createElement("canvas"));
@@ -248,6 +255,7 @@ export async function runTower(
   // Arandu sits on his lesson, turned three quarters to whoever looks at that storey; with the book done, by its last
   // chapter's house.
   const cat = makeCat({ ...catModel, scene: clone(catModel.scene) as THREE.Group }, "ink-400");
+  cat.wear(league);
   const home = (book.at && seats.get(book.at)) || seats.get(chapterKey(book.chapters.length - 1)) || { at: new THREE.Vector3(), bay: 0 };
   const facing = (Math.PI / 2) * home.bay - Math.PI / 2 + 0.45;
   scene.add(cat.root);
@@ -265,6 +273,13 @@ export async function runTower(
   const hop = clamp(WAY_IN / (way.length - 1), HOP[0], HOP[1]);
   let leg = reduce ? way.length - 1 : 0;
   let along = 0;
+  /** Set while he leaves: called once he is off the screen. */
+  let gone: (() => void) | null = null;
+  /** His bubble while he leaves, over his head and kept on the screen. */
+  const bubble = stage.querySelector<HTMLElement>("[data-say]");
+  // The app keeps a page it left as it was: the line from his last way out may still be up.
+  if (bubble) delete bubble.dataset.on;
+  const head = new THREE.Vector3();
   /** The page follows him down until the person moves it themselves. */
   let following = !reduce;
   const letGo = () => {
@@ -320,6 +335,10 @@ export async function runTower(
         pose.leap = along;
         pose.air = Math.sin(Math.PI * along);
         pose.sit = 0;
+      } else if (gone) {
+        // Off the screen: the app goes on.
+        gone();
+        gone = null;
       } else {
         cat.root.position.copy(home.at);
         cat.yaw.rotation.y = facing;
@@ -346,6 +365,13 @@ export async function runTower(
       sign.scale.setScalar(sign === hot ? 1.3 : 1);
     }
     cat.update(pose, dt, (now - start) / 1000);
+    if (bubble?.dataset.on !== undefined) {
+      head.copy(cat.root.position).setY(cat.root.position.y + 0.45).project(camera);
+      const half = bubble.offsetWidth / 2 + 8;
+      const x = clamp(((head.x + 1) / 2) * stage.clientWidth, half, stage.clientWidth - half);
+      const y = clamp(((1 - head.y) / 2) * stage.clientHeight, bubble.offsetHeight + 16, stage.clientHeight);
+      bubble.style.translate = `${x.toFixed(1)}px ${y.toFixed(1)}px`;
+    }
     renderer.render(scene, camera);
   };
   const loop = () => {
@@ -387,6 +413,34 @@ export async function runTower(
   canvas.addEventListener("click", onClick);
   canvas.addEventListener("pointermove", onMove);
 
+  // The app goes back to the Quarto: from wherever he is, he hops up the path's spots above him to the roof and leaps
+  // off it to the left, the page following him up.
+  const onLeave = (e: Event) => {
+    e.preventDefault();
+    const { go, say } = (e as CustomEvent<Leave>).detail;
+    if (bubble) {
+      bubble.textContent = say;
+      bubble.dataset.on = "";
+    }
+    if (reduce || gone) {
+      go();
+      return;
+    }
+    const here = cat.root.position.clone();
+    const up: THREE.Vector3[] = [];
+    for (let i = path.length - 1; i >= 0; i--) {
+      const seat = seats.get(path[i]!);
+      if (seat && seat.at.y > here.y + 0.05) up.push(seat.at);
+    }
+    up.sort((a, b) => a.y - b.y);
+    way.splice(0, way.length, here, ...up, new THREE.Vector3(0, BAY + 0.06, 0.1), new THREE.Vector3(-2.6, BAY + 1.3, 0.4));
+    leg = 0;
+    along = 0;
+    following = true;
+    gone = go;
+  };
+  addEventListener(LEAVE_EVENT, onLeave);
+
   return {
     /** The spot that stands out: the one the person picked. */
     select(spot: string | null) {
@@ -394,6 +448,7 @@ export async function runTower(
       if (reduce) draw();
     },
     stop() {
+      removeEventListener(LEAVE_EVENT, onLeave);
       cancelAnimationFrame(frame);
       observer.disconnect();
       scroller.removeEventListener("scroll", draw);

@@ -38,6 +38,9 @@ export type PropName =
   | "NeonSign"
   | "NeonApp"
   | "StringLights"
+  | "StringLightsShort"
+  | "Rug"
+  | "EndTable"
   | "FarolSantander"
   | "FrameTall"
   | "FrameSquare"
@@ -90,6 +93,8 @@ export const DESK_TOP = 0.98;
 export const SOFA_SEAT = 0.61;
 /** The top of the round side table beside the sofa (build.py, SIDE_TABLE). */
 export const SIDE_TABLE_TOP = 0.55;
+/** The height (m) of the small round table's top (build.py, END_TABLE). */
+export const END_TABLE_TOP = 0.52;
 
 // The colliders of the props that are not books or shelves, measured from blender/props/build.py.
 // They follow each mesh closely enough to stand, tip and roll like it; the heavy parts are the bases.
@@ -130,6 +135,8 @@ const SHAPES: Partial<Record<PropName, Shape[]>> = {
     cylinder(0.08, 0, SIDE_TABLE_TOP - 0.035, 0),
     box(0.4, SIDE_TABLE_TOP, SIDE_TABLE_TOP + 0.16, 0.009, 0, 0, -0.06),
   ],
+  // The small round table: its top and its column.
+  EndTable: [cylinder(0.2, END_TABLE_TOP - 0.03, END_TABLE_TOP, 0), cylinder(0.03, 0, END_TABLE_TOP - 0.03, 0)],
   Sofa: [
     box(1.17, 0.105, 0.415, 0.535, 0),
     ...[-1, 1].flatMap((sx) => [

@@ -7,6 +7,7 @@ import {
   BOOK_EVENT,
   getBook,
   listBooks,
+  bookWidth,
   openHeight,
   pictures,
   preload,
@@ -19,13 +20,15 @@ import {
   type PagePrint,
 } from "../book/book-data";
 import { makeCat } from "./cat";
+import { catUrl, leagueOf } from "./cat-url";
 import { CARRY, HELD_SCALE, makeLife, OPEN_HEIGHT, openTo, SHUT } from "./cat-life";
 import { tokenColor } from "./palette";
 import { loadRapier, roomPhysics, type RoomPhysics } from "./physics";
 import { GET_APP_EVENT } from "@/install/download-button";
+import { LEAVE_EVENT, type Leave, walkedTo } from "@/app-shell/walk-off";
 import { GITHUB_URL } from "../links";
 import { FRAME_PHOTOS, makeKit, type Kit } from "./props";
-import { heroRoom, TILT, type Room } from "./rooms";
+import { heroRoom, quartoRoom, TILT, type Room } from "./rooms";
 
 // The landing's 3D layer: one fixed canvas over the page that never takes clicks. Each scene with a
 // [data-room] anchor gets its room of shelves, and Arandu follows the scroll from room to room. While
@@ -38,6 +41,7 @@ import { heroRoom, TILT, type Room } from "./rooms";
 
 const BUILD: Record<string, (anchor: HTMLElement, kit: Kit) => Room> = {
   hero: heroRoom,
+  quarto: quartoRoom,
 };
 
 /** How bright the room's ambient lights are at night: the sky, the key light and the back light. */
@@ -54,6 +58,7 @@ const GLOWS: Record<string, { color: string; power: number; reach: number; out: 
   NeonSign: { color: "error", power: 1.4, reach: 1.8, out: 0.3 },
   NeonApp: { color: "error", power: 0.6, reach: 1.1, out: 0.2 },
   StringLights: { color: "amber-300", power: 0.9, reach: 1.5, out: 0.2, at: /^StringLightsLight\d$/ },
+  StringLightsShort: { color: "amber-300", power: 0.9, reach: 1.5, out: 0.2, at: /^StringLightsShortLight\d$/ },
   Tv: { color: "violet-400", power: 0.8, reach: 2.2, out: 0.4 },
 };
 /** The neon sign: how much brighter and bigger it gets under the pointer, and how often it flickers for attention (s). */
@@ -73,6 +78,9 @@ const PORTFOLIO_WIDTH = 1440;
 /** The TV's brand screen: a canvas at the screen's 16:9, the cat's head (px) in its middle. */
 const BRAND = { width: 640, height: 360, head: 120 };
 const ZOOM_LEAST = 1.2;
+/** How close the Quarto's camera may come (a pinch, the wheel), and how fast the wheel brings it. */
+const FREE_ZOOM = 3.5;
+const WHEEL = 0.0015;
 /** The room's scale (px a metre) the steam's wisps are sized for (stage.module.css). */
 const STEAM_K = 190;
 /** The width (px) the hero's title card is laid out at (hero.module.css): the TV scales it to its screen. */
@@ -167,11 +175,12 @@ export function runStage(host: HTMLElement): () => void {
   const draco = new DRACOLoader().setDecoderPath("/draco/");
   const loader = new GLTFLoader().setDRACOLoader(draco);
   // The books print their titles in the page's display font: wait for it too.
-  Promise.all([loader.loadAsync("/models/arandu.glb"), loader.loadAsync("/models/props.glb"), document.fonts.ready])
+  const league = leagueOf(host);
+  Promise.all([loader.loadAsync(catUrl(league)), loader.loadAsync("/models/props.glb"), document.fonts.ready])
     .then(([catGltf, propsGltf]) => {
       draco.dispose();
       if (cancelled) return;
-      stops.push(start(renderer, catGltf, propsGltf));
+      stops.push(start(renderer, catGltf, propsGltf, league));
     })
     .catch((error: unknown) => {
       draco.dispose();
@@ -185,7 +194,7 @@ export function runStage(host: HTMLElement): () => void {
 
 type Gltf = Awaited<ReturnType<GLTFLoader["loadAsync"]>>;
 
-function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): () => void {
+function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, league: string | null): () => void {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const scene = new THREE.Scene();
@@ -271,6 +280,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   });
 
   const cat = makeCat(catGltf);
+  cat.wear(league);
   scene.add(cat.root);
   // The cat's soft shadow, 1 m by 1 m, lying flat under him.
   const shadowTex = shadowTexture();
@@ -424,9 +434,46 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   // The app's neon opens the ways into the app the same way.
   let plaquePressed = false;
   let appPressed = false;
+  // The Quarto closes in wherever the person wants: a pinch or the wheel, toward the fingers or the pointer, and a drag
+  // on the empty room pans it. The view never leaves the viewport's own frame.
+  const free = rooms.find((r) => r.anchor.dataset.room === "quarto") ?? null;
+  const fingers = new Map<number, { x: number; y: number }>();
+  let pinch: { d: number; zoom: number; wx: number; wy: number } | null = null;
+  let pan: { wx: number; wy: number } | null = null;
+  // Keeps the world point (wx, wy) under the screen point (sx, sy) at zoom z.
+  const view = (z: number, sx: number, sy: number, wx: number, wy: number) => {
+    camera.zoom = clamp(z, 1, FREE_ZOOM);
+    const sideX = (W / 2) * (1 - 1 / camera.zoom);
+    const sideY = (H / 2) * (1 - 1 / camera.zoom);
+    camera.position.x = clamp(wx - (sx - W / 2) / camera.zoom, -sideX, sideX);
+    camera.position.y = clamp(wy - (H / 2 - sy) / camera.zoom, -sideY, sideY);
+    camera.updateProjectionMatrix();
+  };
+  const twoFingers = () => {
+    const [a, b] = [...fingers.values()];
+    return a && b ? { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+  };
+  const onWheel = (e: WheelEvent) => {
+    if (!free || zoomed || book || !(e.target instanceof Node && free.scene.contains(e.target))) return;
+    e.preventDefault();
+    view(camera.zoom * Math.exp(-e.deltaY * WHEEL), e.clientX, e.clientY, worldX(e.clientX), worldY(e.clientY));
+  };
+  addEventListener("wheel", onWheel, { passive: false });
+
   const onDown = (e: PointerEvent) => {
     lastInput = performance.now() / 1000;
     const target = e.target instanceof Element ? e.target : null;
+    if (free && e.pointerType === "touch" && target && free.scene.contains(target) && !zoomed && !book) {
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const two = fingers.size === 2 ? twoFingers() : null;
+      if (two) {
+        // A second finger: the first one's drag gives way to the pinch.
+        if (holding) onUp(e);
+        pan = null;
+        pinch = { d: two.d, zoom: camera.zoom, wx: worldX(two.x), wy: worldY(two.y) };
+        return;
+      }
+    }
     if (book) {
       if (!target?.closest("[data-pages]")) shutBook();
       return;
@@ -485,7 +532,10 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       return;
     }
     const hit = pick(e.clientX, e.clientY);
-    if (!hit) return;
+    if (!hit) {
+      if (free && camera.zoom > 1 && !zoomed && target && free.scene.contains(target)) pan = { wx: worldX(e.clientX), wy: worldY(e.clientY) };
+      return;
+    }
     const name = String(hit.prop.userData.prop ?? "");
     if (name.startsWith("Lamp")) {
       switchLamp(hit.prop);
@@ -591,7 +641,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     const from = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
     const s0 = (box.max.y - box.min.y) / OPEN_HEIGHT;
     // Open, it spreads 1.4 times as wide as it is tall; its pages (book-pages.tsx) take the same size.
-    const height = openHeight(W, H);
+    const height = openHeight(bookWidth(), H);
     const s1 = height / OPEN_HEIGHT / camera.zoom;
     // Its origin is the foot of the spine: shut, the cover reaches right of it; open, it is the middle.
     const mid = { x: camera.position.x, y: camera.position.y - height / 2 / camera.zoom };
@@ -757,9 +807,20 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const onDrag = (e: PointerEvent) => {
     // Let go outside the window: no pointerup came, but no button is down any more.
     if (holding && e.pointerType === "mouse" && e.buttons === 0) return onUp(e);
+    if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const two = pinch && twoFingers();
+    if (pinch && two) return view((pinch.zoom * two.d) / pinch.d, two.x, two.y, pinch.wx, pinch.wy);
+    if (pan) {
+      if (e.pointerType === "mouse" && e.buttons === 0) pan = null;
+      else view(camera.zoom, e.clientX, e.clientY, pan.wx, pan.wy);
+      return;
+    }
     if (holding && toRoom(rooms[holding.i]!, e.clientX, e.clientY, at)) worlds[holding.i]!.drag(at);
   };
   const onUp = (e: PointerEvent) => {
+    fingers.delete(e.pointerId);
+    if (fingers.size < 2) pinch = null;
+    pan = null;
     if (plaquePressed) {
       plaquePressed = false;
       if (e.type === "pointerup" && overPlaque(e.clientX, e.clientY)) window.open(GITHUB_URL, "_blank", "noopener,noreferrer");
@@ -844,6 +905,9 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   let last = performance.now();
   let raf = 0;
   const bubble = document.querySelector<HTMLElement>("[data-say]");
+  // A quiet bubble (the Quarto's) holds only what he says leaving; `leaving` is that line.
+  const chatty = !bubble?.hasAttribute("data-quiet");
+  let leaving = "";
   let sayAt = last / 1000 + SAY_FIRST;
   let sayUntil = 0;
   let said = -1;
@@ -857,6 +921,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   const said2 = document.createElement("span");
   said2.dataset.untyped = "";
   bubble?.replaceChildren(said1, said2);
+  // The app keeps a page it left as it was: the line from his last way out may still be up.
+  if (bubble) delete bubble.dataset.on;
 
   // The neon sign invites a tap: under the pointer it glows brighter and grows a little, and now and
   // then it flickers like a tube warming up. A tap on it closes the camera in on the shelves.
@@ -1008,6 +1074,14 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
   };
   const unzoom = () => zoom(null);
   addEventListener(UNZOOM_EVENT, unzoom);
+  // The app is about to go to the next screen: he walks off first, and it goes once he is out of sight.
+  const onLeave = (e: Event) => {
+    e.preventDefault();
+    const { say, go } = (e as CustomEvent<Leave>).detail;
+    leaving = say;
+    life.exit(go);
+  };
+  addEventListener(LEAVE_EVENT, onLeave);
   addEventListener("scroll", unzoom, { passive: true });
   // A right click backs out of a close-up, as Escape does, instead of the browser's menu; links, fields
   // and the open book's text keep theirs.
@@ -1142,6 +1216,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
         if (i !== settled) s.copy(rooms[i]!.seat.position);
       });
       life.enter(settled, spots[settled]!, yawNow);
+      // Back from a screen he walked off towards this one: he walks in, as he left.
+      if (walkedTo(location.pathname)) life.comeIn();
       lifeStride = life.pose.stride;
     }
 
@@ -1160,7 +1236,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       k = r.k;
       lift = p.lift;
       // While he talks he turns to face you.
-      toUser += ((sayUntil > 0 ? 1 : 0) - toUser) * Math.min(1, dt * 3);
+      // Talking he turns to the person; on his way out he keeps walking side-on, the bubble going with him.
+      toUser += ((sayUntil > 0 && !leaving ? 1 : 0) - toUser) * Math.min(1, dt * 3);
       yawNow = p.yaw + Math.atan2(Math.sin(-Math.PI / 2 - p.yaw), Math.cos(-Math.PI / 2 - p.yaw)) * toUser;
       stride += p.stride - lifeStride;
       lifeStride = p.stride;
@@ -1206,7 +1283,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     let gaze: THREE.Vector3 | null = null;
     if (own && p.look) gaze = rooms[life.room]!.content.localToWorld(look.copy(p.look));
     else if (sayUntil > 0 && hinting && neons[0]) gaze = neons[0].getWorldPosition(neonAt).setZ(700);
-    else if (sayUntil > 0) gaze = look.set(catAt.x, catAt.y + 0.3 * k, 2000);
+    else if (sayUntil > 0 && !leaving) gaze = look.set(catAt.x, catAt.y + 0.3 * k, 2000);
     else if (pointer.on && sitNow > 0.5 && t - lastMove < GAZE) gaze = look.set(worldX(pointer.x), worldY(pointer.y), 700);
     cat.update(
       {
@@ -1281,11 +1358,21 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
       const pace = reduce ? 0 : TYPE;
       // Once he has started a line he finishes it, even if he gets up meanwhile.
       const done = t - sayFrom >= line.length * pace;
-      if (sayUntil > 0 && (t > sayUntil || (!sitting && done))) {
+      // On his way out the line stays up until the screen goes.
+      if (sayUntil > 0 && !leaving && (t > sayUntil || (!sitting && done))) {
         delete bubble.dataset.on;
         sayUntil = 0;
         sayAt = t + SAY_EVERY[0] + Math.random() * (SAY_EVERY[1] - SAY_EVERY[0]);
-      } else if (sayUntil === 0 && sitting && t > sayAt) {
+      } else if (leaving && line !== leaving) {
+        // On his way out he says where to, until the screen goes.
+        line = leaving;
+        said1.textContent = "";
+        said2.textContent = line;
+        typed = 0;
+        sayFrom = t;
+        bubble.dataset.on = "";
+        sayUntil = Infinity;
+      } else if (chatty && sayUntil === 0 && sitting && t > sayAt) {
         hinting = !hinted && life.room === 0 && neons.length > 0 && !zoomed && shelfView() !== null;
         if (hinting) {
           hinted = true;
@@ -1334,6 +1421,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (tvCard) delete tvCard.dataset.onTv;
     if (steam) delete steam.dataset.on;
     removeEventListener(UNZOOM_EVENT, unzoom);
+    removeEventListener(LEAVE_EVENT, onLeave);
     removeEventListener("scroll", unzoom);
     removeEventListener("contextmenu", onMenu);
     delete document.documentElement.dataset.zoom;
@@ -1341,6 +1429,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf): (
     if (site) delete site.dataset.on;
     document.body.style.cursor = "";
     removeEventListener("pointerdown", onDown);
+    removeEventListener("wheel", onWheel);
     book?.kill();
     clearTimeout(taps?.timer);
     clearInterval(rotation);

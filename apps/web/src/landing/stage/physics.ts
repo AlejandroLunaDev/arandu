@@ -373,8 +373,10 @@ export function roomPhysics(R: Rapier, room: Room): RoomPhysics {
     const ky = room.k * Math.cos(TILT);
     bounds.bottom = room.ground ?? -below / ky + FLOOR_UP;
     bounds.top = (a.bottom - pin.getBoundingClientRect().top) / ky;
-    bounds.left = -a.left / room.k;
-    bounds.right = (innerWidth - a.left) / room.k;
+    // The side walls: the viewport's edges, or those of the page's column where it says so (data-sides).
+    const sides_ = room.anchor.closest<HTMLElement>("[data-sides]")?.getBoundingClientRect();
+    bounds.left = ((sides_?.left ?? 0) - a.left) / room.k;
+    bounds.right = ((sides_?.right ?? innerWidth) - a.left) / room.k;
     floor.setTranslation({ x: 0, y: bounds.bottom - 0.05, z: 0 });
     ceiling.setTranslation({ x: 0, y: bounds.top + 0.05, z: 0 });
     sides[0]!.setTranslation({ x: bounds.left - 0.05, y: 0, z: 0 });

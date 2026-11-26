@@ -76,6 +76,11 @@
   padding: 14px var(--pad) 44px;
 }
 
+/* Its sections keep their height: what does not fit runs on below, to scroll to, never squashed. */
+.body > * {
+  flex-shrink: 0;
+}
+
 .head {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -494,13 +499,54 @@
     padding: 1px 1px 7px;
   }
 
-  /* Small pages keep the essentials: who, a few subjects and topics, and the sources. */
-  .card .roomy,
-  .chips li:nth-child(n + 3),
-  .topics li:nth-child(n + 3),
-  .subject:nth-of-type(n + 2) {
-    display: none;
+  /* Small pages: smaller print, and what still does not fit scrolls (touch and wheel), clear of the turning corners. */
+  .body {
+    gap: 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 8px;
+    margin-bottom: 36px;
   }
+
+  .title {
+    font-size: 15px;
+    line-height: 19px;
+  }
+
+  .chips li {
+    padding: 3px 8px;
+    font-size: 10px;
+    line-height: 13px;
+  }
+}
+
+/* In the app's column (data-sides) the book is a phone's, on any window: the same rules as above. */
+:global([data-sides]) .book {
+  --pad: 12px;
+  width: 420px;
+  height: 300px;
+  column-gap: 5px;
+  padding: 1px 1px 7px;
+}
+
+/* Small pages: smaller print, and what still does not fit scrolls (touch and wheel), clear of the turning corners. */
+:global([data-sides]) .body {
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+  margin-bottom: 36px;
+}
+
+:global([data-sides]) .title {
+  font-size: 15px;
+  line-height: 19px;
+}
+
+:global([data-sides]) .chips li {
+  padding: 3px 8px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 @media (prefers-reduced-motion: reduce) {

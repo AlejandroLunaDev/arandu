@@ -5,14 +5,15 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import styles from "@/onboarding/onboarding.module.css";
-import { Loading } from "@/ui/loading";
 import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
+import { useWalkOff } from "@/app-shell/walk-off";
 import { type LessonRefusal, startLesson } from "./actions";
 import { enterLesson } from "./lesson-entry";
 import { type SpotState, chapterKey, lessonKey, specialKey, towerPlan } from "./tower-plan";
 import type { TowerBook } from "./tower-scene";
 import c from "./caminho.module.css";
+import say from "@/landing/stage/stage.module.css";
 
 type Run = Awaited<ReturnType<typeof import("./tower-scene").runTower>>;
 
@@ -38,6 +39,8 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
   const track = useRef<HTMLOListElement>(null);
   const pop = useRef<HTMLElement>(null);
   const run = useRef<Run | null>(null);
+  // Back to the Quarto: he climbs the path to the roof and leaps off to the left, the way he came in.
+  useWalkOff("/app", "Voltando pro quarto!");
   /** The pick came from the list: the card takes the focus, so it is read out and its button is next. */
   const fromList = useRef(false);
 
@@ -53,7 +56,6 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
 
   const [picked, setPicked] = useState(at);
   const [plain, setPlain] = useState(false);
-  const [live, setLive] = useState(false);
   const [refused, setRefused] = useState<LessonRefusal | null>(null);
   const input = JSON.stringify({ seed: book.discipline.id, chapters, at } satisfies TowerBook);
   useEffect(() => {
@@ -70,7 +72,6 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
       .then((r) => {
         if (cancelled) return r.stop();
         run.current = r;
-        setLive(true);
       })
       .catch((error: unknown) => {
         console.error("The 3D tower could not load", error);
@@ -134,11 +135,8 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
   return (
     <div ref={box} className={c.tower} data-plain={plain || undefined}>
       <div ref={stage} className={c.stage}>
-        {!live && !plain && (
-          <div className={c.wait}>
-            <Loading />
-          </div>
-        )}
+        {/* What Arandu says on his way back to the Quarto. */}
+        <p data-say aria-live="polite" className={`${say.say} type-small`} />
       </div>
       <ol ref={track} className={c.bays} aria-label="Caminho da matéria">
         {towerPlan(total).map((storey, b) => (

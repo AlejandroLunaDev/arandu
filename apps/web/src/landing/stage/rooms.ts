@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { PRODUCT, RESEARCH } from "../book/book-data";
 import { tokenColor } from "./palette";
-import { DESK_TOP, SIDE_TABLE_TOP, SOFA_SEAT, WALL, type BookLook, type BookName, type Kit, type PropName, type Shape } from "./props";
+import { DESK_TOP, END_TABLE_TOP, SIDE_TABLE_TOP, SOFA_SEAT, WALL, type BookLook, type BookName, type Kit, type PropName, type Shape } from "./props";
 
 // Each scene's room is composed here in metres and drawn over the page. A room follows one element
 // of its scene, its anchor ([data-room]): the room's origin sits on the anchor's bottom-left corner,
@@ -228,9 +228,9 @@ function base(anchor: HTMLElement, face: number) {
 }
 
 /** The furniture: it holds what falls on it, like the shelves, and never moves. */
-const FURNITURE = new Set<PropName>(["Desk", "ChairGamer", "Sofa", "SideTable", "PaperBin", "Mug", "Notebook"]);
+const FURNITURE = new Set<PropName>(["Desk", "ChairGamer", "Sofa", "SideTable", "EndTable", "PaperBin", "Mug", "Notebook"]);
 /** What only dresses the room: on the wall, or on the desk, out of the physics. */
-const DECOR = new Set<PropName>(["NeonSign", "NeonApp", "StringLights", "Tv", "FrameTall", "FrameSquare", "GithubPlaque", "MottoSign"]);
+const DECOR = new Set<PropName>(["NeonSign", "NeonApp", "StringLights", "StringLightsShort", "Rug", "Tv", "FrameTall", "FrameSquare", "GithubPlaque", "MottoSign"]);
 /** The frames hang larger than they were modelled, to read from across the room. */
 const FRAME_SCALE = 1.3;
 
@@ -478,5 +478,100 @@ export function heroRoom(anchor: HTMLElement, kit: Kit): Room {
     content.position.y = -0.5 * (1 - rise);
   };
   collect(room, kit);
+  return room;
+}
+
+/** The Quarto's room, a phone wide: the sofa and a small table, the shelves over them; the wall runs up past the screen. */
+const QUARTO = { width: 3.3, height: 6.5 };
+const QUARTO_SOFA = 1.4;
+/** The small table right of the sofa, a mug on it. */
+const QUARTO_TABLE = { x: 3.0, z: 0.5 };
+/** Where the hanging lamp's shade sits (m); its cord (1 m, in the model) runs up out of the screen. */
+const QUARTO_PENDANT = { x: 1.65, y: 4.4, cord: 1 };
+
+/**
+ * The app's Quarto: Arandu's living room. The sofa where he sits on a rug, a small table with a mug, and over them the
+ * landing's shelves of professions: their titles change, and a tap opens one (run-stage). His yarn, the Farol
+ * Santander, a plant and a little lamp among the books, two frames, the fairy lights and a hanging lamp over it all.
+ * The wall is the room's own width, so a wide screen shows the page's sides, not more wall.
+ */
+export function quartoRoom(anchor: HTMLElement, kit: Kit): Room {
+  anchor.dataset.metres = String(QUARTO.width);
+  const room = base(anchor, FACE.left);
+  const { content } = room;
+  const paint = (color: string) => new THREE.MeshStandardMaterial({ color: tokenColor(color), roughness: 0.95 });
+  put(content, new THREE.Mesh(new THREE.PlaneGeometry(QUARTO.width, QUARTO.height), paint(WALL_COLOR)), QUARTO.width / 2, QUARTO.height / 2, ON_WALL - 0.001);
+  const floor = put(content, new THREE.Mesh(new THREE.PlaneGeometry(QUARTO.width, FLOOR_DEPTH), paint(FLOOR_COLOR)), QUARTO.width / 2, 0, ON_WALL + FLOOR_DEPTH / 2);
+  floor.rotation.x = -Math.PI / 2;
+  room.ground = 0;
+  room.front = 1.2;
+
+  place(content, kit, "Rug", QUARTO_SOFA, 0, 1.25);
+  place(content, kit, "Sofa", QUARTO_SOFA, 0, 0.5);
+  // As in the hero's wide room: his seat on the left cushion, the whole seat his to walk and sleep on.
+  room.seat = seatAt(content, QUARTO_SOFA - 0.45, SOFA_SEAT);
+  room.seat.position.z = 0.62;
+  room.walk = { y: SOFA_SEAT, from: QUARTO_SOFA - 0.8, to: QUARTO_SOFA + 0.8 };
+  room.bed = { at: new THREE.Vector3(QUARTO_SOFA + 0.35, SOFA_SEAT, 0.62), from: QUARTO_SOFA - 0.89, to: QUARTO_SOFA + 0.91, edge: 1 };
+  place(content, kit, "EndTable", QUARTO_TABLE.x, 0, QUARTO_TABLE.z);
+  place(content, kit, "Mug", QUARTO_TABLE.x - 0.03, END_TABLE_TOP, QUARTO_TABLE.z, -30);
+
+  // The low shelf, his seat being the sofa, is all books, end to end. Every title here is a stand-in: run-stage puts
+  // the API's professions on them.
+  put(content, kit.make("ShelfLarge"), 1.1, 1.55);
+  standBooks(kit, content, 0.36, 1.55, [
+    ["Book", LOOK.v6, "Psicologia"],
+    ["BookTall", LOOK.a6, "Medicina"],
+    ["BookSlim", LOOK.c3, "Letras"],
+    ["BookThick", LOOK.v8, "Engenharia"],
+    ["Book", LOOK.v4, "Economia"],
+    ["BookPaperback", LOOK.a8, "Música"],
+    ["BookTall", LOOK.i7, "Arquitetura"],
+    ["BookSlim", LOOK.a4, "Jornalismo"],
+    ["Book", LOOK.c3, "Nutrição"],
+    ["BookThick", LOOK.v6, "Administração"],
+    ["BookShort", LOOK.a6, "Biologia"],
+    ["BookSlim", LOOK.v8, "Odontologia"],
+    ["BookTall", LOOK.v4, "Veterinária"],
+    ["Book", LOOK.a8, "História"],
+    ["BookPaperback", LOOK.c3, "Geografia"],
+    ["BookSlim", LOOK.i7, "Enfermagem"],
+    ["Book", LOOK.v6, "Farmácia"],
+    ["BookThick", LOOK.a8, "Contabilidade"],
+    ["BookSlim", LOOK.v4, "Teatro"],
+    ["BookShort", LOOK.a4, "Filosofia", "lean"],
+  ]);
+  // His yarn on the rug, left of the sofa's front.
+  const yarn = put(content, kit.make("YarnBall"), 0.45, 0, 1.3);
+  yarn.rotation.y = 0.6;
+  // The middle one: the Farol Santander, books, the plant over its edge.
+  put(content, kit.make("ShelfMedium"), 2.45, 2.3);
+  put(content, kit.make("FarolSantander"), 2.04, 2.3);
+  standBooks(kit, content, 2.12, 2.3, [
+    ["BookSlim", LOOK.i7, "Química"],
+    ["BookPaperback", LOOK.a8, "Música"],
+    ["BookSlim", LOOK.v8, "Física"],
+  ]);
+  put(content, kit.make("PlantPot"), 2.68, 2.3, 0.05);
+  // The top one: a few books and the little lamp.
+  put(content, kit.make("ShelfSmall"), 0.65, 3.05);
+  standBooks(kit, content, 0.4, 3.05, [
+    ["BookShort", LOOK.c3, "Design"],
+    ["BookSlim", LOOK.a6, "Direito"],
+    ["BookPaperback", LOOK.v4, "Pedagogia"],
+  ]);
+  put(content, kit.make("LampMushroom"), 0.8, 3.05);
+
+  place(content, kit, "FrameTall", 2.5, 3.45, ON_WALL).scale.setScalar(FRAME_SCALE);
+  place(content, kit, "FrameSquare", 1.5, 3.35, ON_WALL).scale.setScalar(FRAME_SCALE);
+  place(content, kit, "StringLightsShort", 0.35, 4.85, ON_WALL);
+  place(content, kit, "Ball", 2.55, 0, 1.3);
+  const lamp = put(content, kit.make("LampPendant"), QUARTO_PENDANT.x, QUARTO_PENDANT.y);
+
+  // No books to read here: he reads those beside him on his plank, and here he sits on the sofa, under the shelves.
+  collect(room, kit);
+  // The hanging lamp swings on its own joint (physics.ts), not with the props.
+  room.props = room.props.filter((p) => p.object !== lamp);
+  room.pendant = { object: lamp, shapes: kit.shapes("LampPendant"), top: QUARTO_PENDANT.y + QUARTO_PENDANT.cord, lift: 0, on: true };
   return room;
 }

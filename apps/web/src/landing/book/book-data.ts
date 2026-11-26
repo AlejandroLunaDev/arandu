@@ -26,6 +26,8 @@ export const TURN = 0.7;
 
 /** How tall the open book stands on a width by height screen: half its height, never wider (1.4 times
  * its height) than 70% of its width, or 96% on a narrow one. The 3D book and its pages both use it. */
+/** The width the open book has to fit: the app's column where the page has one (data-sides), else the window's. */
+export const bookWidth = () => document.querySelector("[data-sides]")?.getBoundingClientRect().width ?? innerWidth;
 export const openHeight = (width: number, height: number) => Math.min(height * 0.78, (width * (width < 640 ? 0.96 : 0.86)) / 1.4);
 
 /** Only https links and images reach the page: the API is a trust boundary. */
