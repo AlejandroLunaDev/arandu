@@ -423,7 +423,7 @@ SIDES = ["SidePlatform", "SideLadder", "SideBasket", "SideBed"]
 FRONTS = ["FrontBowl", "FrontStep", "FrontTunnel"]
 
 
-SIGNS = {"SignTag": ((0.2, 0.15), -0.147), "SignBoard": ((0.5, 0.15), 0.125)}  # a face's size, and its centre's height
+SIGNS = {"SignTag": ((0.44, 0.14), -0.142), "SignBoard": ((0.5, 0.15), 0.125)}  # a face's size, and its centre's height
 
 
 def spot(obj, seat, sign):
@@ -619,8 +619,9 @@ def build_kit(coll):
     pompom(p, (0, 0, 0), length=0.3)
     p.build("Bolinha", coll)
 
-    def string(part):
-        part.add(*tube([(0, 0, 0), (0, 0, -0.06)], 0.004, sides=6), "TowerSisal")
+    def string(part):  # two, wide apart: the tag is as wide as a board, so that "Lição 1" can be read on it
+        for x in (-0.15, 0.15):
+            part.add(*tube([(x, 0, 0), (x, 0, -0.06)], 0.004, sides=6), "TowerSisal")
 
     def stake(part):  # one, under the board's middle: the web turns the board on it to face the camera
         cylinder(part, (0, 0), 0, 0.05, 0.014, "TowerSignRim")
