@@ -1034,6 +1034,19 @@ describe('ChaptersService', () => {
       });
     });
 
+    describe('extraLife', () => {
+      it('spends one stored extra life', async () => {
+        await service.extraLife('u', 7, 1, 2);
+
+        expect(wallet.pay).toHaveBeenCalledWith('u', 'vidas', 1);
+      });
+
+      it('refuses a locked lesson with 409 lesson_locked, and spends nothing', async () => {
+        await locked(service.extraLife('u', 7, 1, 3));
+        expect(wallet.pay).not.toHaveBeenCalled();
+      });
+    });
+
     describe('finishLesson', () => {
       it('keeps only the misses that were in the lesson, once each, with the kind they were missed in', async () => {
         const [a, b] = (await service.start('u', 7, 1, 2)).exercises;

@@ -2,7 +2,9 @@ import type {
   Caixa,
   League,
   Season,
-  Wallet,
+  Shop,
+  ShopItemId,
+  ShopPurchase,
   Wardrobe,
   WardrobeUpdate,
 } from '@arandu/contracts';
@@ -17,7 +19,7 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { UserId } from '../auth/user-id.decorator.js';
-import { LEAGUES, LEVELS } from './game.logic.js';
+import { LEAGUES, LEVELS, SHOP_ITEMS } from './game.logic.js';
 import { GameRepository } from './game.repository.js';
 import { id, param } from '../../core/http/params.js';
 import {
@@ -27,7 +29,10 @@ import {
 } from './game.errors.js';
 
 const level = z.coerce.number().int().min(1).max(LEVELS);
-const shopItem = z.enum(['marcador']);
+const shopItem = z.enum(['promotion', ...SHOP_ITEMS.map((i) => i.id)] as [
+  ShopItemId,
+  ...ShopItemId[],
+]);
 const wardrobeUpdate = z
   .object({
     wearing: z
@@ -78,7 +83,7 @@ export class GameController {
     return this.game.claim(userId, levelNumber);
   }
 
-  /** L4: earned only, never sold. */
+  /** L4: earned by studying, or bought in the shop with the currency (never with money). */
   @Get('caixas')
   caixas(@UserId() userId: string): Promise<Caixa[]> {
     return this.game.caixas(userId);
@@ -93,14 +98,19 @@ export class GameController {
     return this.game.open(userId, caixaId);
   }
 
-  /** K1: a page marker, for peixinhos. */
+  /** The shop (#153): items for the currency, a page marker for peixinhos, and the week's promotion. */
+  @Get('shop')
+  shop(@UserId() userId: string): Promise<Shop> {
+    return this.game.shop(userId);
+  }
+
   @Post('shop/:item')
   @HttpCode(200)
   buy(
     @UserId() userId: string,
     @Param('item', param(shopItem, shopItemNotFound))
-    item: 'marcador',
-  ): Promise<Wallet> {
+    item: ShopItemId,
+  ): Promise<ShopPurchase> {
     return this.game.buy(userId, item);
   }
 

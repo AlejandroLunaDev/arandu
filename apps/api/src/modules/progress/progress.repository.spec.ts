@@ -7,7 +7,13 @@ import {
 import type { Sql } from '../../core/database/database.module.js';
 
 const NOW = new Date('2026-03-10T15:00:00.000Z');
-const row = { peixinhos: 30, currency: 2, marcadores: 1, giftDue: false };
+const row = {
+  peixinhos: 30,
+  currency: 2,
+  marcadores: 1,
+  vidas: 0,
+  giftDue: false,
+};
 
 describe('toWallet', () => {
   it('gives the balances, the prices and the next gift at São Paulo midnight', () => {
@@ -20,6 +26,7 @@ describe('toWallet', () => {
       currency: 2,
       continuePrice: CONTINUE_PRICE,
       marcadores: 1,
+      vidas: 0,
     });
   });
 

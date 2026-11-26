@@ -18,6 +18,7 @@ describe('progress routes', () => {
     currency: 0,
     continuePrice: 5,
     marcadores: 0,
+    vidas: 0,
   };
   const repo = {
     wallet: vi.fn(),
