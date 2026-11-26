@@ -31,19 +31,66 @@
   line-height: 22px;
 }
 
-/* A cat does not talk: the words are his thought, so no tail points at him. A trail of three small bubbles goes from
-   them toward him, each smaller than the last. It starts on their lower left, where he is while he is beside them. */
-.talk .bubble::after {
-  content: "";
+/* A cat does not talk: the words are his thought, so no tail points at him. Where he sits under them, a trail of
+   three small bubbles goes from him up to them, the smallest nearest him (Trail in arandu-says.tsx). They come last,
+   one after another, once the words are in their place: while he is beside them they would sit on top of him. */
+.trail {
   position: absolute;
-  bottom: 4px;
-  left: -40px;
-  width: 36px;
-  height: 40px;
-  background:
-    radial-gradient(circle 8px at 26px 9px, var(--cloud) 5.8px, var(--violet-400) 6.2px 7.6px, transparent 8px),
-    radial-gradient(circle 5.5px at 13px 25px, var(--cloud) 3.3px, var(--violet-400) 3.7px 5.1px, transparent 5.5px),
-    radial-gradient(circle 3.5px at 5px 36px, var(--cloud) 1.3px, var(--violet-400) 1.7px 3.1px, transparent 3.5px);
+  top: 100%;
+  left: 50%;
+  pointer-events: none;
+}
+
+.trail i {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 50%;
+  background: var(--cloud);
+  opacity: 0;
+}
+
+.trail i:nth-child(1) {
+  --nth: 0;
+
+  top: 36px;
+  left: -19px;
+  width: 7px;
+  height: 7px;
+}
+
+.trail i:nth-child(2) {
+  --nth: 1;
+
+  top: 22px;
+  left: -12px;
+  width: 11px;
+  height: 11px;
+}
+
+.trail i:nth-child(3) {
+  --nth: 2;
+
+  top: 5px;
+  left: -2px;
+  width: 16px;
+  height: 16px;
+}
+
+.trail[data-on] i {
+  animation: pop 0.3s cubic-bezier(0.3, 1.4, 0.6, 1) calc(var(--after, 0.15s) + var(--nth) * 0.24s) both;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+
+  to {
+    opacity: 1;
+    scale: 1;
+  }
 }
 
 /* A talk that frees the cat (arandu-says.tsx): room above for his words to float into and below for him to wait in,
@@ -60,10 +107,9 @@
   transition: translate 0.9s cubic-bezier(0.4, 0, 0.6, 1) 0.3s;
 }
 
-.talk[data-free] .bubble::after {
-  transition:
-    left 2.6s cubic-bezier(0.37, 0, 0.63, 1) 0.35s,
-    bottom 2.6s cubic-bezier(0.37, 0, 0.63, 1) 0.35s;
+/* The trail waits for the words to reach their place: 0.35s, then the 2.6s they take. */
+.talk[data-free] .trail {
+  --after: 3s;
 }
 
 /* His words let go of him and drift up and to the middle like a thought: a slow lift-off, a little past its place,
@@ -87,20 +133,18 @@
   }
 }
 
-/* Its trail comes round under it, down to him. */
-.talk[data-said] .bubble::after {
-  bottom: -48px;
-  left: calc(50% - 22px);
-}
-
 .talk[data-said] .talkCat {
   translate: calc(50cqi - 42px) 110px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .talk[data-free] .talkCat,
-  .talk[data-free] .bubble::after {
+  .talk[data-free] .talkCat {
     transition: none;
+  }
+
+  .trail[data-on] i {
+    opacity: 1;
+    animation: none;
   }
 
   .talk[data-said] .bubble {

@@ -40,6 +40,20 @@ export function Said({ text, shown }: { text: string; shown: number }) {
 }
 
 /**
+ * The thought's trail: three small bubbles from Arandu up to his words, the smallest nearest him. They belong under
+ * the words (inside a `ui.bubble`), where he is once the words are over him, and come one after another when `on`.
+ */
+export function Trail({ on }: { on: boolean }) {
+  return (
+    <span className={styles.trail} data-on={on || undefined} aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+/**
  * Arandu's thought, the cat at its trail: a cat does not talk, so what he tells is what goes through his head. `free`, on a screen where the person answers in the field below: once he has
  * said it all the bubble floats up a little and he walks out from beside it to wait under it. Sitting there he is on
  * his own: the 3D cat taps, stretches, turns and watches the pointer until the answer comes.
@@ -57,6 +71,7 @@ export function AranduSays({ text, shown, pose, free = false }: { text: string; 
       <Cat mood={!said ? pose : arrived ? "sit" : "walk"} size={104} className={styles.talkCat} />
       <div className={styles.bubble} role="status">
         <Said text={text} shown={shown} />
+        {free && <Trail on={said} />}
       </div>
     </section>
   );

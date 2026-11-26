@@ -1,6 +1,6 @@
 "use client";
 
-import { Said, useReveal } from "@/ui/arandu-says";
+import { Said, Trail, useReveal } from "@/ui/arandu-says";
 import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
@@ -23,6 +23,7 @@ export function HelloView({ busy, failed, onStart, onGoogle }: { busy: boolean; 
       <section className={styles.hello}>
         <div className={`${ui.bubble} ${styles.bubble}`} role="status">
           <Said text={HELLO} shown={shown} />
+          <Trail on={done} />
         </div>
         <Cat mood="sit" size={220} className={styles.heroCat} />
       </section>

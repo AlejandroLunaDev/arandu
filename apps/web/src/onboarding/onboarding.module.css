@@ -41,22 +41,9 @@
   max-width: 300px;
 }
 
-/* The thought's trail comes down to the cat: three small bubbles under his words (ui .bubble gives --cloud). */
+/* Room under his words for the thought's trail down to him (ui Trail). */
 .hello .bubble {
   margin-bottom: 50px;
-}
-
-.hello .bubble::after {
-  content: "";
-  position: absolute;
-  bottom: -48px;
-  left: calc(50% - 22px);
-  width: 36px;
-  height: 40px;
-  background:
-    radial-gradient(circle 8px at 26px 9px, var(--cloud) 5.8px, var(--violet-400) 6.2px 7.6px, transparent 8px),
-    radial-gradient(circle 5.5px at 13px 25px, var(--cloud) 3.3px, var(--violet-400) 3.7px 5.1px, transparent 5.5px),
-    radial-gradient(circle 3.5px at 5px 36px, var(--cloud) 1.3px, var(--violet-400) 1.7px 3.1px, transparent 3.5px);
 }
 
 /* The logo on the first screen: big, in the middle, at the top. */
