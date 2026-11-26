@@ -561,7 +561,7 @@ export interface BookProgress {
 export type LeagueId =
   "calouro" | "veterano" | "monitor" | "mestre" | "filosofo" | "sabio";
 
-/** GET /me/league (L1): this week's league of 12 by weekly sabedoria. Others show only a nickname and sabedoria. */
+/** GET /me/league (L1): this round's league of 6 (LEAGUE_SIZE) by the round's sabedoria. Others show only a nickname and sabedoria. */
 export interface League {
   league: { id: LeagueId; name: string; rank: number };
   /** The round in progress (its length is a game setting, 1 day in the demo): first São Paulo day, days, end. */
