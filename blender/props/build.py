@@ -122,6 +122,9 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "NeonBorder": (srgb("#EF5D6C"), 0.3, 0.0),  # the palette's coral red, the sign's frame
     "NeonBacking": (srgb("#15131B"), 0.35, 0.0),  # smoked acrylic
     "StringBulb": (srgb("#F1EBDD"), 0.2, 0.0),  # lit by the web in amber-300
+    "RugWool": (srgb("#2E1B46"), 1.0, 0.0),  # violet-900: the rug's ground
+    "RugField": (srgb("#432765"), 1.0, 0.0),  # violet-800: its middle
+    "RugBand": (srgb("#D99A32"), 1.0, 0.0),  # amber-500: the band between them
     "StringSocket": (srgb("#3A3645"), 0.5, 0.0),
     "TowerStone": (srgb("#DDD3C0"), 0.7, 0.0),
     "TowerWindow": (srgb("#3A3645"), 0.4, 0.0),
@@ -1223,30 +1226,60 @@ def neon_app(coll):
     return p.build("NeonApp", coll)
 
 
-def string_lights(coll):
-    """Fairy lights strung along the wall in four scallops, a warm bulb hanging every 0.2 m. Its
-    StringLightsLight1 to 3 empties mark where the web may put a few point lights."""
-    L, SAG, BULBS = 3.7, 0.12, 18
+# The fairy lights: name: length (m), scallops, bulbs. The short one spans the app's Quarto wall.
+STRING_LIGHTS = {"StringLights": (3.7, 4, 18), "StringLightsShort": (2.6, 3, 13)}
+
+
+def string_lights(coll, name="StringLights"):
+    """Fairy lights strung along the wall in scallops, a warm bulb hanging every 0.2 m. Its
+    <name>Light1 to 3 empties mark where the web may put a few point lights."""
+    L, SCALLOPS, BULBS = STRING_LIGHTS[name]
+    SAG = 0.12
     p = Part()
     wire = []
     for i in range(121):
         x = L * i / 120
-        u = (x / (L / 4)) % 1
+        u = (x / (L / SCALLOPS)) % 1
         wire.append((x, -0.01, -SAG * 4 * u * (1 - u)))
     p.add(*tube(wire, 0.003, sides=5), "LampCord")
-    for x in (0, L / 4, L / 2, 3 * L / 4, L):
+    for x in (L * i / SCALLOPS for i in range(SCALLOPS + 1)):
         add_box(p, (0.012, 0.02, 0.012), (x, 0.0, 0.004), "LampMetal", 0.003, seg=1)  # hooks
     for k in range(BULBS):
         x = L * (k + 0.5) / BULBS
-        u = (x / (L / 4)) % 1
+        u = (x / (L / SCALLOPS)) % 1
         z = -SAG * 4 * u * (1 - u)
         at = Matrix.Translation((x, -0.012, z))
         add_lathe(p, [(0.0, 0.0), (0.008, 0.0), (0.009, -0.018), (0.0, -0.02)], "StringSocket", at, seg=12)
         add_lathe(p, [(0.0, -0.016), (0.011, -0.022), (0.017, -0.036), (0.016, -0.05), (0.009, -0.06), (0.0, -0.062)], "StringBulb", at, seg=16)
-    obj = p.build("StringLights", coll)
+    obj = p.build(name, coll)
     for i, x in enumerate((L / 6, L / 2, 5 * L / 6)):
-        light("StringLightsLight%d" % (i + 1), obj, (x, -0.03, -0.1))
+        light("%sLight%d" % (name, i + 1), obj, (x, -0.03, -0.1))
     return obj
+
+
+def rug(coll):
+    """An oval wool rug for under the sofa, 1.6 x 0.96 m: a violet field, an amber band, a darker rim
+    that rounds down to the floor. Its origin at the middle of its underside."""
+    T = 0.012
+    p = Part()
+    profile = [(0.0, T), (0.5, T), (0.56, T), (0.76, T), (0.795, T * 0.5), (0.8, 0.0)]
+    add_lathe(p, profile, ["RugField", "RugBand", "RugWool", "RugWool", "RugWool"], Matrix.Diagonal((1, 0.6, 1, 1)), seg=96)
+    return p.build("Rug", coll)
+
+
+END_TABLE = (0.2, 0.52)  # top radius, height
+
+
+def end_table(coll):
+    """A small round table on one turned column and a round foot, for beside the sofa where the big
+    side table does not fit; a mug stands on it."""
+    R, H = END_TABLE
+    T = 0.03
+    p = Part()
+    add_lathe(p, [(0.0, H - T), (R - 0.01, H - T), (R, H - T + 0.01), (R, H - 0.006), (R - 0.006, H), (0.0, H)], "TableWood", seg=48)
+    add_lathe(p, [(0.0, 0.0), (0.15, 0.0), (0.155, 0.012), (0.14, 0.026), (0.03, 0.04), (0.022, 0.12), (0.03, 0.2),
+                  (0.02, 0.3), (0.026, H - T - 0.04), (0.06, H - T), (0.0, H - T)], "TableWood", seg=32)
+    return p.build("EndTable", coll)
 
 
 def farol_santander(coll):
@@ -1310,6 +1343,9 @@ LAYOUT = {  # where each prop stands in the Blender scene; the export puts every
     "NeonSign": (-0.4, 3.0, 2.2),
     "NeonApp": (-0.4, 3.0, 1.75),
     "StringLights": (-2.2, 3.0, 2.8),
+    "StringLightsShort": (-2.2, 3.0, 3.2),
+    "Rug": (1.6, -1.5, 0),
+    "EndTable": (2.6, 1.5, 0),
     "FarolSantander": (4.3, 3.0, 0),
     "Tv": (-1.5, 4.5, 1.6),
     "GithubPlaque": (4.6, 1.5, 1.2),
@@ -1342,7 +1378,8 @@ def build():
     props += [shelf(coll, name) for name in SHELVES]
     props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball, paw, fish, mouse)]
     props += [f(coll) for f in (desk, notebook, chair_gamer, sofa, paper_bin, trophy, grad_cap,
-                                pencil_cup, mug, neon_sign, neon_app, string_lights, farol_santander, tv, side_table)]
+                                pencil_cup, mug, neon_sign, neon_app, farol_santander, tv, side_table, rug, end_table)]
+    props += [string_lights(coll, name) for name in STRING_LIGHTS]
     props += [paper_ball(coll, name) for name in PAPER_BALLS] + [pencil(coll, name) for name in PENCILS]
     props += [frame(coll, name) for name in FRAMES] + [github_plaque(coll), motto_sign(coll)]
     for obj in props:
