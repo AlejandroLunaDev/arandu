@@ -5,6 +5,7 @@ import { getFontEmbedCSS, toCanvas } from "html-to-image";
 import Image from "next/image";import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import {
   BOOK_EVENT,
+  bookWidth,
   getBook,
   getOwnBook,
   openHeight,
@@ -109,7 +110,7 @@ export function BookPages() {
   useEffect(() => {
     const el = host.current;
     if (!opened || !el) return;
-    const fit = () => el.style.setProperty("--k", String(openHeight(innerWidth, innerHeight) / el.offsetHeight));
+    const fit = () => el.style.setProperty("--k", String(openHeight(bookWidth(), innerHeight) / el.offsetHeight));
     fit();
     el.focus();
     addEventListener("resize", fit);

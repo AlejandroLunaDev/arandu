@@ -1,18 +1,10 @@
-import type { Home } from "@arandu/contracts";
-import { Suspense } from "react";
+import type { Home, League } from "@arandu/contracts";
 import { mine } from "@/app-shell/api";
 import { HomeView } from "@/room/home";
-import { Loading } from "@/ui/loading";
 
-// Quarto (S1), the app's home.
-export default function QuartoPage() {
-  return (
-    <Suspense fallback={<Loading />}>
-      <Room />
-    </Suspense>
-  );
-}
-
-async function Room() {
-  return <HomeView home={await mine<Home>("/me")} />;
+// Quarto (S1), the app's home. No loading boundary of its own: on the way back from the path the path stays on screen
+// while Arandu leaps off and this loads (app-shell/walk-off.ts); a first visit waits in the tabs' boundary.
+export default async function QuartoPage() {
+  const [home, league] = await Promise.all([mine<Home>("/me"), mine<League>("/me/league")]);
+  return <HomeView home={home} league={league} />;
 }

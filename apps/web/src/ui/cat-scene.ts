@@ -3,6 +3,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { type GLTF, GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { makeCat } from "@/landing/stage/cat";
+import { catUrl, leagueOf } from "@/landing/stage/cat-url";
 import { tokenColor } from "@/landing/stage/palette";
 import { TILT } from "@/landing/stage/rooms";
 
@@ -13,10 +14,13 @@ import { TILT } from "@/landing/stage/rooms";
  */
 export type CatMood = "sit" | "lie" | "read" | "hop" | "stand" | "walk" | "surprised" | "angry" | "sad";
 
-// One download for every cat on the page; each gets its own copy of the skinned model.
-let model: Promise<GLTF> | null = null;
-const load = () =>
-  (model ??= new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/")).loadAsync("/models/arandu.glb"));
+// One download of each model for every cat on the page; each cat gets its own copy of the skinned model.
+const models = new Map<string, Promise<GLTF>>();
+const load = (url: string) => {
+  let model = models.get(url);
+  if (!model) models.set(url, (model = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/")).loadAsync(url)));
+  return model;
+};
 
 /** Seconds between hops while he celebrates, and how long one lasts. */
 const HOP_EVERY = 1.4;
@@ -62,7 +66,8 @@ const envelope = (f: number) => {
  * the GPU and takes the canvas away.
  */
 export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => void) {
-  const gltf = await load();
+  const league = leagueOf(host);
+  const gltf = await load(catUrl(league));
   const canvas = host.appendChild(document.createElement("canvas"));
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -79,6 +84,7 @@ export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => vo
   scene.add(key, back);
 
   const cat = makeCat({ ...gltf, scene: clone(gltf.scene) as THREE.Group }, "ink-400");
+  cat.wear(league);
   // He faces +X: turned three quarters toward you, tipped as on the landing.
   const FACING = -Math.PI / 2 + 0.45;
   cat.yaw.rotation.y = FACING;

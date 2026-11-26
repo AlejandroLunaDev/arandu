@@ -1,28 +1,19 @@
 import type { BookProgress, Home, Journey } from "@arandu/contracts";
 import Link from "next/link";
-import { Suspense } from "react";
 import { mine } from "@/app-shell/api";
 import c from "@/caminho/caminho.module.css";
 import { PathMap } from "@/caminho/path-map";
 import { careerPaths } from "@/onboarding/catalog";
-import { Loading } from "@/ui/loading";
 
-// Caminho (P1): the path of the book the person is on.
-export default function CaminhoPage() {
-  return (
-    <Suspense fallback={<Loading />}>
-      <Path />
-    </Suspense>
-  );
-}
-
-async function Path() {
+// Caminho (P1): the path of the book the person is on. No loading boundary of its own: on the way here the Quarto stays
+// on screen while Arandu walks off and this loads (app-shell/walk-off.ts); a first visit waits in the tabs' boundary.
+export default async function CaminhoPage() {
   const home = await mine<Home>("/me");
   if (!home.current)
     return (
       <main className={c.empty}>
         <h1>Seu caminho começa com uma matéria</h1>
-        <Link href="/app/estante">Escolher na estante</Link>
+        <Link href="/app">Escolher no quarto</Link>
       </main>
     );
   const [book, journey] = await Promise.all([mine<BookProgress>(`/me/books/${home.current.disciplineId}`), mine<Journey>("/me/journey")]);

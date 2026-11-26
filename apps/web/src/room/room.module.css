@@ -5,19 +5,20 @@
   padding: 12px 16px 16px;
 }
 
+/* One line: the week on the left, the wallet on the right. */
 .top {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
-.top p {
+.top > p {
   display: inline-flex;
   margin: 0;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 10px 0 4px;
+  height: 30px;
+  padding: 0 9px 0 3px;
   border: 1px solid var(--ink-800);
   border-radius: 99px;
   background: var(--ink-850);
@@ -27,34 +28,27 @@
 }
 
 /* Both sides set: with only the width, the preflight's height: auto follows the file's ratio, not the box. */
-.top img {
-  width: 26px;
-  height: 17px;
+.top > p img {
+  width: 24px;
+  height: 16px;
   object-fit: contain;
 }
 
 /* The patinha is square, not long like the fish. */
 .top img[src*="paw"] {
-  height: 26px;
+  height: 24px;
 }
 
-.week img {
-  width: 26px;
-  height: 17px;
-  object-fit: contain;
-}
-
-/* S1's week strip: a ratinho per day studied, today ringed in amber, the goal on the right. */
+/* S1's week strip: a ratinho per day studied, today ringed in amber, the days studied of the goal after it. */
+/* The week's mice, the count under them on the left; the wallet keeps to the right. */
 .week {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
+  min-width: 0;
+  margin-right: auto;
 }
 
 .week > div {
   display: flex;
-  gap: 4px;
+  gap: 1px;
 }
 
 .week span {
@@ -62,12 +56,15 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  width: 26px;
+  width: 21px;
   padding: 2px 0;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .week img {
+  width: 18px;
+  height: 12px;
+  object-fit: contain;
   opacity: 0.16;
   filter: grayscale(1);
 }
@@ -88,106 +85,145 @@
 
 .week i {
   color: var(--ink-500);
-  font-size: 9px;
+  font-size: 8px;
   font-style: normal;
-  line-height: 11px;
+  line-height: 10px;
 }
 
 .week [data-today] i {
   color: var(--amber-300);
 }
 
-.week p {
-  margin: 0 0 0 auto;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.week p strong {
-  color: var(--amber-200);
-  font-weight: 600;
-}
-
-.cat {
-  display: flex;
+/* The room's place, between the top line and the ways on: its anchor lies along the bottom, the floor's line. */
+.scene {
+  position: relative;
   flex: 1;
+  min-height: 0;
+  /* Its pinches and drags zoom and pan the room (run-stage), not the page. */
+  touch-action: none;
+}
+
+/* On a wide screen the room is cut to the app's column, however close the camera comes. */
+.cut {
+  clip-path: inset(0 var(--cut-right, 0) 0 var(--cut-left, 0));
+}
+
+/* The floor's line, a little above the ways on: the sofa stands clear of them, its floor running on under them. */
+.anchor {
+  position: absolute;
+  right: 0;
+  bottom: 72px;
+  left: 0;
+  height: 1px;
+}
+
+/* The page's things stay over the 3D stage (z-index 5, landing/stage). */
+.top,
+.ways,
+.gift {
+  position: relative;
+  z-index: 6;
+}
+
+/* Under the room, as on Clash Royale's home: the catalog, the big way on, the league. */
+.ways {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.side,
+.go {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-}
-
-.catModel {
-  width: 220px;
-}
-
-/* Going on to the path: he gathers himself, then leaps up and off the screen. */
-.cat[data-leaving] .catModel {
-  animation: leap-out 0.62s cubic-bezier(0.5, 0, 0.8, 0.5) forwards;
-}
-
-@keyframes leap-out {
-  22% {
-    translate: 0 10px;
-  }
-
-  100% {
-    opacity: 0;
-    translate: 60vw -75vh;
-  }
-}
-
-.book {
-  position: relative;
-  display: block;
-  padding: 12px;
+  min-height: 64px;
+  border-radius: 14px;
   color: var(--text);
   text-decoration: none;
-  border: 1.5px solid var(--violet-400);
-  border-radius: 12px;
 }
 
-.book p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.book strong {
-  display: block;
-  margin-top: 2px;
-  font: 700 16px/1.25 var(--font-bricolage), var(--font-display);
-}
-
-.book span {
-  display: block;
-  margin-top: 4px;
-  color: var(--violet-200);
-  font-size: 12px;
-}
-
-.book b {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  display: inline-flex;
-  align-items: center;
+.side {
+  position: relative;
+  flex: none;
   gap: 2px;
-  color: var(--amber-300);
-  font-size: 13px;
+  width: 64px;
+  border: 1.5px solid var(--violet-400);
+  background: var(--ink-850);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.side img {
+  width: 36px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.side img[src*="laurel"] {
+  width: 30px;
+  height: 30px;
+}
+
+/* A promotion not seen yet: a dot on the trophy, its words read. */
+.side i {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
+  border: 2px solid var(--bg);
+  border-radius: 99px;
+  background: var(--error);
+  color: transparent;
+  font-size: 1px;
+}
+
+/* As wide as its words need, not the row: the sides frame it. */
+.go {
+  flex: 0 1 180px;
+  min-width: 0;
+  gap: 2px;
+  padding: 0 12px;
+  background: var(--amber-400);
+  color: var(--ink-950);
+}
+
+.go strong {
+  font: 700 19px/1.1 var(--font-bricolage), var(--font-display);
+}
+
+/* The book and its chapter: up to two lines, then cut. */
+.go span {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  opacity: 0.75;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
-.book svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+/* While a book lies open over the room, the room's own things step back from it. */
+:global(html[data-book="open"]) .top,
+:global(html[data-book="open"]) .ways {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.book:focus-visible,
+.top,
+.ways {
+  transition: opacity 0.3s ease-out;
+}
+
+.side:focus-visible,
+.go:focus-visible,
 .gift button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

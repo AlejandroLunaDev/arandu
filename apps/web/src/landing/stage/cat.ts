@@ -47,6 +47,8 @@ export type Cat = {
   mouth: THREE.Object3D;
   /** Between his paws in the read clip, turned so an open book there faces him. */
   paws: THREE.Object3D;
+  /** Dresses him in a league's outfit (arandu-dressed.glb), or none: null, or a model without outfits. */
+  wear(league: string | null): void;
   update(pose: CatPose, dt: number, time: number): void;
   dispose(): void;
 };
@@ -77,6 +79,19 @@ const LID_UP = THREE.MathUtils.degToRad(58);
 const LID_LOW = THREE.MathUtils.degToRad(44);
 /** Seconds a blink takes, shut and open again. */
 const BLINK = 0.18;
+
+// What hangs from an outfit (a tag, a stole's end, a tassel) swings on its own bone, "dangle_<league>_<n>"
+// (blender/league/rig.py): its tip is a weight on a spring toward where the bone would point at rest, under
+// gravity, damped. In the model's metres and seconds.
+/** How far the tip sits from the bone's root, for the swing only: the mesh keeps its own size. */
+const HANG = 0.1;
+const HANG_PULL = 140;
+const HANG_DAMP = 9;
+const HANG_FALL = 5;
+/** The widest it swings from rest, so it never folds into the body. */
+const HANG_MAX = Math.cos(THREE.MathUtils.degToRad(55));
+
+type Hang = { bone: THREE.Bone; rest: THREE.Quaternion; league: string; tip: THREE.Vector3; speed: THREE.Vector3; fresh: boolean };
 
 // A black cat on a dark page: a violet rim keeps his outline. The camera is orthographic, so every
 // fragment looks straight down -Z.
@@ -119,6 +134,14 @@ export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
   });
   const furMesh = furs[0];
   if (!furMesh) throw new Error("arandu.glb has no AranduFur skinned mesh");
+  const outfits: THREE.Object3D[] = [];
+  model.traverse((o) => {
+    if (o.name.startsWith("Outfit_")) outfits.push(o);
+  });
+  for (const o of outfits) o.visible = false;
+  const hangs: Hang[] = furMesh.skeleton.bones
+    .filter((b) => b.name.startsWith("dangle_"))
+    .map((bone) => ({ bone, rest: bone.quaternion.clone(), league: bone.name.split("_")[1] ?? "", tip: new THREE.Vector3(), speed: new THREE.Vector3(), fresh: true }));
 
   // Rest orientation of every bone, in model space: the model is not placed yet.
   model.updateMatrixWorld(true);
@@ -189,13 +212,68 @@ export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
   const blink = { t: 1, next: 2.5 };
   const local = new THREE.Vector3();
   const earAxis = new THREE.Vector3();
+  let worn: string | null = null;
+  let swinging = false;
+  const at = new THREE.Vector3();
+  const aim = new THREE.Vector3();
+  const pull = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+  const swing = new THREE.Quaternion();
+  const up = new THREE.Quaternion();
   const back = AX.x.clone().negate();
+
+  const swingHangs = (dt: number) => {
+    if (!swinging) return;
+    for (const h of hangs) if (h.league === worn) h.bone.quaternion.copy(h.rest);
+    root.updateMatrixWorld(true);
+    const step = Math.min(dt, 1 / 30);
+    for (const h of hangs) {
+      if (h.league !== worn) continue;
+      const m = h.bone.matrixWorld;
+      at.setFromMatrixPosition(m);
+      aim.set(0, HANG, 0).applyMatrix4(m);
+      const length = aim.distanceTo(at);
+      if (length === 0) continue;
+      // A jump across the page (a leap, a new room) or the first frame: it starts at rest.
+      if (h.fresh || h.tip.distanceTo(aim) > length * 3) {
+        h.tip.copy(aim);
+        h.speed.set(0, 0, 0);
+        h.fresh = false;
+      }
+      const scale = length / HANG;
+      pull.subVectors(aim, h.tip).multiplyScalar(HANG_PULL).addScaledVector(h.speed, -HANG_DAMP);
+      pull.y -= HANG_FALL * scale;
+      h.speed.addScaledVector(pull, step);
+      h.tip.addScaledVector(h.speed, step);
+      // Back on its length, and no wider than HANG_MAX from where it rests.
+      aim.sub(at).divideScalar(length);
+      dir.subVectors(h.tip, at).normalize();
+      const cos = dir.dot(aim);
+      if (cos < HANG_MAX) dir.addScaledVector(aim, -cos).normalize().multiplyScalar(Math.sqrt(1 - HANG_MAX * HANG_MAX)).addScaledVector(aim, HANG_MAX);
+      h.tip.copy(at).addScaledVector(dir, length);
+      // The bone turns, in its parent's frame, as far as its tip swung in the world's.
+      swing.setFromUnitVectors(aim, dir);
+      const parent = h.bone.parent;
+      if (!parent) continue;
+      parent.getWorldQuaternion(up);
+      h.bone.quaternion.copy(up).invert().multiply(swing).multiply(up).multiply(h.rest);
+    }
+  };
 
   return {
     root,
     yaw,
     mouth,
     paws,
+    wear(league) {
+      worn = league;
+      swinging = hangs.some((h) => h.league === league);
+      for (const o of outfits) o.visible = o.name.startsWith(`Outfit_${league}_`);
+      for (const h of hangs) {
+        h.bone.quaternion.copy(h.rest);
+        h.fresh = true;
+      }
+    },
     update(p, dt, time) {
       for (const r of Object.values(rig)) if (r.clip) r.bone.quaternion.copy(r.clip);
       // A clip played once (tap, startle, stretch) takes over from the others while it runs, eased in and out at its
@@ -284,13 +362,17 @@ export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
         pose(`lidUp${side}`, [[AX.z, -LID_UP * shut]]);
         pose(`lidLow${side}`, [[AX.z, LID_LOW * shut]]);
       }
+
+      swingHangs(dt);
     },
     dispose() {
       mixer.stopAllAction();
       model.traverse((o) => {
         if (!(o instanceof THREE.Mesh)) return;
         o.geometry.dispose();
-        (o.material as THREE.Material).dispose();
+        const m = o.material as THREE.MeshStandardMaterial;
+        m.map?.dispose();
+        m.dispose();
       });
     },
   };

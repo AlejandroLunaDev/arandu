@@ -12,6 +12,23 @@ const FRAME_CREDITS = [
   { what: "UFSCar", who: "Melobozoga", license: "domínio público", href: "https://commons.wikimedia.org/wiki/File:Entrada_Sul_UFSCar.jpg" },
 ];
 
+/** The frames' photos, credited while the camera is close on them (html[data-zoom="frames"]); the Quarto shows them too. */
+export function FrameCredits() {
+  return (
+    <p className={`${styles.credits} type-small`}>
+      {FRAME_CREDITS.map(({ what, who, license, href }, i) => (
+        <Fragment key={href}>
+          {i > 0 && " · "}
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {what}: {who}, {license}
+          </a>
+        </Fragment>
+      ))}
+      {" · Wikimedia Commons"}
+    </p>
+  );
+}
+
 // The 3D layer over the landing. three.js loads in its own chunk, after the page is up, so the
 // first paint never waits for it.
 export function Stage() {
@@ -57,18 +74,7 @@ export function Stage() {
         sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
         referrerPolicy="no-referrer"
       />
-      {/* The frames' photos, credited while the camera is close on them. */}
-      <p className={`${styles.credits} type-small`}>
-        {FRAME_CREDITS.map(({ what, who, license, href }, i) => (
-          <Fragment key={href}>
-            {i > 0 && " · "}
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {what}: {who}, {license}
-            </a>
-          </Fragment>
-        ))}
-        {" · Wikimedia Commons"}
-      </p>
+      <FrameCredits />
       <button type="button" className={`${styles.back} ar-btn ar-btn--primary`} onClick={() => dispatchEvent(new Event(UNZOOM_EVENT))}>
         Voltar ao quarto
       </button>

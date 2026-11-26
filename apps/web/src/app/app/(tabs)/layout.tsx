@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { BottomNav } from "@/app-shell/bottom-nav";
+import { Dressed } from "@/app-shell/dressed";
 import { EntryGate } from "@/app-shell/entry-gate";
 import { Loading } from "@/ui/loading";
 
@@ -9,8 +10,10 @@ export default function TabsLayout({ children }: LayoutProps<"/app">) {
   return (
     <Suspense fallback={<Loading />}>
       <EntryGate>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-        <BottomNav />
+        <Dressed>
+          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <BottomNav />
+        </Dressed>
       </EntryGate>
     </Suspense>
   );

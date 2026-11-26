@@ -25,6 +25,12 @@
   padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
 }
 
+/* Every scrollbar in the app: thin and dark. Out of the base layer, where Tailwind drops a rule on every element. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-700) transparent;
+}
+
 @layer base {
   body {
     @apply bg-bg text-text type-body antialiased;

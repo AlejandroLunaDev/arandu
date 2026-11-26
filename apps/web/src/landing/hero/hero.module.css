@@ -26,6 +26,17 @@
   opacity: 1;
 }
 
+/* The way into the app: in the room, the small neon is its button; this one is read, and shows when the keyboard
+   reaches it. Without 3D it is the way in, in the card. */
+:global(html:not(.no3d)) .getApp:not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .tv[data-on-tv] {
   position: fixed;
   z-index: 6;

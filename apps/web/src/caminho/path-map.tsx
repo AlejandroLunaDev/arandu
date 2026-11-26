@@ -18,7 +18,7 @@ export function PathMap({ home, book, course, next }: { home: Home; book: BookPr
   return (
     <main className={c.map}>
       <div className={c.stats}>
-        <Link className={c.stat} href="/app/estante" aria-label="Voltar para as matérias">
+        <Link className={c.stat} href="/app" aria-label="Voltar ao quarto">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M15 6l-6 6 6 6" />
           </svg>

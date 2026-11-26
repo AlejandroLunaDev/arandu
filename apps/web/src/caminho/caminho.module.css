@@ -119,18 +119,16 @@ a.stat::after {
   pointer-events: none;
 }
 
-/* While the tower loads, Arandu's head in the middle of the stage. */
-.wait {
-  position: absolute;
-  inset: 0;
-  display: flex;
-}
-
 .stage canvas {
   position: relative;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* His bubble on his way back (tower-scene.ts), over the canvas. */
+.stage [data-say] {
+  z-index: 1;
 }
 
 .stage canvas[data-hot] {

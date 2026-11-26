@@ -1,6 +1,7 @@
 import type { Home } from "@arandu/contracts";
 import { Suspense } from "react";
 import { mine } from "@/app-shell/api";
+import { Dressed } from "@/app-shell/dressed";
 import { PathLesson } from "@/caminho/path-lesson";
 import { Loading } from "@/ui/loading";
 
@@ -15,5 +16,10 @@ export default function CapituloPage() {
 }
 
 async function Lesson() {
-  return <PathLesson wallet={(await mine<Home>("/me")).wallet} />;
+  const { wallet } = await mine<Home>("/me");
+  return (
+    <Dressed>
+      <PathLesson wallet={wallet} />
+    </Dressed>
+  );
 }
