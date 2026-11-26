@@ -26,7 +26,8 @@ const HAIKU = 'anthropic/claude-haiku-5.5';
           // generateObject sends a JSON schema, which OpenRouter passes on to the model.
           supportsStructuredOutputs: true,
         });
-        // The students are minors (LGPD): route only to providers that neither store nor train on prompts.
+        // shortcut: for the demo prompts may go to providers that store or train on them, as free models do (owner,
+        // 2026-11-26); the people may be minors (LGPD), so put `provider: { data_collection: 'deny' }` back before real users.
         // Reasoning off: Haiku 5.5's thinking spent 307 of 400 output tokens and cut replies mid-sentence.
         // A model's own providerOptions replace these defaults (not merged), so each model repeats them.
         // With more than one model OpenRouter falls back through `models` itself, within the same request.
@@ -34,7 +35,6 @@ const HAIKU = 'anthropic/claude-haiku-5.5';
           infer: true,
         });
         const routing = {
-          provider: { data_collection: 'deny' },
           reasoning: { enabled: false },
           ...(fallbacks.length > 0 && { models: [id, ...fallbacks] }),
         };
