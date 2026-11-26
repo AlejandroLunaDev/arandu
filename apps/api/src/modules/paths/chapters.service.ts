@@ -5,12 +5,15 @@ import type {
   Lesson,
   LessonExercise,
   LessonResult,
+  Wallet,
 } from '@arandu/contracts';
 import { AiOutputError, AiService } from '@nestjs/ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 import type { Env } from '../../core/config/env.js';
+import { CONTINUE_PRICE, LESSON_PRICE } from '../progress/progress.logic.js';
+import { ProgressRepository } from '../progress/progress.repository.js';
 import { ProgressService } from '../progress/progress.service.js';
 import {
   cardsInstructions,
@@ -22,11 +25,15 @@ import {
   type Composed,
   composeChapter,
   composeLesson,
-  composeReview,
   type PieceRef,
 } from './composer.js';
 import { type Page, searchPages } from './firecrawl.js';
-import { LESSONS } from './lessons.logic.js';
+import {
+  LESSON_LIVES,
+  lessonCards,
+  lessonOpen,
+  LESSONS,
+} from './lessons.logic.js';
 import {
   chapterNotFound,
   chapterUnavailable,
@@ -162,6 +169,7 @@ export class ChaptersService {
     private readonly paths: PathsRepository,
     private readonly progress: ProgressService,
     private readonly config: ConfigService<Env, true>,
+    private readonly wallet: ProgressRepository,
   ) {}
 
   /**
@@ -263,36 +271,61 @@ export class ChaptersService {
   }
 
   /**
-   * One lesson of a chapter for this person (#123), composed from its pieces: lessons 1-3 recognise, apply and solve;
-   * lesson 4 brings back what they missed in another kind. 409 before the lessons ahead of it are done.
+   * Enters one lesson of a chapter for this person (#123, #145), composed from its pieces: lessons 1-3 recognise, apply
+   * and solve. 409 `lesson_locked` before it opens; otherwise it costs LESSON_PRICE peixinhos, 409 `not_enough_peixinhos`
+   * with too few. Each lesson brings its share of the chapter's cards.
    */
-  async lesson(
+  async start(
     userId: string,
     disciplineId: number,
     topic: number,
     index: number,
   ): Promise<Lesson> {
     const { chapter, topics } = await this.opened(disciplineId, topic);
-    const done = await this.paths.lessons(userId, disciplineId, topic);
-    if (
-      index > done.length + 1 &&
-      !(await this.paths.chapterFinished(userId, disciplineId, topic))
-    )
-      throw lessonLocked();
-    const composed = await this.composed(userId, chapter, topics, index, done);
+    await this.mustBeOpen(userId, disciplineId, topic, index);
+    const composed = await this.composed(userId, chapter, topics, index);
+    await this.wallet.pay(userId, 'peixinhos', LESSON_PRICE);
     return {
       index,
       total: LESSONS,
-      cards: index === 1 ? chapter.cards : null,
+      cards: lessonCards(chapter.cards, index),
       exercises: composed.map((c): LessonExercise => ({
         ...c.exercise,
         topic: c.ref.topic,
         index: c.ref.index,
       })),
+      lives: LESSON_LIVES,
     };
   }
 
-  /** Records a lesson; only the misses that were in it count, each with the kind it was missed in. Lesson 4 finishes the chapter. */
+  /** Goes on with a lesson after its last life, for CONTINUE_PRICE of the currency: 409 `not_enough_currency`. */
+  async continue(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    index: number,
+  ): Promise<Wallet> {
+    await this.opened(disciplineId, topic);
+    await this.mustBeOpen(userId, disciplineId, topic, index);
+    return this.wallet.pay(userId, 'currency', CONTINUE_PRICE);
+  }
+
+  /** 409 `lesson_locked` while the lesson is not open, unless the chapter was finished (its lessons are practice). */
+  private async mustBeOpen(
+    userId: string,
+    disciplineId: number,
+    topic: number,
+    index: number,
+  ): Promise<void> {
+    const done = await this.paths.lessons(userId, disciplineId, topic);
+    if (
+      !lessonOpen(index, new Set(done.map((d) => d.lesson))) &&
+      !(await this.paths.chapterFinished(userId, disciplineId, topic))
+    )
+      throw lessonLocked();
+  }
+
+  /** Records a lesson; only the misses that were in it count, each with the kind it was missed in. Lesson 3 finishes the chapter. */
   async finishLesson(
     userId: string,
     disciplineId: number,
@@ -301,9 +334,8 @@ export class ChaptersService {
     missed: { topic: number; index: number }[],
   ): Promise<LessonResult> {
     const { chapter, topics } = await this.opened(disciplineId, topic);
-    const done = await this.paths.lessons(userId, disciplineId, topic);
     const inLesson = new Map(
-      (await this.composed(userId, chapter, topics, index, done)).map((c) => [
+      (await this.composed(userId, chapter, topics, index)).map((c) => [
         `${c.ref.topic}:${c.ref.index}`,
         c.ref,
       ]),
@@ -336,26 +368,15 @@ export class ChaptersService {
     chapter: StoredChapter,
     topics: string[],
     index: number,
-    done: { lesson: number; missed: PieceRef[] }[],
   ): Promise<Composed[]> {
     const disciplineId = chapter.discipline.id;
     const topic = chapter.topic.index;
-    const seed = `${userId}:${disciplineId}:${topic}`;
-    const own = { topic, pieces: chapter.pieces ?? [] };
     const subject = await this.paths.subjectPieces(disciplineId, topics);
-    if (index < LESSONS)
-      return composeLesson(
-        own,
-        subject.filter((c) => c.topic !== topic),
-        index,
-        seed,
-      );
-    return composeReview(
-      own,
-      subject,
-      done.filter((d) => d.lesson < LESSONS).flatMap((d) => d.missed),
-      await this.paths.missedElsewhere(userId, disciplineId, topic),
-      seed,
+    return composeLesson(
+      { topic, pieces: chapter.pieces ?? [] },
+      subject.filter((c) => c.topic !== topic),
+      index,
+      `${userId}:${disciplineId}:${topic}`,
     );
   }
 

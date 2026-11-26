@@ -105,7 +105,7 @@ export const FREE_TRACK: SeasonReward[] = [
   { kind: 'marcador' },
   { kind: 'peixinhos', amount: 40 },
   { kind: 'caixa' },
-  { kind: 'novelos_cheios' },
+  { kind: 'peixinhos', amount: 50 },
   { kind: 'peixinhos', amount: 60 },
   { kind: 'caixa' },
 ];
@@ -118,18 +118,22 @@ export const PLUS_TRACK = [
   { level: 8, item: 'chapeu_de_inverno' },
 ];
 
-/** What a caixa holds: 15-60 peixinhos, a page marker 35%, full novelos 25%, the room plant 12%. */
+/**
+ * What a caixa holds (#145): 2-8 peixinhos, 1-3 of the currency, 1-5 sabedoria, a page marker 35%, the room plant 12%.
+ * Every finished lesson gives one, so its peixinhos stay under a lesson's price: the energy still runs out.
+ */
 export function rollCaixa(
   roll: (max: number) => number = randomInt,
 ): CaixaContents {
   return {
-    peixinhos: 15 + roll(46),
+    peixinhos: 2 + roll(7),
+    currency: 1 + roll(3),
+    sabedoria: 1 + roll(5),
     marcador: roll(100) < 35,
-    novelosCheios: roll(100) < 25,
     roomItem: roll(100) < 12 ? 'planta' : null,
   };
 }
 
-/** The page marker's price; a novelo's is NOVELO_PRICES (progress.logic). */
+/** The page marker's price, in peixinhos. */
 export const SHOP = { marcador: 50 } as const;
 export const MAX_MARCADORES = 2;

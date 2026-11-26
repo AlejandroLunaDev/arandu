@@ -18,12 +18,13 @@ export const CHAPTER_PEIXINHOS = 10;
 import {
   asPerson,
   madeChapters,
-  sabedoriaRows,
+  studyRows,
   TIME_ZONE,
+  topUp,
 } from '../progress/progress.repository.js';
 import { one } from '../../core/database/one.js';
 import type { ChapterPieces, PieceRef } from './composer.js';
-import { LESSON_SABEDORIA, LESSONS } from './lessons.logic.js';
+import { LESSON_SABEDORIA, LESSONS, lessonOpen } from './lessons.logic.js';
 import type { Piece, StoredChapter } from './pieces.js';
 import { lessonLocked } from './paths.errors.js';
 
@@ -254,25 +255,10 @@ export class PathsRepository {
     return row !== undefined;
   }
 
-  /** What the person missed in lessons 1-3 of the subject's other chapters, newest first. */
-  async missedElsewhere(
-    userId: string,
-    disciplineId: number,
-    topic: number,
-  ): Promise<PieceRef[]> {
-    const rows = await this.sql<{ missed: PieceRef[] }[]>`
-      select missed from public.lesson_results
-      where user_id = ${userId} and discipline_id = ${disciplineId} and topic <> ${topic} and lesson < ${LESSONS}
-        and jsonb_array_length(missed) > 0
-      order by completed_at desc limit 20`;
-    return rows.flatMap((r) => r.missed);
-  }
-
   /**
-   * Records a finished lesson, in order: 409 `lesson_locked` while an earlier one is not done (none once the chapter
-   * was finished the old way). The first finish gives LESSON_SABEDORIA, none once the chapter is finished; lesson 4
-   * also finishes the chapter, with its peixinhos. The patinha is the day's first lesson or chapter. Achievements are added
-   * by the caller.
+   * Records a finished lesson: 409 `lesson_locked` before it opens (lessonOpen; never once the chapter was finished in
+   * one pass). The first finish gives LESSON_SABEDORIA (none once the chapter is finished) and a caixa (#145); lesson 3
+   * also finishes the chapter. The patinha is the day's first lesson or chapter. Achievements are added by the caller.
    */
   async finishLesson(
     userId: string,
@@ -285,17 +271,18 @@ export class PathsRepository {
       this.sql.begin(async (tx) => {
         await tx`select pg_advisory_xact_lock(hashtext(${userId}))`;
         const { done, finished, studied } = one(
-          await tx<{ done: number; finished: boolean; studied: boolean }[]>`
+          await tx<{ done: number[]; finished: boolean; studied: boolean }[]>`
           select
-            (select count(*)::int from public.lesson_results
+            array(select lesson::int from public.lesson_results
               where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}) as done,
             exists (select 1 from public.chapter_results
               where user_id = ${userId} and discipline_id = ${disciplineId} and topic = ${topic}) as finished,
-            exists (select 1 from ${sabedoriaRows(tx)} s
+            exists (select 1 from ${studyRows(tx)} s
               where s.user_id = ${userId}
                 and (s.completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date) as studied`,
         );
-        if (!finished && lesson > done + 1) throw lessonLocked();
+        if (!finished && !lessonOpen(lesson, new Set(done)))
+          throw lessonLocked();
         // A chapter already finished (in one pass or in lessons) gave its sabedoria: its lessons are practice.
         const sabedoria = finished ? 0 : LESSON_SABEDORIA;
         const inserted = await tx`
@@ -305,37 +292,30 @@ export class PathsRepository {
         if (!inserted.length)
           return {
             sabedoria: 0,
-            peixinhos: 0,
             patinha: false,
+            caixaId: null,
             chapterDone: lesson === LESSONS,
           };
 
-        let peixinhos = 0;
+        const [caixa] = await tx<{ id: number }[]>`
+          insert into public.caixas (user_id, reason) values (${userId}, ${`lesson:${disciplineId}:${topic}:${lesson}`})
+          on conflict do nothing returning id::int`;
         if (lesson === LESSONS) {
-          // The chapter's mistakes are the distinct exercises missed in lessons 1-3; the review plays the relâmpago.
+          // The chapter's mistakes are the distinct exercises missed in its lessons.
           const { mistakes } = one(
             await tx<{ mistakes: number }[]>`
             select count(distinct m.value)::int as mistakes from public.lesson_results r, jsonb_array_elements(r.missed) m
-            where r.user_id = ${userId} and r.discipline_id = ${disciplineId} and r.topic = ${topic}
-              and r.lesson < ${LESSONS}`,
+            where r.user_id = ${userId} and r.discipline_id = ${disciplineId} and r.topic = ${topic}`,
           );
-          const relampago = mistakes > 0 ? Math.min(missed.length, 100) : null;
-          const chapter = await tx`
-            insert into public.chapter_results (user_id, discipline_id, topic, mistakes, relampago_mistakes, sabedoria)
-            values (${userId}, ${disciplineId}, ${topic}, ${Math.min(mistakes, 100)}, ${relampago}, 0)
-            on conflict do nothing returning 1`;
-          if (chapter.length) {
-            await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
-            await tx`
-              update public.wallets set peixinhos = peixinhos + ${CHAPTER_PEIXINHOS}, updated_at = now()
-              where user_id = ${userId}`;
-            peixinhos = CHAPTER_PEIXINHOS;
-          }
+          await tx`
+            insert into public.chapter_results (user_id, discipline_id, topic, mistakes, sabedoria)
+            values (${userId}, ${disciplineId}, ${topic}, ${Math.min(mistakes, 100)}, 0)
+            on conflict do nothing`;
         }
         return {
           sabedoria,
-          peixinhos,
           patinha: !studied,
+          caixaId: caixa?.id ?? null,
           chapterDone: lesson === LESSONS,
         };
       }),
@@ -369,12 +349,14 @@ export class PathsRepository {
           return { sabedoria: 0, peixinhos: 0, patinha: false };
 
         await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
+        // The day's top-up first, so these peixinhos are not swallowed by it later.
+        await topUp(tx, userId);
         await tx`
           update public.wallets set peixinhos = peixinhos + ${CHAPTER_PEIXINHOS}, updated_at = now()
           where user_id = ${userId}`;
         const { today } = one(
           await tx<{ today: number }[]>`
-          select count(*)::int as today from ${sabedoriaRows(tx)} s
+          select count(*)::int as today from ${studyRows(tx)} s
           where s.user_id = ${userId}
             and (s.completed_at at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`,
         );

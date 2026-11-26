@@ -14,7 +14,7 @@ import { closingInstructions } from './closing.prompt.js';
 import { achievementsOf, addDays } from './progress.logic.js';
 import { ProgressRepository } from './progress.repository.js';
 import { subjectNotFound } from './progress.errors.js';
-import { LESSONS } from '../paths/lessons.logic.js';
+import { lessonOpen } from '../paths/lessons.logic.js';
 
 // The suggestion comes first, so the model decides the way before it writes about it.
 const closingDraft = z.object({
@@ -215,17 +215,37 @@ In their words: ${feeling.text ?? '-'}`;
         .filter((f) => f.disciplineId === disciplineId)
         .map((f) => f.topic),
     );
-    const lessons = await this.progress.lessonsDone(userId, disciplineId);
+    const lessonsDone = await this.progress.lessonsDone(userId, disciplineId);
+    const lessons = (
+      state: (lesson: 1 | 2 | 3) => 'done' | 'open' | 'locked',
+    ) => ([1, 2, 3] as const).map((index) => ({ index, state: state(index) }));
     let currentFound = false;
     return {
       discipline: { id: discipline.id, name: discipline.name },
       chapters: discipline.topics.map((text, index) => {
         if (done.has(index))
-          return { index, text, state: 'done', lessonsDone: LESSONS };
-        const lessonsDone = lessons.get(index) ?? 0;
-        if (currentFound) return { index, text, state: 'locked', lessonsDone };
+          return { index, text, state: 'done', lessons: lessons(() => 'done') };
+        if (currentFound)
+          return {
+            index,
+            text,
+            state: 'locked',
+            lessons: lessons(() => 'locked'),
+          };
         currentFound = true;
-        return { index, text, state: 'current', lessonsDone };
+        const finished = lessonsDone.get(index) ?? new Set<number>();
+        return {
+          index,
+          text,
+          state: 'current',
+          lessons: lessons((n) =>
+            finished.has(n)
+              ? 'done'
+              : lessonOpen(n, finished)
+                ? 'open'
+                : 'locked',
+          ),
+        };
       }),
     };
   }

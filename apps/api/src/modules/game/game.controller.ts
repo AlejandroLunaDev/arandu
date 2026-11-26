@@ -27,7 +27,7 @@ import {
 } from './game.errors.js';
 
 const level = z.coerce.number().int().min(1).max(LEVELS);
-const shopItem = z.enum(['novelos', 'marcador']);
+const shopItem = z.enum(['marcador']);
 const wardrobeUpdate = z
   .object({
     wearing: z
@@ -93,13 +93,13 @@ export class GameController {
     return this.game.open(userId, caixaId);
   }
 
-  /** K1: full novelos or a page marker, for peixinhos. */
+  /** K1: a page marker, for peixinhos. */
   @Post('shop/:item')
   @HttpCode(200)
   buy(
     @UserId() userId: string,
     @Param('item', param(shopItem, shopItemNotFound))
-    item: 'novelos' | 'marcador',
+    item: 'marcador',
   ): Promise<Wallet> {
     return this.game.buy(userId, item);
   }

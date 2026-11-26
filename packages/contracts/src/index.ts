@@ -393,29 +393,35 @@ export type Exercise = { mode: ExerciseMode; why: string } & (
 export interface ChapterContent {
   discipline: { id: number; name: string };
   topic: { index: number; text: string; total: number };
-  /** 1-3. */
+  /** 3 to 5 (a few early chapters have fewer). */
   cards: ChapterCard[];
   exercises: Exercise[];
 }
 
 /**
- * Where an exercise comes from: `index` is the chapter piece it tests (a concept, a statement, a problem...). Lesson 4
- * mixes in misses from earlier chapters, so /explain goes to `topic`. Report a miss with this `topic` and `index`.
+ * Where an exercise comes from: `index` is the chapter piece it tests (a concept, a statement, a problem...), in the
+ * chapter `topic`. Report a miss with this `topic` and `index`.
  */
 export type LessonExercise = Exercise & { topic: number; index: number };
 
 /**
- * GET /chapters/:disciplineId/:topic/lessons/:lesson (1-4): one lesson of a chapter, for this person, built from the
- * chapter's pieces: 1 recognises, 2 applies, 3 solves and produces, 4 brings back what they missed in another kind.
- * The same person gets the same lesson again; another person gets another variant. 409 `lesson_locked` before the
- * lessons ahead of it are done.
+ * POST /chapters/:disciplineId/:topic/lessons/:lesson/start (1-3): enters one lesson of a chapter, for this person,
+ * built from the chapter's pieces: 1 recognises, 2 applies, 3 solves and produces. Entering costs `Wallet.lessonPrice`
+ * peixinhos, every time: 409 `not_enough_peixinhos` with too few, and nothing is spent. Lessons 1 and 2 open in any
+ * order, 3 once both are done: 409 `lesson_locked` before. The same person gets the same lesson again; another person
+ * gets another variant. Each lesson is a full pass: its cards, its exercises, then its misses again until right.
  */
 export interface Lesson {
   index: number;
-  total: 4;
-  /** The chapter's cards, in lesson 1 only; GET /chapters/:disciplineId/:topic has them to re-read at any time. */
-  cards: ChapterCard[] | null;
+  total: 3;
+  /** This lesson's share of the chapter's cards (all of them when the chapter has fewer than 3). */
+  cards: ChapterCard[];
   exercises: LessonExercise[];
+  /**
+   * Mistakes the lesson allows: each one costs a life, and the last one loses the lesson's progress, unless the person
+   * goes on with POST /chapters/:disciplineId/:topic/lessons/:lesson/continue.
+   */
+  lives: number;
 }
 
 /** POST /chapters/:disciplineId/:topic/lessons/:lesson/result: the exercises missed at least once. */
@@ -423,8 +429,15 @@ export interface LessonResultRequest {
   missed: { topic: number; index: number }[];
 }
 
-/** A lesson's rewards (0 on a replay); lesson 4 also finishes the chapter, with its peixinhos. */
-export interface LessonResult extends ChapterResult {
+/** A lesson's rewards; a replay gives none. Lesson 3 also finishes the chapter. */
+export interface LessonResult {
+  /** Sabedoria this finish gave: 0 on a replay, or once the chapter was finished. */
+  sabedoria: number;
+  /** The day's first lesson or chapter: a new patinha. */
+  patinha: boolean;
+  /** The caixa this lesson's first finish earned (open it with POST /me/caixas/:id/open); null on a replay. */
+  caixaId: number | null;
+  achievements: AchievementCode[];
   chapterDone: boolean;
 }
 
@@ -477,16 +490,20 @@ export interface ChapterResult {
   achievements: AchievementCode[];
 }
 
-/** Novelos, peixinhos and page markers (all amounts are demo values). */
+/** Peixinhos, the currency and page markers (all amounts are demo values). */
 export interface Wallet {
-  novelos: number;
-  maxNovelos: number;
-  /** When the next novelo comes back; null when full. */
-  nextNoveloAt: string | null;
+  /** The energy: entering a lesson costs `lessonPrice`. Caixas and the season add more. */
   peixinhos: number;
+  /** Every São Paulo day the peixinhos are topped up to this; more than this is kept. */
+  dailyPeixinhos: number;
+  /** The next top-up: the next São Paulo midnight. */
+  nextRefillAt: string;
+  lessonPrice: number;
+  /** The game's currency (its name is not chosen yet): it comes in caixas. */
+  currency: number;
+  /** Currency to go on with a lesson after its last life (POST /chapters/:d/:t/lessons/:n/continue). */
+  continuePrice: number;
   marcadores: number;
-  /** Peixinhos that refill the novelos (POST /me/shop/novelos). */
-  refillPrice: number;
 }
 
 export interface Achievement {
@@ -523,8 +540,8 @@ export interface BookProgress {
     index: number;
     text: string;
     state: "done" | "current" | "locked";
-    /** Lessons of the chapter done, 0-4: the circle fills one quarter each; 4 when done. */
-    lessonsDone: number;
+    /** The chapter's three lessons: all done in a done chapter, all locked in a locked one. */
+    lessons: { index: 1 | 2 | 3; state: "done" | "open" | "locked" }[];
   }[];
 }
 
@@ -554,7 +571,6 @@ export interface League {
 export type SeasonReward =
   | { kind: "peixinhos"; amount: number }
   | { kind: "caixa" }
-  | { kind: "novelos_cheios" }
   | { kind: "marcador" };
 
 /** GET /me/season (L3): a level every 50 sabedoria of the season, 8 levels. Only studying moves it. */
@@ -577,15 +593,16 @@ export interface Season {
 /** What a caixa held, rolled on the server when opened (L4). */
 export interface CaixaContents {
   peixinhos: number;
+  currency: number;
+  sabedoria: number;
   marcador: boolean;
-  novelosCheios: boolean;
   /** A room item, e.g. "planta"; null when none. */
   roomItem: string | null;
 }
 
 export interface Caixa {
   id: number;
-  /** Why it was earned: "season:1:2", "promotion:veterano" or "demo_finished". */
+  /** Why it was earned: "lesson:<disciplineId>:<topic>:<lesson>", "season:1:2", "promotion:veterano" or "demo_finished". */
   reason: string;
   createdAt: string;
   openedAt: string | null;

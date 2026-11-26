@@ -10,6 +10,7 @@ import type {
   ChapterContent,
   ChapterResult,
   ChapterResultRequest,
+  Wallet,
 } from '@arandu/contracts';
 import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -105,18 +106,36 @@ export class PathsController {
     );
   }
 
-  /** P1-P2 (#123): one of the chapter's four lessons, for this person. */
-  @Get('chapters/:disciplineId/:topic/lessons/:lesson')
-  lesson(
+  /** P1-P2 (#123, #145): enters one of the chapter's three lessons, for this person, paying its peixinhos. */
+  @Post('chapters/:disciplineId/:topic/lessons/:lesson/start')
+  @HttpCode(200)
+  start(
     @UserId() userId: string,
     @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
     @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
     @Param('lesson', param(lessonIndex, chapterNotFound)) lessonNumber: number,
   ): Promise<Lesson> {
-    return this.chapters.lesson(userId, disciplineId, topicIndex, lessonNumber);
+    return this.chapters.start(userId, disciplineId, topicIndex, lessonNumber);
   }
 
-  /** A lesson is done; lesson 4 finishes the chapter (O19). */
+  /** The lesson's last life is gone: going on costs the currency. */
+  @Post('chapters/:disciplineId/:topic/lessons/:lesson/continue')
+  @HttpCode(200)
+  continue(
+    @UserId() userId: string,
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, chapterNotFound)) lessonNumber: number,
+  ): Promise<Wallet> {
+    return this.chapters.continue(
+      userId,
+      disciplineId,
+      topicIndex,
+      lessonNumber,
+    );
+  }
+
+  /** A lesson is done; lesson 3 finishes the chapter (O19). */
   @Post('chapters/:disciplineId/:topic/lessons/:lesson/result')
   @HttpCode(200)
   finishLesson(

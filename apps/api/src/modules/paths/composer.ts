@@ -1,5 +1,5 @@
 import type { Exercise } from '@arandu/contracts';
-import { EARLIER_MISSES, REVIEW_WHEN_CLEAN, seeded } from './lessons.logic.js';
+import { seeded } from './lessons.logic.js';
 import type { Piece } from './pieces.js';
 import { instanceOf } from './problem.js';
 
@@ -95,23 +95,6 @@ export function tapSegments(
   }
   return null;
 }
-
-/** The exercises one piece can be played in, as many as it has: the review picks one it was not missed in. */
-const KINDS: Record<Piece['type'], Kind[]> = {
-  conceito: ['escolha_uma', 'complete_a_frase'],
-  afirmacao: [
-    'escolha_a_frase_certa',
-    'toque_no_trecho',
-    'verdadeiro_ou_falso',
-  ],
-  caso: ['escolha_uma'],
-  classificacao: ['separe_nas_cestas'],
-  sequencia: ['ordene'],
-  frase: ['monte_a_frase'],
-  pergunta: ['explique_para_o_arandu'],
-  problema: ['resolva'],
-  codigo: ['ordene', 'complete_a_frase'],
-};
 
 /** Builds exercises of one chapter, with the concepts of the subject's other chapters as extra wrong options. */
 class Builder {
@@ -430,70 +413,4 @@ export function composeChapter(
   return [1, 2, 3].flatMap((lesson) =>
     composeLesson(chapter, others, lesson, seed).map((c) => c.exercise),
   );
-}
-
-const key = (r: PieceRef) => `${r.topic}:${r.index}`;
-
-/**
- * Lesson 4: each piece missed in this chapter, then up to EARLIER_MISSES missed in the subject's earlier chapters,
- * each played in a kind it was not missed in. A piece with one kind (a case, baskets, steps, a sentence, a problem)
- * comes back in that kind with new options, or new values for a problem. Nothing missed: REVIEW_WHEN_CLEAN pieces of
- * the chapter, picked by the seed.
- */
-export function composeReview(
-  chapter: ChapterPieces,
-  subject: ChapterPieces[],
-  missedHere: PieceRef[],
-  missedEarlier: PieceRef[],
-  seed: string,
-): Composed[] {
-  const random = seeded(`${seed}:review`);
-  const byTopic = new Map(subject.map((c) => [c.topic, c]));
-  byTopic.set(chapter.topic, chapter);
-  const seen = new Set<string>();
-  const once = (refs: PieceRef[]) =>
-    refs.filter((r) => !seen.has(key(r)) && seen.add(key(r)));
-
-  const here = once(missedHere.filter((r) => r.topic === chapter.topic));
-  const refs: PieceRef[] = here.length
-    ? here
-    : shuffle(
-        chapter.pieces
-          .map((piece, index) => ({
-            topic: chapter.topic,
-            index,
-            type: piece.type,
-          }))
-          .filter((r) => r.type !== 'pergunta'),
-        random,
-      ).slice(0, REVIEW_WHEN_CLEAN);
-  const earlier = once(
-    missedEarlier.filter((r) => r.topic !== chapter.topic),
-  ).slice(0, EARLIER_MISSES);
-
-  const out: Composed[] = [];
-  for (const ref of [...refs, ...earlier]) {
-    const owner = byTopic.get(ref.topic);
-    const piece = owner?.pieces[ref.index];
-    if (!owner || !piece) continue;
-    const others = subject.filter((c) => c.topic !== owner.topic);
-    const b = new Builder(owner, others, random);
-    const kinds = KINDS[piece.type];
-    // Another kind first; the same one (new options, new values) when it has no other.
-    const order = [
-      ...shuffle(
-        kinds.filter((k) => k !== ref.kind),
-        random,
-      ),
-      ...kinds.filter((k) => k === ref.kind),
-    ];
-    for (const kind of order) {
-      const played = b.play({ piece, index: ref.index }, kind);
-      if (played) {
-        out.push(played);
-        break;
-      }
-    }
-  }
-  return out;
 }

@@ -15,12 +15,13 @@ const finish = (day: string, topic: number, disciplineId = 7): Finish => ({
 });
 
 const wallet = {
-  novelos: 3,
-  maxNovelos: 3,
-  nextNoveloAt: null,
-  peixinhos: 0,
+  peixinhos: 50,
+  dailyPeixinhos: 50,
+  nextRefillAt: '2026-03-11T03:00:00.000Z',
+  lessonPrice: 10,
+  currency: 0,
+  continuePrice: 5,
   marcadores: 0,
-  refillPrice: 15,
 };
 const discipline = { id: 7, name: 'Cálculo', topics: ['a', 'b', 'c'] };
 
@@ -206,15 +207,43 @@ describe('ProgressService', () => {
       ]);
     });
 
-    it('counts lessons done per chapter: 4 when the chapter is done, 0 when unknown', async () => {
+    const states = (chapter: { lessons: { state: string }[] } | undefined) =>
+      chapter?.lessons.map((l) => l.state);
+
+    it('gives each lesson its state: all done in a done chapter, all locked in a locked one', async () => {
       repo.finishes!.mockResolvedValue([finish('2026-03-09', 0)]);
-      repo.lessonsDone!.mockResolvedValue(new Map([[1, 2]]));
+      repo.lessonsDone!.mockResolvedValue(new Map([[2, new Set([1])]]));
 
       const { chapters } = await service.book('u', 7);
 
       expect(repo.lessonsDone).toHaveBeenCalledWith('u', 7);
-      expect(chapters.map((s) => s.lessonsDone)).toEqual([4, 2, 0]);
+      expect(chapters[0]?.lessons).toEqual([
+        { index: 1, state: 'done' },
+        { index: 2, state: 'done' },
+        { index: 3, state: 'done' },
+      ]);
+      expect(states(chapters[1])).toEqual(['open', 'open', 'locked']);
+      // A locked chapter's lessons stay locked, whatever was played in it.
+      expect(states(chapters[2])).toEqual(['locked', 'locked', 'locked']);
     });
+
+    it.each([
+      [[1], ['done', 'open', 'locked']],
+      [[2], ['open', 'done', 'locked']],
+      [
+        [1, 2],
+        ['done', 'done', 'open'],
+      ],
+    ])(
+      'opens lesson 3 only once 1 and 2 are done (done: %j)',
+      async (done, expected) => {
+        repo.lessonsDone!.mockResolvedValue(new Map([[0, new Set(done)]]));
+
+        const { chapters } = await service.book('u', 7);
+
+        expect(states(chapters[0])).toEqual(expected);
+      },
+    );
 
     it('has no current when all are done', async () => {
       repo.finishes!.mockResolvedValue(

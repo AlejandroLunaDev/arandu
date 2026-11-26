@@ -4,7 +4,6 @@ import {
   type ChapterPieces,
   composeChapter,
   composeLesson,
-  composeReview,
   tapSegments,
 } from './composer.js';
 import type { Piece } from './pieces.js';
@@ -257,67 +256,6 @@ describe('composeChapter', () => {
 
     expect(conceptChoices([])).toBe(0);
     expect(conceptChoices([other])).toBeGreaterThan(0);
-  });
-});
-
-describe('composeReview', () => {
-  it('brings a missed piece back in a kind it was not missed in', () => {
-    const review = composeReview(
-      chapter,
-      [chapter, other],
-      [{ topic: 2, index: 0, kind: 'escolha_uma' }],
-      [],
-      's',
-    );
-    expect(review).toHaveLength(1);
-    expect(review[0]!.ref).toEqual({
-      topic: 2,
-      index: 0,
-      kind: 'complete_a_frase',
-    });
-  });
-
-  it('brings a missed problem back with the same kind, as a new play', () => {
-    const review = composeReview(
-      chapter,
-      [chapter],
-      [{ topic: 2, index: 8, kind: 'resolva' }],
-      [],
-      's',
-    );
-    expect(kinds(review)).toEqual(['resolva']);
-  });
-
-  it('adds up to two misses of earlier chapters, each once', () => {
-    const earlier = [
-      { topic: 0, index: 0, kind: 'escolha_uma' as const },
-      { topic: 0, index: 0, kind: 'escolha_uma' as const },
-      { topic: 0, index: 1, kind: 'verdadeiro_ou_falso' as const },
-    ];
-    const review = composeReview(
-      chapter,
-      [chapter, other],
-      [{ topic: 2, index: 3 }],
-      earlier,
-      's',
-    );
-    expect(review.map((c) => `${c.ref.topic}:${c.ref.index}`)).toEqual([
-      '2:3',
-      '0:0',
-      '0:1',
-    ]);
-  });
-
-  it('takes three pieces of the chapter when nothing was missed, never the open question', () => {
-    const review = composeReview(chapter, [chapter], [], [], 's');
-    expect(review).toHaveLength(3);
-    expect(kinds(review)).not.toContain('explique_para_o_arandu');
-  });
-
-  it('skips a miss whose chapter is gone', () => {
-    expect(
-      composeReview(chapter, [chapter], [], [{ topic: 5, index: 0 }], 's'),
-    ).toHaveLength(3);
   });
 });
 

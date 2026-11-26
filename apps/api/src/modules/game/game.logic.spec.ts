@@ -9,6 +9,7 @@ import {
   rollCaixa,
   seasonOf,
 } from './game.logic.js';
+import { LESSON_PRICE } from '../progress/progress.logic.js';
 
 describe('rivals', () => {
   it('is deterministic for the same rank and monday', () => {
@@ -95,45 +96,52 @@ describe('levelOf', () => {
 });
 
 describe('rollCaixa', () => {
-  /** Answers each roll in the order rollCaixa asks: peixinhos, marcador, novelos, planta. */
+  /** Answers each roll in the order rollCaixa asks: peixinhos, currency, sabedoria, marcador, planta. */
   const rolls = (...values: number[]) => {
     const queue = [...values];
     return vi.fn((_max: number) => queue.shift() ?? 0);
   };
 
-  it('gives 15 peixinhos at the low extreme and 60 at the high one', () => {
-    expect(rollCaixa(rolls(0, 99, 99, 99)).peixinhos).toBe(15);
-    expect(rollCaixa(rolls(45, 99, 99, 99)).peixinhos).toBe(60);
+  it('gives 2-8 peixinhos, 1-3 currency and 1-5 sabedoria at the extremes', () => {
+    expect(rollCaixa(rolls(0, 0, 0, 99, 99))).toMatchObject({
+      peixinhos: 2,
+      currency: 1,
+      sabedoria: 1,
+    });
+    expect(rollCaixa(rolls(6, 2, 4, 99, 99))).toMatchObject({
+      peixinhos: 8,
+      currency: 3,
+      sabedoria: 5,
+    });
   });
 
-  it('asks for 46 values for peixinhos and 100 for each chance', () => {
-    const roll = rolls(0, 0, 0, 0);
+  it('asks for 7, 3 and 5 values for the amounts and 100 for each chance', () => {
+    const roll = rolls(0, 0, 0, 0, 0);
 
     rollCaixa(roll);
 
-    expect(roll.mock.calls.map(([max]) => max)).toEqual([46, 100, 100, 100]);
+    expect(roll.mock.calls.map(([max]) => max)).toEqual([7, 3, 5, 100, 100]);
   });
 
   it('gives a marcador below 35 only', () => {
-    expect(rollCaixa(rolls(0, 34, 99, 99)).marcador).toBe(true);
-    expect(rollCaixa(rolls(0, 35, 99, 99)).marcador).toBe(false);
-  });
-
-  it('gives full novelos below 25 only', () => {
-    expect(rollCaixa(rolls(0, 99, 24, 99)).novelosCheios).toBe(true);
-    expect(rollCaixa(rolls(0, 99, 25, 99)).novelosCheios).toBe(false);
+    expect(rollCaixa(rolls(0, 0, 0, 34, 99)).marcador).toBe(true);
+    expect(rollCaixa(rolls(0, 0, 0, 35, 99)).marcador).toBe(false);
   });
 
   it('gives the planta below 12 only', () => {
-    expect(rollCaixa(rolls(0, 99, 99, 11)).roomItem).toBe('planta');
-    expect(rollCaixa(rolls(0, 99, 99, 12)).roomItem).toBeNull();
+    expect(rollCaixa(rolls(0, 0, 0, 99, 11)).roomItem).toBe('planta');
+    expect(rollCaixa(rolls(0, 0, 0, 99, 12)).roomItem).toBeNull();
   });
 
-  it('stays inside the ranges with the real random source', () => {
+  it('keeps its peixinhos under a lesson price with the real random source', () => {
     for (let i = 0; i < 200; i++) {
-      const { peixinhos } = rollCaixa();
-      expect(peixinhos).toBeGreaterThanOrEqual(15);
-      expect(peixinhos).toBeLessThanOrEqual(60);
+      const { peixinhos, currency, sabedoria } = rollCaixa();
+      expect(peixinhos).toBeGreaterThanOrEqual(2);
+      expect(peixinhos).toBeLessThan(LESSON_PRICE);
+      expect(currency).toBeGreaterThanOrEqual(1);
+      expect(currency).toBeLessThanOrEqual(3);
+      expect(sabedoria).toBeGreaterThanOrEqual(1);
+      expect(sabedoria).toBeLessThanOrEqual(5);
     }
   });
 });

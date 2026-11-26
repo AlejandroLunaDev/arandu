@@ -216,13 +216,23 @@ describe('paths and journey routes', () => {
   });
 
   describe('lesson routes', () => {
-    it.each(['0', '5', 'abc'])('GET lesson %s 404s', async (n) => {
-      await server().get(`/chapters/7/1/lessons/${n}`).expect(404);
+    it.each(['start', 'continue'])(
+      'POST lesson 0, 4 and abc %s 404',
+      async (action) => {
+        for (const n of ['0', '4', 'abc'])
+          await server()
+            .post(`/chapters/7/1/lessons/${n}/${action}`)
+            .expect(404);
 
-      expect(paths.lessons).not.toHaveBeenCalled();
+        expect(paths.lessons).not.toHaveBeenCalled();
+      },
+    );
+
+    it('has no GET lesson route: a lesson is entered with POST start', async () => {
+      await server().get('/chapters/7/1/lessons/1').expect(404);
     });
 
-    it.each(['0', '5'])('POST lesson %s result 404s', async (n) => {
+    it.each(['0', '4'])('POST lesson %s result 404s', async (n) => {
       await server()
         .post(`/chapters/7/1/lessons/${n}/result`)
         .send({ missed: [] })

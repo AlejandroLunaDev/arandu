@@ -30,22 +30,10 @@ export const shopItemNotFound = () =>
     message: 'No such shop item',
   });
 
-export const novelosNotOut = () =>
-  new ConflictException({
-    code: 'novelos_left',
-    message: 'A novelo is sold only at 0',
-  });
-
 export const marcadoresFull = () =>
   new ConflictException({
     code: 'marcadores_full',
     message: 'Page markers are already at the maximum',
-  });
-
-export const notEnoughPeixinhos = () =>
-  new ConflictException({
-    code: 'not_enough_peixinhos',
-    message: 'Not enough peixinhos',
   });
 
 export const outfitNotOwned = () =>
