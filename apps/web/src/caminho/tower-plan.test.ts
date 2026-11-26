@@ -3,24 +3,14 @@ import assert from "node:assert/strict";
 import { seeded, towerPlan } from "./tower-plan.ts";
 
 describe("towerPlan", () => {
-  it("goes down house, lessons, next house", () =>
-    assert.deepEqual(towerPlan(1), [
-      { hung: "crown", floor: { house: 0 } },
-      { hung: { lessons: 0 }, floor: "end" },
-    ]));
+  it("gives each chapter a storey", () => assert.deepEqual(towerPlan(1), [{ chapter: 0 }]));
 
-  it("gives a special lesson its own bay after every second chapter, with a tunnel before it", () =>
-    assert.deepEqual(towerPlan(3), [
-      { hung: "crown", floor: { house: 0 } },
-      { hung: { lessons: 0 }, floor: { house: 1 } },
-      { hung: { lessons: 1 }, floor: "tunnel" },
-      { hung: "special", floor: { house: 2 } },
-      { hung: { lessons: 2 }, floor: "end" },
-    ]));
+  it("puts a special lesson on its own storey after every second chapter", () =>
+    assert.deepEqual(towerPlan(5), [{ chapter: 0 }, { chapter: 1 }, { special: 2 }, { chapter: 2 }, { chapter: 3 }, { special: 4 }, { chapter: 4 }]));
 
-  it("ends on the last chapter's lessons, never on a special lesson", () => assert.equal(towerPlan(2).at(-1)?.floor, "end"));
+  it("never ends on a special lesson", () => assert.deepEqual(towerPlan(2).at(-1), { chapter: 1 }));
 
-  it("still stands with no chapters", () => assert.deepEqual(towerPlan(0), [{ hung: "crown", floor: "end" }]));
+  it("is empty with no chapters", () => assert.deepEqual(towerPlan(0), []));
 });
 
 describe("seeded", () => {

@@ -19,15 +19,13 @@ const HOUSES = ["HouseBox", "HouseWide", "HouseBarrel"];
 const SIDES = ["SidePlatform", "SideLadder", "SideBasket", "SideBed"];
 const FRONTS = ["FrontBowl", "FrontStep", "FrontTunnel"];
 /** A sign's face, wide and tall. */
-const FACE = { SignTag: [0.2, 0.15], SignBoard: [0.5, 0.15] } as const;
+const FACE = { SignTag: [0.44, 0.14], SignBoard: [0.5, 0.15] } as const;
 type SignName = keyof typeof FACE;
-/** Where the pompom hangs at the book's end, and where Arandu sits by it, in the last bay. */
-const BOLINHA = [-0.2, 0.49, 0.64] as const;
-const END_SEAT = [0.1, 0, 0.25] as const;
+/** Where the pompom hangs at the book's end: under the last floor. */
+const BOLINHA = [-0.2, -0.06, 0.5] as const;
 
-/** What a sign shows in place of words. */
-export const CHECK = "check";
-export const STAR = "star";
+/** What a special lesson's tag says: it is not built yet, so it reads as locked, in amber. */
+const SPECIAL = "Especial";
 /** A sign's face and ink, by what the person can do there. */
 const LOOK: Record<SpotState, [face: string, ink: string]> = {
   open: ["cream-50", "ink-950"],
@@ -40,15 +38,17 @@ const TEXTURE = 1280; // pixels a metre of sign
 const ACROSS = 2.5;
 const DOWN = 3;
 const FOV = 30;
-/** How far above its floor a bay is looked at, and how far above that the camera rides (a share of its distance). */
-const EYE = 0.62;
+/**
+ * How far above its floor a storey is looked at, and how far above that the camera rides (a share of its distance).
+ * Low on the storey: the card of what the person picked covers the bottom of the stage, so the storey stands over it.
+ */
+const EYE = 0.25;
 const LIFT = 0.2;
-/** Arandu's way in: seconds from off the screen to his spot, and where he comes from (to the viewer's right, and up). */
-const LEAP = 0.95;
-const FROM = [2.1, 1.5] as const;
-/** The crown's top over the first floor, and the air the camera leaves above it when the page is at its top. */
-const CROWN = 1.93;
-const AIR = 0.45;
+/** How far over a floor Arandu is, about, on a storey's spots: what the page follows on his way down. */
+const PERCH = 0.75;
+/** His way in takes this long at most (seconds), however far down he sits, and a hop no longer or shorter than these. */
+const WAY_IN = 4.5;
+const HOP = [0.16, 0.42] as const;
 
 export type TowerBook = {
   /** The same book always grows the same tower. */
@@ -61,11 +61,14 @@ export type TowerBook = {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /**
- * A book's path as a cat tower, stacked from the kit: a house per chapter, a spot per lesson, and a sign on each. The
- * page's scroll moves the camera down the tower and round it, a quarter turn a bay (`track` holds one element per bay,
- * and its scroll offset says which one is looked at). A tap on a spot or its sign reports its key to onPick, and a tap
- * on nothing reports null. `box` gets the stage's height and a bay's, in pixels, as --stage and --bay. Returns select
- * (the sign that stands out: Arandu's, to begin with) and stop.
+ * A book's path as a cat tower, stacked from the kit. A storey is a chapter: its house on the floor, its three lessons
+ * on the spots round it, all facing the same way, and a sign on each that says what it is. A special lesson takes a
+ * storey of its own. The page's scroll moves the camera down the tower and round it, a quarter turn a storey (`track`
+ * holds one element per storey, and its scroll offset says which one is looked at). Arandu comes in from the left of
+ * the screen onto the roof and hops down the path, spot by spot, to his own, and the page follows him unless the
+ * person takes it. A tap on a spot or its sign reports its key to onPick, and a tap on nothing reports null. `box`
+ * gets the stage's height and a storey's, in pixels, as --stage and --bay. Returns select (the spot that stands out,
+ * with a line round it: Arandu's, to begin with) and stop.
  */
 export async function runTower(
   { box, stage, track }: { box: HTMLElement; stage: HTMLElement; track: HTMLElement },
@@ -99,7 +102,7 @@ export async function runTower(
     return o;
   };
 
-  // A sign's printed face, shared by every sign that reads the same.
+  // A sign's printed face, shared by every sign that reads the same. A done lesson's name comes after a check.
   const owned: { dispose(): void }[] = [];
   const faces = new Map<string, THREE.Material>();
   const face = (kind: SignName, text: string, state: SpotState) => {
@@ -113,32 +116,26 @@ export async function runTower(
     const h = (g.canvas.height = Math.round(FACE[kind][1] * TEXTURE));
     g.fillStyle = tokenValue(faceToken);
     g.fillRect(0, 0, w, h);
-    g.fillStyle = g.strokeStyle = tokenValue(text === STAR ? "amber-400" : inkToken);
+    g.fillStyle = g.strokeStyle = tokenValue(text === SPECIAL ? "amber-400" : inkToken);
     g.translate(w / 2, h / 2);
-    if (text === CHECK) {
-      g.lineWidth = h * 0.13;
+    const tick = state === "done" && kind === "SignTag" ? h * 0.44 : 0;
+    const size = h * 0.56;
+    const font = tokenValue("font-display");
+    g.font = `700 ${size}px ${font}`;
+    g.font = `700 ${size * Math.min(1, (w * 0.86 - tick) / g.measureText(text).width)}px ${font}`;
+    const left = -(g.measureText(text).width + tick) / 2;
+    if (tick) {
+      g.lineWidth = h * 0.09;
       g.lineCap = g.lineJoin = "round";
       g.beginPath();
-      g.moveTo(-h * 0.26, 0);
-      g.lineTo(-h * 0.07, h * 0.19);
-      g.lineTo(h * 0.28, -h * 0.2);
+      g.moveTo(left, 0);
+      g.lineTo(left + tick * 0.28, tick * 0.3);
+      g.lineTo(left + tick * 0.74, -tick * 0.34);
       g.stroke();
-    } else if (text === STAR) {
-      g.beginPath();
-      for (let i = 0; i < 10; i++) {
-        const r = h * (i % 2 ? 0.16 : 0.38);
-        g.lineTo(Math.sin((i * Math.PI) / 5) * r, -Math.cos((i * Math.PI) / 5) * r);
-      }
-      g.fill();
-    } else {
-      const size = h * (kind === "SignBoard" ? 0.56 : 0.74);
-      const font = tokenValue("font-display");
-      g.font = `700 ${size}px ${font}`;
-      g.font = `700 ${size * Math.min(1, (w * 0.88) / g.measureText(text).width)}px ${font}`;
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      g.fillText(text, 0, h * 0.04);
     }
+    g.textAlign = "left";
+    g.textBaseline = "middle";
+    g.fillText(text, left + tick, h * 0.04);
     const map = new THREE.CanvasTexture(g.canvas);
     map.colorSpace = THREE.SRGBColorSpace;
     map.flipY = false; // glTF UVs put v = 0 at the top of the image
@@ -149,7 +146,8 @@ export async function runTower(
     return material;
   };
 
-  // The tower. Bay 0's floor is at y = 0 and each bay under it turns a quarter, so the path goes down in a spiral.
+  // The tower. The first storey's floor is at y = 0 and each one under it turns a quarter, so the path goes down in a
+  // spiral.
   const bays = towerPlan(book.chapters.length);
   const random = seeded(book.seed);
   const last: Record<string, string> = {};
@@ -161,11 +159,14 @@ export async function runTower(
   scene.add(tower);
   const seats = new Map<string, { at: THREE.Vector3; bay: number }>();
   const signs = new Map<string, THREE.Object3D>();
+  const modules = new Map<string, THREE.Object3D>();
   const targets: THREE.Object3D[] = [];
   const spots: { key: string; module: THREE.Object3D; name: string; index: number; text: string; state: SpotState }[] = [];
+  /** The lessons from the top down, as the path goes: the spots Arandu hops over on his way in. */
+  const path: string[] = [];
 
   let bay = tower;
-  bays.forEach(({ hung, floor }, i) => {
+  bays.forEach((storey, i) => {
     bay = new THREE.Group();
     bay.position.y = -i * BAY;
     bay.rotation.y = (Math.PI / 2) * i;
@@ -175,23 +176,28 @@ export async function runTower(
       spots.push({ key, module: place(name, parent), name, index: i, text, state });
 
     place("Board", bay);
-    place(hung === "crown" ? "Crown" : "Posts", bay);
-    if (hung === "special" && typeof floor === "object") spot(specialKey(floor.house), "Hammock", bay, STAR, "locked");
-    else if (typeof hung === "object") {
-      const c = hung.lessons;
-      const right = new THREE.Group(); // a side module is built for the left post: mirrored, it hangs on the right
-      right.scale.x = -1;
-      bay.add(right);
-      [pick("side", SIDES), pick("side", SIDES), pick("front", FRONTS)].forEach((name, n) => {
-        const state = book.chapters[c]?.lessons[n] ?? "locked";
-        spot(lessonKey(c, n + 1), name, n === 1 ? right : bay, state === "done" ? CHECK : String(n + 1), state);
-      });
+    place("Posts", bay);
+    if ("special" in storey) {
+      spot(specialKey(storey.special), "Hammock", bay, SPECIAL, "locked");
+      path.push(specialKey(storey.special));
+      place("Tunnel", bay);
+      return;
     }
-    if (floor === "tunnel") place("Tunnel", bay);
-    else if (floor === "end") place("Bolinha", bay).position.set(...BOLINHA);
-    else spot(chapterKey(floor.house), pick("house", HOUSES), bay, `Capítulo ${floor.house + 1}`, book.chapters[floor.house]?.state ?? "locked");
+    const c = storey.chapter;
+    const right = new THREE.Group(); // a side module is built for the left post: mirrored, it hangs on the right
+    right.scale.x = -1;
+    bay.add(right);
+    [pick("side", SIDES), pick("side", SIDES), pick("front", FRONTS)].forEach((name, n) => {
+      spot(lessonKey(c, n + 1), name, n === 1 ? right : bay, `Lição ${n + 1}`, book.chapters[c]?.lessons[n] ?? "locked");
+      path.push(lessonKey(c, n + 1));
+    });
+    spot(chapterKey(c), pick("house", HOUSES), bay, `Capítulo ${c + 1}`, book.chapters[c]?.state ?? "locked");
   });
-  // Two bays of bare posts run on under the last floor: the tower shows no foot.
+  // A board roofs the first storey; the pompom of the book's end hangs under the last floor, and two storeys of bare
+  // posts run on under it: the tower shows no foot.
+  const roof = tower.children[0];
+  if (roof) place("Board", roof).position.y = BAY;
+  place("Bolinha", bay).position.set(...BOLINHA);
   for (const k of [1, 2]) place("Posts", bay).position.y = -k * BAY;
   tower.updateMatrixWorld(true);
 
@@ -208,32 +214,72 @@ export async function runTower(
       if (o instanceof THREE.Mesh && (o.material as THREE.Material).name === "TowerSign") o.material = face(kind, text, state);
     });
     signs.set(key, sign);
+    modules.set(key, module);
     module.userData.spot = sign.userData.spot = key;
     targets.push(module, sign);
   }
   const turning = [...signs.values()];
 
-  // Arandu sits on his lesson, turned three quarters to whoever looks at that bay; at the book's end, by the pompom.
+  // The picked spot stands out: its sign grows, and a line goes round its model (the model again, a little fatter,
+  // seen from inside: only its rim shows past the model itself).
+  const line = new THREE.MeshBasicMaterial({ color: tokenColor("amber-400"), side: THREE.BackSide });
+  line.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n  transformed += normalize(normal) * 0.014;");
+  };
+  owned.push(line);
+  const rims: THREE.Mesh[] = [];
+  let hot: THREE.Object3D | null = null;
+  const mark = (spot: string | null) => {
+    hot = (spot && signs.get(spot)) || null;
+    for (const rim of rims) rim.removeFromParent();
+    rims.length = 0;
+    const meshes: THREE.Mesh[] = [];
+    (spot ? modules.get(spot) : undefined)?.traverse((o) => {
+      if (o instanceof THREE.Mesh) meshes.push(o);
+    });
+    for (const mesh of meshes) {
+      const rim = new THREE.Mesh(mesh.geometry, line);
+      mesh.add(rim);
+      rims.push(rim);
+    }
+  };
+  mark(book.at);
+
+  // Arandu sits on his lesson, turned three quarters to whoever looks at that storey; with the book done, by its last
+  // chapter's house.
   const cat = makeCat({ ...catModel, scene: clone(catModel.scene) as THREE.Group }, "ink-400");
-  const home = (book.at && seats.get(book.at)) || { at: bay.localToWorld(new THREE.Vector3(...END_SEAT)), bay: bays.length - 1 };
-  cat.root.position.copy(home.at);
+  const home = (book.at && seats.get(book.at)) || seats.get(chapterKey(book.chapters.length - 1)) || { at: new THREE.Vector3(), bay: 0 };
   const facing = (Math.PI / 2) * home.bay - Math.PI / 2 + 0.45;
-  cat.yaw.rotation.y = facing;
-  // He arrives with the tower: a leap in from off the screen, on the right of whoever looks at his bay, down to his
-  // spot. `arrived` runs 0 to 1; with reduced motion he is already there.
-  const side = (Math.PI / 2) * home.bay;
-  const fromX = home.at.x + Math.cos(side) * FROM[0];
-  const fromZ = home.at.z - Math.sin(side) * FROM[0];
-  let arrived = reduce ? 1 : 0;
   scene.add(cat.root);
   const pose: CatPose = { sit: 1, leap: 0, air: 0, stride: 0, tap: 0, lids: 0, ears: 0, hold: 0, lie: 0, look: null };
 
-  // The scroll's gear: a bay of the track is a bay of the tower, as tall on the page as it is drawn.
+  // His way in: from off the screen, on the left, onto the roof, then down the path spot by spot to his own. `leg` is
+  // the hop he is on, from way[leg] to way[leg + 1], and `along` how far through it; with reduced motion he is there.
+  const way = [new THREE.Vector3(-2.6, BAY + 1.3, 0.4), new THREE.Vector3(0, BAY + 0.06, 0.1)];
+  const mine = book.at ? path.indexOf(book.at) : path.length;
+  for (let i = 0; i < mine; i++) {
+    const seat = seats.get(path[i]!);
+    if (seat) way.push(seat.at);
+  }
+  way.push(home.at);
+  const hop = clamp(WAY_IN / (way.length - 1), HOP[0], HOP[1]);
+  let leg = reduce ? way.length - 1 : 0;
+  let along = 0;
+  /** The page follows him down until the person moves it themselves. */
+  let following = !reduce;
+  const letGo = () => {
+    following = false;
+  };
+  cat.root.position.copy(reduce ? home.at : way[0]!);
+  cat.yaw.rotation.y = facing;
+
+  // The scroll's gear: a storey of the track is a storey of the tower, as tall on the page as it is drawn.
   const camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 80);
+  const lowest = Math.max(0, bays.length - 1);
   let top = 0;
   let step = 1;
   let distance = 1;
-  let first = 0; // the bay the camera starts on: above the first floor when the screen is too short to show the crown
+  let first = 0; // where the camera starts: above the first storey when the screen is too short to show the roof
   const measure = () => {
     const width = stage.clientWidth;
     const height = scroller.clientHeight;
@@ -241,7 +287,7 @@ export async function runTower(
     const down = Math.max(ACROSS / (width / height), DOWN);
     step = (BAY * height) / down;
     distance = down / 2 / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-    first = Math.min(0, (EYE + down / 2 - CROWN - AIR) / BAY);
+    first = Math.min(0, (EYE + down / 2 - BAY - 0.5) / BAY);
     box.style.setProperty("--stage", String(height));
     box.style.setProperty("--bay", String(step));
     top = track.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
@@ -250,7 +296,6 @@ export async function runTower(
     camera.updateProjectionMatrix();
   };
 
-  let hot = (book.at && signs.get(book.at)) || null;
   const start = performance.now();
   let before = start;
   let frame = 0;
@@ -258,7 +303,32 @@ export async function runTower(
     const now = performance.now();
     const dt = Math.min((now - before) / 1000, 0.05);
     before = now;
-    const u = clamp((scroller.scrollTop - top) / step, first, bays.length - 1);
+
+    if (leg < way.length - 1) {
+      along += dt / hop;
+      if (along >= 1) {
+        along = 0;
+        leg++;
+      }
+      const a = way[leg]!;
+      const b = way[leg + 1];
+      if (b) {
+        // A straight line from one spot to the next, and an arc over it; in the air he faces the way he goes.
+        const e = along * along * (3 - 2 * along);
+        cat.root.position.set(a.x + (b.x - a.x) * e, a.y + (b.y - a.y) * e + Math.sin(Math.PI * along) * 0.32, a.z + (b.z - a.z) * e);
+        cat.yaw.rotation.y = Math.atan2(a.z - b.z, b.x - a.x);
+        pose.leap = along;
+        pose.air = Math.sin(Math.PI * along);
+        pose.sit = 0;
+      } else {
+        cat.root.position.copy(home.at);
+        cat.yaw.rotation.y = facing;
+        pose.leap = pose.air = 0;
+      }
+      if (following) scroller.scrollTop = top + clamp((PERCH - cat.root.position.y) / BAY, 0, lowest) * step;
+    } else if (pose.sit < 1) pose.sit = Math.min(1, pose.sit + dt * 6); // landed: he settles into sitting
+
+    const u = clamp((scroller.scrollTop - top) / step, first, lowest);
     const yaw = (Math.PI / 2) * u;
     const y = EYE - u * BAY;
     const sin = Math.sin(yaw);
@@ -275,17 +345,6 @@ export async function runTower(
       sign.rotation.y = yaw;
       sign.scale.setScalar(sign === hot ? 1.3 : 1);
     }
-    if (arrived < 1) {
-      arrived = Math.min(1, arrived + dt / LEAP);
-      const e = arrived * arrived * (3 - 2 * arrived);
-      // A straight run across, and an arc over it that ends on the seat.
-      cat.root.position.set(fromX + (home.at.x - fromX) * e, home.at.y + FROM[1] * (1 - e) + Math.sin(Math.PI * arrived) * 0.5, fromZ + (home.at.z - fromZ) * e);
-      // In the air he faces the way he flies (to the viewer's left), and turns to the viewer as he lands.
-      cat.yaw.rotation.y = side + Math.PI + (facing - side - Math.PI) * e * e;
-      pose.leap = arrived;
-      pose.air = Math.sin(Math.PI * arrived);
-      pose.sit = arrived < 0.8 ? 0 : (arrived - 0.8) / 0.2;
-    }
     cat.update(pose, dt, (now - start) / 1000);
     renderer.render(scene, camera);
   };
@@ -295,14 +354,15 @@ export async function runTower(
   };
 
   measure();
-  // The page opens on Arandu's bay.
-  scroller.scrollTop = top + home.bay * step;
+  // The page opens at the top, where he comes in; with reduced motion, on his storey.
+  scroller.scrollTop = reduce ? top + home.bay * step : 0;
   const observer = new ResizeObserver(() => {
     measure();
     if (reduce) draw();
   });
   observer.observe(scroller);
   observer.observe(track);
+  for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) scroller.addEventListener(type, letGo, { passive: true });
   // With reduced motion Arandu holds his pose, and the tower is drawn again only when the page moves.
   if (reduce) {
     draw();
@@ -328,15 +388,16 @@ export async function runTower(
   canvas.addEventListener("pointermove", onMove);
 
   return {
-    /** The spot whose sign stands out: the one the person picked. */
+    /** The spot that stands out: the one the person picked. */
     select(spot: string | null) {
-      hot = (spot && signs.get(spot)) || null;
+      mark(spot);
       if (reduce) draw();
     },
     stop() {
       cancelAnimationFrame(frame);
       observer.disconnect();
       scroller.removeEventListener("scroll", draw);
+      for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) scroller.removeEventListener(type, letGo);
       canvas.removeEventListener("click", onClick);
       canvas.removeEventListener("pointermove", onMove);
       owned.forEach((o) => o.dispose());

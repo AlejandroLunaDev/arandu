@@ -27,7 +27,7 @@ const REFUSED: Record<LessonRefusal, string> = {
 /**
  * P1: the book's path as a 3D cat tower (tower-scene.ts). Each chapter is a house and each lesson a spot, with a sign
  * that opens it; the page's scroll goes down the tower and round it. The same path is a list of buttons, one group per
- * bay, for the keyboard and screen readers, and what is seen if the 3D cannot start. What the person picks shows in a
+ * storey, for the keyboard and screen readers, and what is seen if the 3D cannot start. What the person picks shows in a
  * card at the bottom, and an open lesson is entered from there, for its peixinhos.
  */
 export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) {
@@ -141,13 +141,16 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
         )}
       </div>
       <ol ref={track} className={c.bays} aria-label="Caminho da matéria">
-        {towerPlan(total).map(({ hung, floor }, b) => (
+        {towerPlan(total).map((storey, b) => (
           <li key={b} className={c.bay}>
-            {typeof hung === "object" &&
-              [1, 2, 3].map((l) => spot(lessonKey(hung.lessons, l), `Capítulo ${hung.lessons + 1}, lição ${l}, ${LESSON[chapters[hung.lessons]?.lessons[l - 1] ?? "locked"]}`))}
-            {hung === "special" && typeof floor === "object" && spot(specialKey(floor.house), "Lição especial, em breve")}
-            {typeof floor === "object" &&
-              spot(chapterKey(floor.house), `Capítulo ${floor.house + 1}: ${book.chapters[floor.house]?.text ?? ""}, ${CHAPTER[chapters[floor.house]?.state ?? "locked"]}`)}
+            {"special" in storey
+              ? spot(specialKey(storey.special), "Lição especial, em breve")
+              : [
+                  spot(chapterKey(storey.chapter), `Capítulo ${storey.chapter + 1}: ${book.chapters[storey.chapter]?.text ?? ""}, ${CHAPTER[chapters[storey.chapter]?.state ?? "locked"]}`),
+                  ...[1, 2, 3].map((l) =>
+                    spot(lessonKey(storey.chapter, l), `Capítulo ${storey.chapter + 1}, lição ${l}, ${LESSON[chapters[storey.chapter]?.lessons[l - 1] ?? "locked"]}`),
+                  ),
+                ]}
           </li>
         ))}
       </ol>
