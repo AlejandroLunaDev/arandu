@@ -42,6 +42,75 @@
   rotate: 45deg;
 }
 
+/* A talk that frees the cat (arandu-says.tsx): room above for the bubble to float into and below for him to wait in,
+   so neither leaves the talk's own box. He ends under the bubble, in the middle: 50cqi is half the talk's width, and
+   his box's middle starts 42px from its left. */
+.talk[data-free] {
+  container-type: inline-size;
+  padding-top: 48px;
+  padding-bottom: 96px;
+}
+
+.talk[data-free] .talkCat {
+  transition: translate 0.9s cubic-bezier(0.4, 0, 0.6, 1) 0.3s;
+}
+
+.talk[data-free] .bubble::before {
+  transition: opacity 0.4s;
+}
+
+/* The bubble lets go of him and drifts up like a thought: a slow lift-off, a little past its place, back down into
+   it, and from then on it hangs in the air, barely moving. */
+.talk[data-said] .bubble {
+  translate: 0 -40px;
+  animation:
+    drift-up 2.6s cubic-bezier(0.37, 0, 0.63, 1) 0.35s backwards,
+    hang 5.5s ease-in-out 2.95s infinite alternate;
+}
+
+@keyframes drift-up {
+  0% {
+    translate: 0 0;
+  }
+
+  72% {
+    translate: 1px -45px;
+  }
+
+  100% {
+    translate: 0 -40px;
+  }
+}
+
+@keyframes hang {
+  from {
+    translate: 0 -40px;
+  }
+
+  to {
+    translate: -2px -46px;
+  }
+}
+
+.talk[data-said] .bubble::before {
+  opacity: 0;
+}
+
+.talk[data-said] .talkCat {
+  translate: calc(50cqi - 42px) 68px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talk[data-free] .talkCat,
+  .talk[data-free] .bubble::before {
+    transition: none;
+  }
+
+  .talk[data-said] .bubble {
+    animation: none;
+  }
+}
+
 /* The words still to come hold their place, so the bubble is the text's size from the first word. */
 .unsaid {
   visibility: hidden;
