@@ -114,8 +114,10 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
   const n = Number(lesson);
   const lessonState = lesson ? state?.lessons[n - 1] : undefined;
   const closed = state?.state === "locked" ? `Abre quando você terminar o capítulo ${i}.` : "Abre depois das lições 1 e 2.";
+  // Practice (a done lesson, or any lesson of a finished chapter) is free (#150).
+  const free = lessonState === "done" || state?.state === "done";
   // The day's gift comes with the first lesson entered, so it counts toward the price.
-  const short = wallet.peixinhos + wallet.dailyGift < wallet.lessonPrice;
+  const short = !free && wallet.peixinhos + wallet.dailyGift < wallet.lessonPrice;
 
   const start = () =>
     attempt(async () => {
@@ -179,7 +181,7 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
                   </p>
                 )}
                 {lessonState === "locked" && <p className={c.note}>{closed}</p>}
-                {lessonState === "done" && <p className={c.note}>Lição feita. Refazer não dá os prêmios de novo.</p>}
+                {lessonState === "done" && <p className={c.note}>Lição feita. Refazer é grátis, mas não dá os prêmios de novo.</p>}
                 {lessonState && lessonState !== "locked" && (
                   <>
                     {short && (
@@ -193,8 +195,14 @@ export function Tower({ book, wallet }: { book: BookProgress; wallet: Wallet }) 
                       </p>
                     )}
                     <MainButton disabled={busy || short} onClick={start}>
-                      {busy ? "Abrindo…" : lessonState === "done" ? "Fazer de novo" : "Começar"} · {wallet.lessonPrice}
-                      <Image className={c.fish} src="/img/props/fish.webp" alt="peixinhos" width={22} height={22} />
+                      {busy ? "Abrindo…" : lessonState === "done" ? "Fazer de novo" : "Começar"}
+                      {!free && (
+                        <>
+                          {" "}
+                          · {wallet.lessonPrice}
+                          <Image className={c.fish} src="/img/props/fish.webp" alt="peixinhos" width={22} height={22} />
+                        </>
+                      )}
                     </MainButton>
                   </>
                 )}
