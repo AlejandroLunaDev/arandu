@@ -51,6 +51,20 @@ describe('validateEnv', () => {
     expect(env.CORS_ORIGINS).toEqual(['https://a.test', 'https://b.test']);
   });
 
+  it('splits OPENROUTER_MODELS by comma, trimmed, and leaves it empty when unset', () => {
+    expect(validateEnv(valid).OPENROUTER_MODELS).toEqual([]);
+    expect(
+      validateEnv({ ...valid, OPENROUTER_MODELS: ' a/one:free, b/two:free ,' })
+        .OPENROUTER_MODELS,
+    ).toEqual(['a/one:free', 'b/two:free']);
+  });
+
+  it('refuses more than 3 OPENROUTER_MODELS, the most OpenRouter falls back through', () => {
+    expect(() =>
+      validateEnv({ ...valid, OPENROUTER_MODELS: 'a,b,c,d' }),
+    ).toThrow('OPENROUTER_MODELS');
+  });
+
   it('drops the trailing slash of SUPABASE_URL', () => {
     expect(validateEnv(valid).SUPABASE_URL).toBe('https://project.supabase.co');
   });
