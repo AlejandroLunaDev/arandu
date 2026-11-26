@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cat } from "./cat";
 import type { CatMood } from "./cat-scene";
+import { CLOUD_OUT, cloudPath } from "./cloud-path";
 import styles from "./ui.module.css";
 
 /** What Arandu does beside his bubble: one of the 3D cat's clips. */
@@ -40,7 +41,35 @@ export function Said({ text, shown }: { text: string; shown: number }) {
 }
 
 /**
- * Arandu's bubble, the cat at its tail. `free`, on a screen where the person answers in the field below: once he has
+ * The thought cloud behind Arandu's words: a cat does not talk, so what he tells is what goes through his head. It is
+ * drawn for the size of the box it is in (a `ui.bubble`), again whenever that changes; until then the box's own
+ * rounded background holds the words.
+ */
+export function Cloud() {
+  const svg = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState<[width: number, height: number] | null>(null);
+  useEffect(() => {
+    const box = svg.current?.parentElement;
+    if (!box) return;
+    const observer = new ResizeObserver(() => setSize([box.offsetWidth, box.offsetHeight]));
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
+  const path = size && cloudPath(size[0], size[1]);
+  return (
+    <svg ref={svg} className={styles.cloud} viewBox={size ? `0 0 ${size[0] + 2 * CLOUD_OUT} ${size[1] + 2 * CLOUD_OUT}` : undefined} aria-hidden="true">
+      {path && (
+        <>
+          <path className={styles.cloudFill} d={path.fill} />
+          <path className={styles.cloudLine} d={path.line} />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * Arandu's thought, the cat at its trail. `free`, on a screen where the person answers in the field below: once he has
  * said it all the bubble floats up a little and he walks out from beside it to wait under it. Sitting there he is on
  * his own: the 3D cat taps, stretches, turns and watches the pointer until the answer comes.
  */
@@ -56,6 +85,7 @@ export function AranduSays({ text, shown, pose, free = false }: { text: string; 
     <section className={styles.talk} data-free={free || undefined} data-said={said || undefined}>
       <Cat mood={!said ? pose : arrived ? "sit" : "walk"} size={104} className={styles.talkCat} />
       <div className={styles.bubble} role="status">
+        <Cloud />
         <Said text={text} shown={shown} />
       </div>
     </section>
