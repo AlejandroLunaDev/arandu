@@ -2,6 +2,7 @@ import type {
   BookProgress,
   BookReflection,
   BookReflectionRequest,
+  DailyGift,
   Home,
 } from '@arandu/contracts';
 import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
@@ -33,6 +34,13 @@ export class ProgressController {
   @Get('me')
   home(@UserId() userId: string): Promise<Home> {
     return this.progress.home(userId);
+  }
+
+  /** The day's gift (#145): what is missing to reach the daily peixinhos, given once per São Paulo day. */
+  @Post('me/daily-gift')
+  @HttpCode(200)
+  dailyGift(@UserId() userId: string): Promise<DailyGift> {
+    return this.repository.dailyGift(userId);
   }
 
   @Get('me/books/:disciplineId')

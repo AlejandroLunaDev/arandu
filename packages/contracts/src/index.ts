@@ -494,9 +494,15 @@ export interface ChapterResult {
 export interface Wallet {
   /** The energy: entering a lesson costs `lessonPrice`. Caixas and the season add more. */
   peixinhos: number;
-  /** Every São Paulo day the peixinhos are topped up to this; more than this is kept. */
+  /** A new wallet starts with this, and the day's gift brings the peixinhos up to it; more than this is kept. */
   dailyPeixinhos: number;
-  /** The next top-up: the next São Paulo midnight. */
+  /**
+   * The day's gift still waiting: what is missing to reach `dailyPeixinhos`, once per São Paulo day. Show it on the day's
+   * first visit and give it with POST /me/daily-gift. 0 once given, or with `dailyPeixinhos` or more. Entering a lesson
+   * before that gives it too.
+   */
+  dailyGift: number;
+  /** The next day's gift: the next São Paulo midnight. */
   nextRefillAt: string;
   lessonPrice: number;
   /** The game's currency (its name is not chosen yet): it comes in caixas. */
@@ -504,6 +510,12 @@ export interface Wallet {
   /** Currency to go on with a lesson after its last life (POST /chapters/:d/:t/lessons/:n/continue). */
   continuePrice: number;
   marcadores: number;
+}
+
+/** POST /me/daily-gift: the peixinhos the day's gift gave (0 when already given today), and the wallet after it. */
+export interface DailyGift {
+  peixinhos: number;
+  wallet: Wallet;
 }
 
 export interface Achievement {

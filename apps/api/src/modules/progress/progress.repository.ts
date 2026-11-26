@@ -1,6 +1,7 @@
 import type {
   BookClosing,
   BookReflectionRequest,
+  DailyGift,
   Wallet,
 } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
@@ -44,20 +45,37 @@ export const sabedoriaRows = (sql: Tx) => sql`(
   select user_id, (contents ->> 'sabedoria')::int, opened_at from public.caixas
   where opened_at is not null and contents ? 'sabedoria')`;
 
-/** The wallet columns every query returns, for toWallet. */
-export const walletColumns = (sql: Tx) => sql`peixinhos, currency, marcadores`;
+/** The wallet columns every query returns, for toWallet; `giftDue` while the São Paulo day's gift is not given. */
+export const walletColumns = (sql: Tx) => sql`peixinhos, currency, marcadores,
+  peixinhos_on is distinct from (now() at time zone ${TIME_ZONE})::date as "giftDue"`;
+
+/** The day's gift: what is missing to reach DAILY_PEIXINHOS, while it is due; more than that is kept. */
+const giftOf = (row: WalletRow) =>
+  row.giftDue ? Math.max(0, DAILY_PEIXINHOS - row.peixinhos) : 0;
 
 /**
- * Creates the wallet on first use with a day's peixinhos (not the column's older default), then gives the day's top-up,
- * once per São Paulo day: peixinhos below the daily amount go up to it, more is kept.
+ * Locks the wallet, created on first use with a day's peixinhos (not the column's older default), and gives the day's
+ * gift if it is still due. Returns the wallet after it and the peixinhos the gift gave (0 when already given).
  */
-export async function openWallet(tx: Tx, userId: string): Promise<void> {
+export async function openWallet(
+  tx: Tx,
+  userId: string,
+): Promise<{ row: WalletRow; gift: number }> {
   await tx`
     insert into public.wallets (user_id, peixinhos) values (${userId}, ${DAILY_PEIXINHOS}) on conflict do nothing`;
-  await tx`
-  update public.wallets set peixinhos = greatest(peixinhos, ${DAILY_PEIXINHOS}),
-    peixinhos_on = (now() at time zone ${TIME_ZONE})::date, updated_at = now()
-  where user_id = ${userId} and peixinhos_on is distinct from (now() at time zone ${TIME_ZONE})::date`;
+  const row = one(
+    await tx<WalletRow[]>`
+    select ${walletColumns(tx)} from public.wallets where user_id = ${userId} for update`,
+  );
+  if (!row.giftDue) return { row, gift: 0 };
+  const gift = giftOf(row);
+  const given = one(
+    await tx<WalletRow[]>`
+    update public.wallets set peixinhos = peixinhos + ${gift},
+      peixinhos_on = (now() at time zone ${TIME_ZONE})::date, updated_at = now()
+    where user_id = ${userId} returning ${walletColumns(tx)}`,
+  );
+  return { row: given, gift };
 }
 
 /**
@@ -88,12 +106,14 @@ export interface WalletRow {
   peixinhos: number;
   currency: number;
   marcadores: number;
+  giftDue: boolean;
 }
 
 export function toWallet(row: WalletRow, now: Date): Wallet {
   return {
     peixinhos: row.peixinhos,
     dailyPeixinhos: DAILY_PEIXINHOS,
+    dailyGift: giftOf(row),
     nextRefillAt: nextMidnight(now).toISOString(),
     lessonPrice: LESSON_PRICE,
     currency: row.currency,
@@ -121,21 +141,37 @@ export async function asPerson<T>(work: Promise<T>): Promise<T> {
 export class ProgressRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
-  /** The person's wallet row, created on first use, topped up for the day and locked for the rest of the transaction. */
+  /**
+   * The person's wallet row, created on first use and locked for the rest of the transaction. Spending gives the day's
+   * gift first, so a gift not yet opened never blocks a lesson.
+   */
   async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
-    await openWallet(tx, userId);
-    const row = one(
-      await tx<WalletRow[]>`
-      select ${walletColumns(tx)} from public.wallets where user_id = ${userId} for update`,
-    );
-    return row;
+    return (await openWallet(tx, userId)).row;
   }
 
-  wallet(userId: string): Promise<Wallet> {
+  /** The wallet as it is, its day's gift still waiting (`dailyGift`) until POST /me/daily-gift gives it. */
+  async wallet(userId: string): Promise<Wallet> {
+    const [row] = await this.sql<WalletRow[]>`
+      select ${walletColumns(this.sql)} from public.wallets where user_id = ${userId}`;
+    // No wallet yet: its first use creates it with a day's peixinhos, so nothing is missing that day.
+    return toWallet(
+      row ?? {
+        peixinhos: DAILY_PEIXINHOS,
+        currency: 0,
+        marcadores: 0,
+        giftDue: false,
+      },
+      new Date(),
+    );
+  }
+
+  /** The day's gift, once per São Paulo day: what is missing to reach DAILY_PEIXINHOS. 0 once given. */
+  dailyGift(userId: string): Promise<DailyGift> {
     return asPerson(
-      this.sql.begin(async (tx) =>
-        toWallet(await this.lockWallet(tx, userId), new Date()),
-      ),
+      this.sql.begin(async (tx) => {
+        const { row, gift } = await openWallet(tx, userId);
+        return { peixinhos: gift, wallet: toWallet(row, new Date()) };
+      }),
     );
   }
 

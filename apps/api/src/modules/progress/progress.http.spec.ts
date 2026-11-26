@@ -11,9 +11,10 @@ describe('progress routes', () => {
   let app: INestApplication;
   const wallet = {
     peixinhos: 50,
-    dailyPeixinhos: 50,
+    dailyPeixinhos: 60,
+    dailyGift: 10,
     nextRefillAt: '2026-03-11T03:00:00.000Z',
-    lessonPrice: 10,
+    lessonPrice: 15,
     currency: 0,
     continuePrice: 5,
     marcadores: 0,
@@ -31,6 +32,7 @@ describe('progress routes', () => {
     discipline: vi.fn(),
     reflection: vi.fn(),
     saveReflection: vi.fn(),
+    dailyGift: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -172,6 +174,13 @@ describe('progress routes', () => {
     it('404s for a bad subject id', async () => {
       await post({ chips: ['a'], text: null }, '0').expect(404);
     });
+  });
+
+  it("gives the day's gift on POST /me/daily-gift", async () => {
+    repo.dailyGift.mockResolvedValue({ peixinhos: 10, wallet });
+    const res = await server().post('/me/daily-gift').expect(200);
+    expect(repo.dailyGift).toHaveBeenCalledWith(USER_ID);
+    expect(res.body).toEqual({ peixinhos: 10, wallet });
   });
 
   it.each(['/me/novelos/spend', '/chapters/7/0/reread'])(
