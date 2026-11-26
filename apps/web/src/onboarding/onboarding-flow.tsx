@@ -16,7 +16,7 @@ import { QuestionView } from "./question-view";
 // O01-O10. Arandu (POST /arandu/onboarding) phrases each question and reacts to the last answer; the person
 // answers in their own words, writing or talking. Once every topic is covered the
 // answers are saved to the journey (PATCH /me/journey), Arandu shows what it understood (O09), and the
-// recommended careers come by institution (O10, POST /arandu/recommendations).
+// recommended careers come with where each is taught (O10, POST /arandu/recommendations).
 /** Whether a profile holds anything the person said. */
 const heard = (p: AranduProfile) =>
   p.situation !== null ||
@@ -29,13 +29,13 @@ export function OnboardingFlow() {
   const [profileShown, setProfileShown] = useState(false);
   const [fixed, setFixed] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
-  const [chosen, setChosen] = useState<{ course: PlaceCourse; place: Place } | null>(null);
+  const [chosen, setChosen] = useState<PlaceCourse | null>(null);
   const { busy, failed, attempt } = useAttempt();
 
   if (!turn)
     return <HelloView busy={busy} failed={failed} onStart={() => attempt(async () => setTurn(await startOnboarding()))} onGoogle={() => attempt(signInWithGoogle)} />;
 
-  if (chosen) return <PathFlow course={chosen.course} place={chosen.place} onBack={() => setChosen(null)} />;
+  if (chosen) return <PathFlow course={chosen} onBack={() => setChosen(null)} />;
 
   if (places)
     return (
@@ -46,10 +46,10 @@ export function OnboardingFlow() {
         onBack={() => setPlaces(null)}
         onChoose={(courseId) =>
           attempt(async () => {
-            const place = places.find((p) => p.courses.some((c) => c.courseId === courseId))!;
-            const course = place.courses.find((c) => c.courseId === courseId)!;
+            // The course that stands for the career the person picked.
+            const course = places.flatMap((p) => p.courses).find((c) => c.courseId === courseId)!;
             await saveJourney({ professionSlug: course.profession.slug, courseId: course.courseId });
-            setChosen({ course, place });
+            setChosen(course);
           })
         }
       />

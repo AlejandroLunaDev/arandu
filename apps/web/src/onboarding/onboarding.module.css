@@ -178,11 +178,6 @@
   text-wrap: balance;
 }
 
-/* O10's chat: the courses of the career Arandu talks about, to open one. */
-.talkCourses {
-  padding: 4px 16px 0;
-}
-
 .hint {
   margin: 8px 16px 0;
   color: var(--text-muted);
@@ -265,7 +260,7 @@
   line-height: 16px;
 }
 
-/* O10: the recommended careers, each one once, with the places where it can be studied as rows to pick. */
+/* O10: the recommended careers, each one once and the thing to pick, with the places where it is taught as rows. */
 .places {
   display: flex;
   flex-direction: column;
@@ -284,23 +279,107 @@
   border-color: var(--violet-400);
 }
 
+/* Which places to list: all, the public ones or the private ones. 32px, its hit area 44px. */
+.filters {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 2px;
+}
+
+.filter {
+  position: relative;
+  height: 32px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ink-700);
+  border-radius: 99px;
+  background: none;
+  color: var(--text-muted);
+  font: 500 13px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.filter::after {
+  content: "";
+  position: absolute;
+  inset: -7px -3px;
+}
+
+.filter[aria-pressed="true"] {
+  border-color: var(--violet-400);
+  background: var(--violet-900);
+  color: var(--text);
+}
+
+/* The career is what the person picks: its name is the button, and the whole head is its hit area. */
+.pick {
+  position: relative;
+  padding: 12px 40px 12px 12px;
+}
+
+.pick > svg {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--amber-400);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .careerName {
   margin: 0;
-  padding: 12px 12px 0;
+}
+
+.careerName button {
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--amber-200);
   font: 700 18px/22px var(--font-bricolage), var(--font-display);
   letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.careerName button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
 
 .why {
-  margin: 4px 12px 0;
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+/* Where it is taught: information, nothing to pick. */
+.count {
+  margin: 0;
+  padding: 8px 12px 6px;
+  border-top: 1px solid var(--ink-800);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.none {
+  margin: 0;
+  padding: 0 12px 12px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 17px;
 }
 
 .wheres {
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -308,30 +387,30 @@
 .wheres li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-left: 12px;
+  gap: 10px;
+  padding: 7px 12px;
   border-top: 1px solid var(--ink-800);
 }
 
-/* A place to pick: the whole row is the button, 44px tall at least. */
-.where {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 44px;
-  padding: 7px 10px 7px 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
+.thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
-.where > span {
+.where {
   flex: 1;
   min-width: 0;
+}
+
+.credit {
+  display: block;
+  margin-top: 1px;
+  color: var(--ink-500);
+  font-size: 9px;
+  line-height: 12px;
 }
 
 .where b {
@@ -348,17 +427,6 @@
   line-height: 15px;
 }
 
-.where svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: var(--amber-400);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .more {
   width: 100%;
   min-height: 44px;
@@ -370,10 +438,15 @@
   cursor: pointer;
 }
 
-.where:focus-visible,
-.more:focus-visible {
+.more:focus-visible,
+.filter:focus-visible,
+.careerName button:focus-visible::after {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
+}
+
+.careerName button:focus-visible {
+  outline: none;
 }
 
 .logo {
@@ -393,12 +466,6 @@
   object-fit: contain;
 }
 
-.meta {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 14px;
-}
-
 .kind {
   display: inline-flex;
   align-items: center;
@@ -412,45 +479,6 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   vertical-align: 1px;
-}
-
-.careers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px 12px 10px;
-}
-
-/* A career to pick: amber, in the brand's display face. 34px, its hit area 44px. */
-.career {
-  position: relative;
-  height: 34px;
-  padding: 0 12px;
-  border: 1.5px solid var(--amber-700);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--amber-900) 40%, var(--ink-900));
-  color: var(--amber-200);
-  font: 700 14px/1 var(--font-bricolage), var(--font-display);
-  letter-spacing: -0.01em;
-  cursor: pointer;
-}
-
-.career::after {
-  content: "";
-  position: absolute;
-  /* From inside the 1.5px border: 34 - 3 + 2 x 7 = 45. */
-  inset: -7px -3px;
-}
-
-.career[aria-pressed="true"] {
-  border-color: var(--amber-400);
-  background: var(--amber-400);
-  color: var(--ink-900);
-}
-
-/* The career Arandu is talking about. */
-.career[data-talk] {
-  box-shadow: 0 0 0 2px var(--violet-400);
 }
 
 /* On the picked course's card: going on with it. */
@@ -484,8 +512,7 @@
   stroke-linejoin: round;
 }
 
-.choose:focus-visible,
-.career:focus-visible {
+.choose:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }

@@ -43,17 +43,14 @@ function Step({ say, pose, button, busy, failed, onNext, onBack, ready = true, c
   );
 }
 
-// O11: the picked course's first semester, its subjects as books; the first one is where the path starts.
-export function SemesterView({ course, place, path, ...next }: Next & { course: PlaceCourse; place: string; path: CareerPath }) {
+// O11: the picked career's first semester, its subjects as books; the first one is where the path starts.
+export function SemesterView({ course, path, ...next }: Next & { course: PlaceCourse; path: CareerPath }) {
   const first = path.subjects[0];
   return (
-    <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.course} na ${place}.`} pose="hop" button={`Experimentar ${course.course}`}>
+    <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.profession.name}.`} pose="hop" button={`Experimentar ${course.profession.name}`}>
       <div className={p.card}>
         <div className={p.head}>
-          <span className={p.pill}>{course.course}</span>
-          <span className={p.meta}>
-            {place} · {path.city ?? "A distância"}
-          </span>
+          <span className={p.pill}>{course.profession.name}</span>
         </div>
         <p className={p.why}>{course.reason}</p>
         <p className={p.label}>
@@ -108,7 +105,7 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
 }
 
 // O13: the game in three things, before the first chapter.
-export function HowView({ course, place, ...next }: Next & { course: string; place: string }) {
+export function HowView({ course, ...next }: Next & { course: string }) {
   return (
     <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Experimentar o primeiro capítulo">
       <div className={p.rows}>
@@ -117,7 +114,7 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
           <div>
             <strong>Um caminho de capítulos</strong>
             <span>
-              As matérias de verdade do 1º semestre de {course} na {place}, um capítulo curto por vez.
+              As matérias de verdade do 1º semestre de {course}, um capítulo curto por vez.
             </span>
           </div>
         </div>
@@ -141,7 +138,7 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
 }
 
 // O19: the sample of the first chapter is over. It gave nothing: inside the app, chapter 1 starts from zero.
-export function DoneView({ course, subject, place, ...next }: Next & { course: string; subject: string; place: string }) {
+export function DoneView({ course, subject, ...next }: Next & { course: string; subject: string }) {
   const say = `Esse foi um gostinho de ${course}. Guardando seu progresso, o primeiro capítulo começa de verdade, com mais exercícios.`;
   const { shown, done } = useReveal(say);
   return (
@@ -150,9 +147,7 @@ export function DoneView({ course, subject, place, ...next }: Next & { course: s
         <section className={p.done}>
           <Cat mood="hop" size={190} label="Arandu comemorando" className={p.doneCat} />
           <h1>Você provou o primeiro capítulo!</h1>
-          <p className={p.meta}>
-            {subject} · {place}
-          </p>
+          <p className={p.meta}>{subject}</p>
         </section>
         <div className={`${ui.bubble} ${p.loose}`} role="status">
           <Said text={say} shown={shown} />

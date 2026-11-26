@@ -9,7 +9,7 @@ import { useAttempt } from "@/ui/use-attempt";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
 import { askAboutCareers } from "./actions";
-import { type Place, type PlaceCourse, placeName, toChoice } from "./places";
+import { type Place, type PlaceCourse, toChoice } from "./places";
 
 /** A moment to read Arandu's confirmation before the next screen, once it is all written out. */
 const READ_MS = 1200;
@@ -38,10 +38,11 @@ export function Answer({ text, busy, onRead }: { text: string; busy: boolean; on
   );
 }
 
-const WAIT = "Deixa eu ver o que sei sobre esse curso.";
+const WAIT = "Deixa eu ver o que sei sobre essa carreira.";
 
-// O10, one course at one place: Arandu tells about it on his own, the person asks more in their own words, and
-// "Escolher" goes on with it, or saying so does ("quero essa": Arandu confirms and the next screen comes).
+// O10, one career: Arandu tells about it on his own, the person asks more in their own words, and "Escolher" goes on
+// with it, or saying so does ("quero essa": Arandu confirms and the next screen comes). `course` at `place` stands for
+// the career where a courseId is needed; the place itself is never shown as chosen.
 export function CourseView({
   place,
   course,
@@ -59,7 +60,7 @@ export function CourseView({
 }) {
   const talk = useAttempt();
   const [chat, setChat] = useState<{ sessionId: string; reply: string; chosen: number | null } | null>(null);
-  const where = `${placeName(place.institution)}, ${place.city ? `em ${place.city}` : "a distância"}`;
+  const career = course.profession.name;
   const chosen = chat?.chosen ?? null;
   const ask = (message: string, sessionId?: string) =>
     talk.attempt(async () => {
@@ -71,7 +72,7 @@ export function CourseView({
   useEffect(() => {
     if (opened.current) return;
     opened.current = true;
-    ask(`Me conta sobre o curso de ${course.course} na ${where}.`);
+    ask(`Me conta sobre a carreira de ${career}.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on opening
   }, []);
 
@@ -82,8 +83,7 @@ export function CourseView({
       </div>
       <div className={styles.body}>
         <header className={styles.courseHead}>
-          <p className={styles.meta}>{where}</p>
-          <h1>{course.course}</h1>
+          <h1>{career}</h1>
         </header>
         <Answer key={chat?.reply ?? WAIT} text={chat?.reply ?? WAIT} busy={talk.busy} onRead={chosen === null ? undefined : () => onChoose(chosen)} />
       </div>
@@ -94,10 +94,10 @@ export function CourseView({
           </p>
         )}
         <MainButton disabled={busy} onClick={() => onChoose(course.courseId)}>
-          Escolher {course.course}
+          Escolher {career}
         </MainButton>
       </footer>
-      <Composer placeholder="Pergunte sobre o curso" busy={talk.busy} onSend={(text) => ask(text, chat?.sessionId)} />
+      <Composer placeholder="Pergunte sobre a carreira" busy={talk.busy} onSend={(text) => ask(text, chat?.sessionId)} />
     </main>
   );
 }

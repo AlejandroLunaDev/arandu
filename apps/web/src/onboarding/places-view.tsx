@@ -10,26 +10,38 @@ import { CareersChatView, type CareersChat } from "./careers-chat-view";
 import { CourseView } from "./course-view";
 import { type Place, byCareer, placeName } from "./places";
 
-const SAY = "Separei carreiras que combinam com o que você me contou, e onde estudar cada uma. Toca num lugar pra saber mais.";
+const SAY = "Separei carreiras que combinam com o que você me contou, e onde estudar cada uma. Toca numa carreira pra saber mais.";
 const KIND = { public: "Pública", private: "Privada", special: null } as const;
+/** Which places to list: all of them, or only the public or the private ones. */
+const FILTERS = [
+  ["all", "Todas"],
+  ["public", "Públicas"],
+  ["private", "Privadas"],
+] as const;
+const NONE = { public: "Nenhuma pública nesta lista.", private: "Nenhuma privada nesta lista.", all: "" } as const;
 /** Places a career shows before "Ver mais": a career can be taught at dozens. */
 const SHOWN = 4;
 
 type Props = { places: Place[]; busy: boolean; failed: boolean; onChoose: (courseId: number) => void; onBack: () => void };
 
-// O10: the recommended careers, each one once with why it fits and the places where it can be studied, on a screen of
-// their own. Tapping a place opens that course with Arandu telling about it (CourseView); "Conversar com o Arandu"
-// opens a chat about all of them (CareersChatView). Either one chooses. A logo the API leaves null stays off its row.
+// O10: the recommended careers, each one once with why it fits, on a screen of their own. The person picks a career,
+// never a place: tapping one opens it with Arandu telling about it (CourseView), and "Conversar com o Arandu" opens a
+// chat about all of them (CareersChatView); either one chooses. Under each career, the places where it is taught are
+// information only: the ones with a photo or a logo first, and a filter for public or private ones.
 export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
   const { shown, done } = useReveal(SAY);
-  const [view, setView] = useState<{ course: number; from: "list" | "chat" } | "chat" | null>(null);
-  // The chat with Arandu outlives a visit to a course: back from it, the conversation goes on.
+  /** The career open on its own screen, by the course that stands for it; or the chat about all of them. */
+  const [view, setView] = useState<number | "chat" | null>(null);
+  // The chat with Arandu outlives a visit to a career: back from it, the conversation goes on.
   const [chat, setChat] = useState<CareersChat | null>(null);
   const courses = places.flatMap((place) => place.courses.map((course) => ({ place, course })));
+  const careers = byCareer(places);
   /** The careers whose whole list of places is open. */
   const [whole, setWhole] = useState<string[]>([]);
+  const [only, setOnly] = useState<(typeof FILTERS)[number][0]>("all");
+  const kinds = new Set(places.map((place) => place.institution.kind));
 
-  const open = typeof view === "object" && view ? courses.find(({ course }) => course.courseId === view.course) : undefined;
+  const open = typeof view === "number" ? courses.find(({ course }) => course.courseId === view) : undefined;
   if (open)
     return (
       <CourseView
@@ -38,18 +50,18 @@ export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
         busy={busy}
         failed={failed}
         onChoose={onChoose}
-        onBack={() => setView(typeof view === "object" && view?.from === "chat" ? "chat" : null)}
+        onBack={() => setView(null)}
       />
     );
   if (view === "chat")
     return (
       <CareersChatView
-        courses={courses}
+        // One course stands for each career: its first place's.
+        courses={careers.flatMap(({ at }) => at.slice(0, 1))}
         chat={chat}
         onChat={setChat}
         busy={busy}
         failed={failed}
-        onOpen={(courseId) => setView({ course: courseId, from: "chat" })}
         onChoose={onChoose}
         onBack={() => setView(null)}
       />
@@ -64,62 +76,94 @@ export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
         <AranduSays text={SAY} shown={shown} pose="stand" />
         {done && (
           <div className={`${styles.places} ${ui.after}`}>
-            {byCareer(places).map(({ profession, reason, at }) => {
+            {kinds.has("public") && kinds.has("private") && (
+              <div className={styles.filters} role="group" aria-label="Quais lugares mostrar">
+                {FILTERS.map(([kind, label]) => (
+                  <button key={kind} type="button" className={styles.filter} aria-pressed={only === kind} onClick={() => setOnly(kind)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {careers.map(({ profession, reason, at }) => {
               const all = whole.includes(profession.slug);
+              const listed = only === "all" ? at : at.filter(({ place }) => place.institution.kind === only);
+              const first = at[0];
               return (
                 <section key={profession.slug} className={styles.place}>
-                  <h2 className={styles.careerName}>{profession.name}</h2>
-                  {reason && <p className={styles.why}>{reason}</p>}
+                  <div className={styles.pick}>
+                    <h2 className={styles.careerName}>
+                      <button type="button" onClick={() => first && setView(first.course.courseId)}>
+                        {profession.name}
+                      </button>
+                    </h2>
+                    {reason && <p className={styles.why}>{reason}</p>}
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </div>
+                  <p className={styles.count}>
+                    Onde estudar · {listed.length} {listed.length === 1 ? "lugar" : "lugares"}
+                  </p>
+                  {listed.length === 0 && <p className={styles.none}>{NONE[only]}</p>}
                   <ul className={styles.wheres} aria-label={`Onde estudar ${profession.name}`}>
-                    {(all ? at : at.slice(0, SHOWN)).map(({ place: { institution, city }, course }) => {
+                    {(all ? listed : listed.slice(0, SHOWN)).map(({ place: { institution, city }, course }) => {
+                      const photo = safeUrl(institution.photo?.url);
                       const logo = safeUrl(institution.logo?.url);
                       const kind = KIND[institution.kind];
                       return (
                         <li key={course.courseId}>
-                          {logo && institution.logo && (
-                            <a
-                              className={styles.logo}
-                              href={safeUrl(institution.logo.sourceUrl) ?? undefined}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={`Logo: ${institution.logo.license}`}
-                              aria-label={`Logo de ${institution.name}: ${institution.logo.license}`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element -- Wikimedia Commons file of any size: no optimizer route for it. */}
-                              <img src={thumb(logo)} alt="" loading="lazy" />
-                            </a>
+                          {photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- Wikimedia Commons file of any size: no optimizer route for it.
+                            <img className={styles.thumb} src={thumb(photo)} alt="" loading="lazy" />
+                          ) : (
+                            logo &&
+                            institution.logo && (
+                              <a
+                                className={styles.logo}
+                                href={safeUrl(institution.logo.sourceUrl) ?? undefined}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`Logo: ${institution.logo.license}`}
+                                aria-label={`Logo de ${institution.name}: ${institution.logo.license}`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element -- as above */}
+                                <img src={thumb(logo)} alt="" loading="lazy" />
+                              </a>
+                            )
                           )}
-                          <button type="button" className={styles.where} onClick={() => setView({ course: course.courseId, from: "list" })}>
-                            <span>
-                              <b>{placeName(institution)}</b>
-                              <small>
-                                {/* A career can be more than one course at a place (Enfermagem and Obstetrícia): the row says which. */}
-                                {[course.course.toLowerCase() === profession.name.toLowerCase() ? null : course.course, city ?? "A distância"].filter(Boolean).join(" · ")}
-                                {kind && <span className={styles.kind}>{kind}</span>}
-                              </small>
-                            </span>
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <path d="M9 6l6 6-6 6" />
-                            </svg>
-                          </button>
+                          <span className={styles.where}>
+                            <b>{placeName(institution)}</b>
+                            <small>
+                              {/* A career can be more than one course at a place (Enfermagem and Obstetrícia): the row says which. */}
+                              {[course.course.toLowerCase() === profession.name.toLowerCase() ? null : course.course, city ?? "A distância"].filter(Boolean).join(" · ")}
+                              {kind && <span className={styles.kind}>{kind}</span>}
+                            </small>
+                            {/* The licenses (CC BY, CC BY-SA) ask for a link to the source, as the landing's book does. */}
+                            {photo && institution.photo && (
+                              <a className={styles.credit} href={safeUrl(institution.photo.sourceUrl) ?? undefined} target="_blank" rel="noreferrer">
+                                Foto: {institution.photo.credit} · {institution.photo.license}
+                              </a>
+                            )}
+                          </span>
                         </li>
                       );
                     })}
                   </ul>
-                  {at.length > SHOWN && (
+                  {listed.length > SHOWN && (
                     <button
                       type="button"
                       className={styles.more}
                       aria-expanded={all}
                       onClick={() => setWhole(all ? whole.filter((slug) => slug !== profession.slug) : [...whole, profession.slug])}
                     >
-                      {all ? "Ver menos" : `Ver mais ${at.length - SHOWN} ${at.length - SHOWN === 1 ? "lugar" : "lugares"}`}
+                      {all ? "Ver menos" : `Ver mais ${listed.length - SHOWN} ${listed.length - SHOWN === 1 ? "lugar" : "lugares"}`}
                     </button>
                   )}
                 </section>
               );
             })}
-            <p className={styles.hint}>Lugares em ordem alfabética. Ninguém paga pra aparecer aqui.</p>
+            <p className={styles.hint}>Primeiro os lugares com foto e mais informação. Ninguém paga pra aparecer aqui.</p>
           </div>
         )}
       </div>

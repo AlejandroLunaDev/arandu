@@ -9,7 +9,7 @@ export type Place = { institution: Institution; city: string | null; courses: Pl
 /** The name the person reads: the short one when there is one ("USP"). */
 export const placeName = (institution: Institution) => institution.shortName ?? institution.name;
 
-/** A course on screen as the chat takes it, so Arandu can tell the places apart (O10). */
+/** A career on screen as the chat takes it: one course stands for it, and "quero essa" answers with its courseId (O10). */
 export const toChoice = (place: Place, course: PlaceCourse): CourseChoice => ({
   courseId: course.courseId,
   course: course.course,
@@ -39,7 +39,14 @@ export function byInstitution(careers: CareerOption[]): Place[] {
 /** A recommended career and where it can be studied. */
 export type CareerPlaces = { profession: CareerOption["profession"]; reason: string; rank: number; at: { place: Place; course: PlaceCourse }[] };
 
-/** O10 lists careers, each one once: Arandu's best first, and under each its places as `places` orders them. */
+/** How much there is to show of a place: a photo counts most, then a logo. */
+const told = ({ photo, logo }: Institution) => (photo ? 2 : 0) + (logo ? 1 : 0);
+
+/**
+ * O10 lists careers, each one once, Arandu's best first. Under each, the places where it is taught: the ones with
+ * more to show first, and alphabetical among equals (as `places` comes). The first place's course stands for the
+ * career wherever a courseId is needed: the person picks the career, never the place.
+ */
 export function byCareer(places: Place[]): CareerPlaces[] {
   const careers = new Map<string, CareerPlaces>();
   for (const place of places)
@@ -48,5 +55,6 @@ export function byCareer(places: Place[]): CareerPlaces[] {
       career.at.push({ place, course });
       careers.set(course.profession.slug, career);
     }
+  for (const career of careers.values()) career.at.sort((a, b) => told(b.place.institution) - told(a.place.institution));
   return [...careers.values()].sort((a, b) => a.rank - b.rank);
 }

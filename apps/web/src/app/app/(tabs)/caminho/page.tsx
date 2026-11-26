@@ -25,9 +25,10 @@ async function Path() {
       </main>
     );
   const [book, journey] = await Promise.all([api<BookProgress>(`/me/books/${home.current.disciplineId}`), api<Journey>("/me/journey")]);
-  // The course the person chose (O10-O11): it names the path, and holds the semester's next book.
+  // The career the person chose (O10-O11), through the course that stands for it: it names the path, and holds the
+  // semester's next book.
   const course = journey.professionSlug ? (await careerPaths(journey.professionSlug)).paths.find((path) => path.courseId === journey.courseId) : undefined;
   const at = course?.subjects.findIndex((subject) => subject.disciplineId === book.discipline.id) ?? -1;
   const next = home.current.nextTopic === null && at >= 0 ? (course?.subjects[at + 1] ?? null) : null;
-  return <PathMap home={home} book={book} course={course ? `${course.course} · ${course.institution} · 1º semestre` : null} next={next} />;
+  return <PathMap home={home} book={book} course={course ? `${course.course} · 1º semestre` : null} next={next} />;
 }
