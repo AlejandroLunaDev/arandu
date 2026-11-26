@@ -116,6 +116,17 @@
   overflow-y: auto;
 }
 
+/* A question is a talk with nothing to tap: Arandu and his words sit in the middle of the screen, near the field the
+   answer goes in. Auto margins, so words too long for the screen start at the top and scroll instead of being cut. */
+.talk {
+  display: flex;
+  flex-direction: column;
+}
+
+.talk > * {
+  margin-block: auto;
+}
+
 /* Arandu thinking: the bubble dims until the answer is in. */
 .thinking {
   opacity: 0.45;

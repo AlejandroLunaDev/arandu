@@ -42,7 +42,7 @@ export function QuestionView({ question, say, step, busy, failed, onSay, onConti
           ))}
         </div>
       </header>
-      <div className={styles.body}>
+      <div className={`${styles.body} ${styles.talk}`}>
         <div className={busy ? styles.thinking : undefined}>
           <AranduSays text={say} shown={shown} pose={question?.pose ?? "sit"} />
         </div>
