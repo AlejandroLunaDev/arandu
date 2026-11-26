@@ -59,6 +59,12 @@ describe('validateEnv', () => {
     ).toEqual(['a/one:free', 'b/two:free']);
   });
 
+  it('refuses more than 3 OPENROUTER_MODELS, the most OpenRouter falls back through', () => {
+    expect(() =>
+      validateEnv({ ...valid, OPENROUTER_MODELS: 'a,b,c,d' }),
+    ).toThrow('OPENROUTER_MODELS');
+  });
+
   it('drops the trailing slash of SUPABASE_URL', () => {
     expect(validateEnv(valid).SUPABASE_URL).toBe('https://project.supabase.co');
   });
