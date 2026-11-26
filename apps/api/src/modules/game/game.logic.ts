@@ -119,14 +119,15 @@ export const PLUS_TRACK = [
 ];
 
 /**
- * What a caixa holds (#145): 2-8 peixinhos, 1-3 of the currency, 1-5 sabedoria, a page marker 35%, the room plant 12%.
- * Every finished lesson gives one, so its peixinhos stay under a lesson's price: the energy still runs out.
+ * What a caixa holds (#145): 10-20 peixinhos, 1-3 of the currency, 1-5 sabedoria, a page marker 35%, the room plant 12%.
+ * Every finished lesson gives one, and its peixinhos average a lesson's price: winning pays the next lesson, losing
+ * spends the energy.
  */
 export function rollCaixa(
   roll: (max: number) => number = randomInt,
 ): CaixaContents {
   return {
-    peixinhos: 2 + roll(7),
+    peixinhos: 10 + roll(11),
     currency: 1 + roll(3),
     sabedoria: 1 + roll(5),
     marcador: roll(100) < 35,

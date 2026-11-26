@@ -47,11 +47,18 @@ export const sabedoriaRows = (sql: Tx) => sql`(
 /** The wallet columns every query returns, for toWallet. */
 export const walletColumns = (sql: Tx) => sql`peixinhos, currency, marcadores`;
 
-/** The day's top-up, once per São Paulo day: peixinhos below the daily amount go up to it, more is kept. */
-export const topUp = (tx: Tx, userId: string) => tx`
+/**
+ * Creates the wallet on first use with a day's peixinhos (not the column's older default), then gives the day's top-up,
+ * once per São Paulo day: peixinhos below the daily amount go up to it, more is kept.
+ */
+export async function openWallet(tx: Tx, userId: string): Promise<void> {
+  await tx`
+    insert into public.wallets (user_id, peixinhos) values (${userId}, ${DAILY_PEIXINHOS}) on conflict do nothing`;
+  await tx`
   update public.wallets set peixinhos = greatest(peixinhos, ${DAILY_PEIXINHOS}),
     peixinhos_on = (now() at time zone ${TIME_ZONE})::date, updated_at = now()
   where user_id = ${userId} and peixinhos_on is distinct from (now() at time zone ${TIME_ZONE})::date`;
+}
 
 /**
  * SQL for how many leading topics of the discipline aliased `d` have a stored chapter for the same topic text: the chapters a
@@ -116,8 +123,7 @@ export class ProgressRepository {
 
   /** The person's wallet row, created on first use, topped up for the day and locked for the rest of the transaction. */
   async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
-    await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
-    await topUp(tx, userId);
+    await openWallet(tx, userId);
     const row = one(
       await tx<WalletRow[]>`
       select ${walletColumns(tx)} from public.wallets where user_id = ${userId} for update`,

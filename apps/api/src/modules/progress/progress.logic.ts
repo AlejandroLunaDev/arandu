@@ -3,11 +3,11 @@ import type { Achievement } from '@arandu/contracts';
 /** Days, patinhas, weeks and the peixinhos' day are counted in Brazil's time. */
 export const TIME_ZONE = 'America/Sao_Paulo';
 
-// Demo values (docs: Arandu-Reka-producto-gamificacion §3, and #145), to tune once the amounts are decided.
-/** Peixinhos are the energy: every São Paulo day they are topped up to this. */
-export const DAILY_PEIXINHOS = 50;
-/** Peixinhos to enter a lesson. */
-export const LESSON_PRICE = 10;
+// #145. LESSON_PRICE is Alejandro's; the rest are demo values balanced around it.
+/** Peixinhos are the energy: a new wallet starts with this, and every São Paulo day it is topped up to it (4 lessons). */
+export const DAILY_PEIXINHOS = 60;
+/** Peixinhos to enter a lesson, each time. */
+export const LESSON_PRICE = 15;
 /** Currency to go on with a lesson after its last life. */
 export const CONTINUE_PRICE = 5;
 /** Questions to Arandu that earn "Curiosidade de gato". */

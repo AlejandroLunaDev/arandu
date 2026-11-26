@@ -19,8 +19,8 @@ import {
   asPerson,
   madeChapters,
   studyRows,
+  openWallet,
   TIME_ZONE,
-  topUp,
 } from '../progress/progress.repository.js';
 import { one } from '../../core/database/one.js';
 import type { ChapterPieces, PieceRef } from './composer.js';
@@ -348,9 +348,8 @@ export class PathsRepository {
         if (!inserted.length)
           return { sabedoria: 0, peixinhos: 0, patinha: false };
 
-        await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
         // The day's top-up first, so these peixinhos are not swallowed by it later.
-        await topUp(tx, userId);
+        await openWallet(tx, userId);
         await tx`
           update public.wallets set peixinhos = peixinhos + ${CHAPTER_PEIXINHOS}, updated_at = now()
           where user_id = ${userId}`;

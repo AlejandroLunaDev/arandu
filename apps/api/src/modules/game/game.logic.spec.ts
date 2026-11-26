@@ -102,25 +102,25 @@ describe('rollCaixa', () => {
     return vi.fn((_max: number) => queue.shift() ?? 0);
   };
 
-  it('gives 2-8 peixinhos, 1-3 currency and 1-5 sabedoria at the extremes', () => {
+  it('gives 10-20 peixinhos, 1-3 currency and 1-5 sabedoria at the extremes', () => {
     expect(rollCaixa(rolls(0, 0, 0, 99, 99))).toMatchObject({
-      peixinhos: 2,
+      peixinhos: 10,
       currency: 1,
       sabedoria: 1,
     });
-    expect(rollCaixa(rolls(6, 2, 4, 99, 99))).toMatchObject({
-      peixinhos: 8,
+    expect(rollCaixa(rolls(10, 2, 4, 99, 99))).toMatchObject({
+      peixinhos: 20,
       currency: 3,
       sabedoria: 5,
     });
   });
 
-  it('asks for 7, 3 and 5 values for the amounts and 100 for each chance', () => {
+  it('asks for 11, 3 and 5 values for the amounts and 100 for each chance', () => {
     const roll = rolls(0, 0, 0, 0, 0);
 
     rollCaixa(roll);
 
-    expect(roll.mock.calls.map(([max]) => max)).toEqual([7, 3, 5, 100, 100]);
+    expect(roll.mock.calls.map(([max]) => max)).toEqual([11, 3, 5, 100, 100]);
   });
 
   it('gives a marcador below 35 only', () => {
@@ -133,11 +133,17 @@ describe('rollCaixa', () => {
     expect(rollCaixa(rolls(0, 0, 0, 99, 12)).roomItem).toBeNull();
   });
 
-  it('keeps its peixinhos under a lesson price with the real random source', () => {
+  it("averages a lesson's price in peixinhos, so winning pays the next lesson", () => {
+    const least = rollCaixa(rolls(0, 0, 0, 99, 99)).peixinhos;
+    const most = rollCaixa(rolls(10, 0, 0, 99, 99)).peixinhos;
+    expect((least + most) / 2).toBe(LESSON_PRICE);
+  });
+
+  it('keeps its peixinhos between 10 and 20 with the real random source', () => {
     for (let i = 0; i < 200; i++) {
       const { peixinhos, currency, sabedoria } = rollCaixa();
-      expect(peixinhos).toBeGreaterThanOrEqual(2);
-      expect(peixinhos).toBeLessThan(LESSON_PRICE);
+      expect(peixinhos).toBeGreaterThanOrEqual(10);
+      expect(peixinhos).toBeLessThanOrEqual(20);
       expect(currency).toBeGreaterThanOrEqual(1);
       expect(currency).toBeLessThanOrEqual(3);
       expect(sabedoria).toBeGreaterThanOrEqual(1);

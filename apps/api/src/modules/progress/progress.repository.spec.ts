@@ -49,6 +49,15 @@ describe('ProgressRepository wallet', () => {
     expect(tx.mock.calls[topUp]).toContain(DAILY_PEIXINHOS);
   });
 
+  it("creates a new wallet with a day's peixinhos, not the column default", async () => {
+    await repo.lockWallet(tx as never, 'u');
+    const insert = queries().findIndex((q) =>
+      q.includes('insert into public.wallets (user_id, peixinhos)'),
+    );
+    expect(insert).toBe(0);
+    expect(tx.mock.calls[insert]).toContain(DAILY_PEIXINHOS);
+  });
+
   it.each([
     ['peixinhos', 'not_enough_peixinhos'],
     ['currency', 'not_enough_currency'],
