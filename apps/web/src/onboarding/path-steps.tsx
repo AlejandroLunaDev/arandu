@@ -62,7 +62,7 @@ export function SemesterView({ course, path, ...next }: Next & { course: PlaceCo
         </div>
         {first && (
           <p className={p.why}>
-            A patinha marca onde você começa: <strong className={p.paw}>{first.name}</strong>.
+            A bolinha marca onde você começa: <strong className={p.paw}>{first.name}</strong>.
           </p>
         )}
       </div>
@@ -94,12 +94,12 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
       <div className={p.week} aria-hidden="true">
         {["S", "T", "Q", "Q", "S", "S", "D"].map((day, i) => (
           <span key={i} className={p.day} data-on={(goal && LIT[goal].includes(i)) || undefined}>
-            <Image src="/img/props/paw.webp" alt="" width={34} height={34} />
+            <Image src="/img/props/mouse.webp" alt="" width={34} height={22} />
             {day}
           </span>
         ))}
       </div>
-      <p className={styles.hint}>Cada dia de estudo vira uma patinha.</p>
+      <p className={styles.hint}>Cada dia de estudo, o Arandu pega um ratinho.</p>
     </Step>
   );
 }
@@ -126,10 +126,10 @@ export function HowView({ course, ...next }: Next & { course: string }) {
           </div>
         </div>
         <div className={p.row}>
-          <Image src="/img/props/paw.webp" alt="" width={46} height={46} />
+          <Image src="/img/props/mouse.webp" alt="" width={46} height={30} />
           <div>
-            <strong>Patinhas</strong>
-            <span>Cada dia que você estuda vira uma patinha.</span>
+            <strong>Ratinhos</strong>
+            <span>Cada dia que você estuda, o Arandu pega um ratinho.</span>
           </div>
         </div>
       </div>

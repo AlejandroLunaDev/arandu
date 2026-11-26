@@ -1,7 +1,7 @@
 import type { BookProgress, Home, PathSubject } from "@arandu/contracts";
 import Image from "next/image";
 import Link from "next/link";
-import { Coin, coins } from "@/ui/coin";
+import { Patinha, patinhas } from "@/ui/patinha";
 import { NextBook } from "./next-book";
 import { Tower } from "./tower";
 import c from "./caminho.module.css";
@@ -24,12 +24,12 @@ export function PathMap({ home, book, course, next }: { home: Home; book: BookPr
           </svg>
         </Link>
         <span className={c.grow} />
-        <span className={c.stat} aria-label={`${week.studied} patinhas esta semana`}>
-          <Image src="/img/props/paw.webp" alt="" width={26} height={26} />
+        <span className={c.stat} aria-label={`${week.studied} ${week.studied === 1 ? "ratinho" : "ratinhos"} esta semana`}>
+          <Image src="/img/props/mouse.webp" alt="" width={26} height={17} />
           {week.studied}
         </span>
-        <span className={c.stat} aria-label={coins(wallet.currency)}>
-          <Coin />
+        <span className={c.stat} aria-label={patinhas(wallet.currency)}>
+          <Patinha />
           {wallet.currency}
         </span>
         <span className={c.stat} aria-label={`${wallet.peixinhos} peixinhos`}>

@@ -33,13 +33,18 @@
   object-fit: contain;
 }
 
+/* The patinha is square, not long like the fish. */
+.top img[src*="paw"] {
+  height: 26px;
+}
+
 .week img {
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 17px;
   object-fit: contain;
 }
 
-/* S1's week strip: a patinha per day studied, today ringed in amber, the goal on the right. */
+/* S1's week strip: a ratinho per day studied, today ringed in amber, the goal on the right. */
 .week {
   display: flex;
   align-items: center;

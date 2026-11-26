@@ -8,7 +8,7 @@ import styles from "@/onboarding/onboarding.module.css";
 import p from "@/onboarding/path.module.css";
 import { ChapterView } from "@/onboarding/chapter-view";
 import { Cat } from "@/ui/cat";
-import { Coin, coinWord } from "@/ui/coin";
+import { Patinha, patinhaWord } from "@/ui/patinha";
 import { MainButton } from "@/ui/main-button";
 import { useAttempt } from "@/ui/use-attempt";
 import { continueLesson, finishLesson, openCaixa } from "./actions";
@@ -66,7 +66,7 @@ export function PathLesson({ wallet }: { wallet: Wallet }) {
   );
 }
 
-// P7: the lesson is done, with what it gave, its caixa to open and the week's patinhas.
+// P7: the lesson is done, with what it gave, its caixa to open and the week's ratinhos.
 function LessonDone({ entry, result, home, onNext }: { entry: LessonEntry; result: LessonResult; home: Home; onNext: () => void }) {
   const { busy, failed, attempt } = useAttempt();
   const [caixa, setCaixa] = useState<CaixaContents | null>(null);
@@ -110,9 +110,9 @@ function LessonDone({ entry, result, home, onNext }: { entry: LessonEntry; resul
               )}
               {caixa && caixa.currency > 0 && (
                 <div>
-                  <Coin className={c.prize} />
+                  <Patinha className={c.prize} />
                   <strong>+{caixa.currency}</strong>
-                  <small>{coinWord(caixa.currency)}</small>
+                  <small>{patinhaWord(caixa.currency)}</small>
                 </div>
               )}
             </div>
@@ -149,7 +149,7 @@ function LessonDone({ entry, result, home, onNext }: { entry: LessonEntry; resul
         <div className={p.week} aria-label={`Sua semana: ${home.week.studied} ${home.week.studied === 1 ? "dia" : "dias"} de estudo`}>
           {home.week.days.map((day, i) => (
             <span key={day.date} className={p.day} data-on={day.studied || undefined} aria-hidden="true">
-              <Image src="/img/props/paw.webp" alt="" width={34} height={34} />
+              <Image src="/img/props/mouse.webp" alt="" width={34} height={22} />
               {DAYS[i]}
             </span>
           ))}

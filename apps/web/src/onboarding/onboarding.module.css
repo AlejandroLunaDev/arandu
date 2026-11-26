@@ -72,45 +72,104 @@
   padding: 12px 16px 0;
 }
 
-/* The onboarding's progress: a trail of seven paw prints walking to the right, a left foot then a right one. */
-.trail {
-  display: flex;
+/* The onboarding's progress: the cat's toy ball on a line, one stretch on with each question. --at is where it is
+   and --from where it was on the question before: every question's screen is new, so the ball rolls in from there. */
+.track {
+  position: relative;
   flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px;
+  height: 24px;
+  margin: 0 12px;
 }
 
-.trail svg {
-  width: 20px;
-  height: 20px;
-  fill: var(--ink-600);
-  translate: 0 -3px;
-  rotate: 78deg;
+.track::before,
+.track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 99px;
 }
 
-.trail svg:nth-child(even) {
-  translate: 0 3px;
-  rotate: 102deg;
+.track::before {
+  right: 0;
+  background: var(--ink-700);
 }
 
-.trail svg[data-on] {
-  fill: var(--amber-400);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--amber-400) 45%, transparent));
+/* The stretch already done. */
+.track::after {
+  width: var(--at);
+  background: var(--amber-400);
 }
 
-/* The newest print lands. */
+.roller {
+  position: absolute;
+  top: 0;
+  left: var(--at);
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  object-fit: contain;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  .trail svg[data-now] {
-    animation: step 0.35s ease-out both;
+  .roller {
+    animation: roll 0.8s cubic-bezier(0.3, 0, 0.3, 1) both;
+  }
+
+  .track::after {
+    animation: stretch 0.8s cubic-bezier(0.3, 0, 0.3, 1) both;
   }
 }
 
-@keyframes step {
+@keyframes roll {
   from {
-    opacity: 0;
-    scale: 0.4;
+    left: var(--from);
+    rotate: -220deg;
   }
+}
+
+@keyframes stretch {
+  from {
+    width: var(--from);
+  }
+}
+
+.track[data-step="1"] {
+  --from: 0.0%;
+  --at: 14.29%;
+}
+
+.track[data-step="2"] {
+  --from: 14.29%;
+  --at: 28.57%;
+}
+
+.track[data-step="3"] {
+  --from: 28.57%;
+  --at: 42.86%;
+}
+
+.track[data-step="4"] {
+  --from: 42.86%;
+  --at: 57.14%;
+}
+
+.track[data-step="5"] {
+  --from: 57.14%;
+  --at: 71.43%;
+}
+
+.track[data-step="6"] {
+  --from: 71.43%;
+  --at: 85.71%;
+}
+
+.track[data-step="7"] {
+  --from: 85.71%;
+  --at: 100.0%;
 }
 
 .body {

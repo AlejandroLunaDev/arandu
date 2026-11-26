@@ -2,7 +2,7 @@ import type { Home } from "@arandu/contracts";
 import Image from "next/image";
 import Link from "next/link";
 import { Cat } from "@/ui/cat";
-import { Coin, coinWord } from "@/ui/coin";
+import { Patinha, patinhaWord } from "@/ui/patinha";
 import { DailyGift } from "./daily-gift";
 import styles from "./room.module.css";
 
@@ -10,7 +10,7 @@ const DAYS = ["S", "T", "Q", "Q", "S", "S", "D"];
 // The API counts the week in São Paulo time (progress.repository TIME_ZONE), so "today" is that date there.
 const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
 
-// S1, the room: the wallet, the day's gift, this week's patinhas and the book the person is on (GET /me), which leads
+// S1, the room: the wallet, the day's gift, this week's ratinhos and the book the person is on (GET /me), which leads
 // to its path.
 // shortcut: the 3D room and Arandu's talk come with the room step; for now it shows where the person stands.
 export function HomeView({ home }: { home: Home }) {
@@ -21,9 +21,9 @@ export function HomeView({ home }: { home: Home }) {
       <h1 className="sr-only">Quarto</h1>
       <header className={styles.top}>
         <p>
-          <Coin />
+          <Patinha />
           {wallet.currency}
-          <span className="sr-only"> {coinWord(wallet.currency)}</span>
+          <span className="sr-only"> {patinhaWord(wallet.currency)}</span>
         </p>
         <p>
           <Image src="/img/props/fish.webp" alt="" width={26} height={17} />
@@ -35,7 +35,7 @@ export function HomeView({ home }: { home: Home }) {
         <div aria-hidden="true">
           {week.days.map((day, i) => (
             <span key={day.date} data-on={day.studied || undefined} data-today={day.date === today || undefined}>
-              <Image src="/img/props/paw.webp" alt="" width={20} height={20} />
+              <Image src="/img/props/mouse.webp" alt="" width={26} height={17} />
               <i>{DAYS[i]}</i>
             </span>
           ))}

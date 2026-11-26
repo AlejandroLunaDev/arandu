@@ -4,7 +4,7 @@ import type { Wallet } from "@arandu/contracts";
 import { useState } from "react";
 import styles from "@/onboarding/onboarding.module.css";
 import { Cat } from "@/ui/cat";
-import { Coin, coins } from "@/ui/coin";
+import { Patinha, patinhas } from "@/ui/patinha";
 import { useAttempt } from "@/ui/use-attempt";
 import c from "./caminho.module.css";
 
@@ -33,17 +33,17 @@ export function OutOfLives({ wallet, onGoOn, onClose }: { wallet: Wallet; onGoOn
               })
             }
           >
-            <Coin />
+            <Patinha />
             <span>
               <b>Continuar a lição</b>
               <small>
-                {coins(wallet.continuePrice)} · você tem {wallet.currency}
+                {patinhas(wallet.continuePrice)} · você tem {wallet.currency}
               </small>
             </span>
           </button>
           {(refused || failed) && (
             <p className={styles.error} role="alert">
-              {refused ? "Você não tem o bastante para continuar." : "Não consegui agora. Tenta de novo?"}
+              {refused ? "Faltam patinhas para continuar." : "Não consegui agora. Tenta de novo?"}
             </p>
           )}
         </div>
