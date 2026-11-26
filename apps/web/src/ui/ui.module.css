@@ -32,8 +32,8 @@
 }
 
 /* A cat does not talk: the words are his thought, so no tail points at him. Where he sits under them, a trail of
-   three small bubbles goes from him up to them, the smallest nearest him (Trail in arandu-says.tsx). They come last,
-   one after another, once the words are in their place: while he is beside them they would sit on top of him. */
+   three small bubbles goes from them down to him, the smallest nearest him (Trail in arandu-says.tsx). They come last,
+   one after another from the biggest, once the words are in their place: while he is beside them they would sit on top of him. */
 .trail {
   position: absolute;
   top: 100%;
@@ -51,7 +51,7 @@
 }
 
 .trail i:nth-child(1) {
-  --nth: 0;
+  --nth: 2;
 
   top: 36px;
   left: -19px;
@@ -69,7 +69,7 @@
 }
 
 .trail i:nth-child(3) {
-  --nth: 2;
+  --nth: 0;
 
   top: 5px;
   left: -2px;

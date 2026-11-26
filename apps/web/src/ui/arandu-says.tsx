@@ -40,8 +40,9 @@ export function Said({ text, shown }: { text: string; shown: number }) {
 }
 
 /**
- * The thought's trail: three small bubbles from Arandu up to his words, the smallest nearest him. They belong under
- * the words (inside a `ui.bubble`), where he is once the words are over him, and come one after another when `on`.
+ * The thought's trail: three small bubbles from Arandu's words down to him, the smallest nearest him. They belong
+ * under the words (inside a `ui.bubble`), where he is once the words are over him, and come one after another when
+ * `on`, the biggest first.
  */
 export function Trail({ on }: { on: boolean }) {
   return (
