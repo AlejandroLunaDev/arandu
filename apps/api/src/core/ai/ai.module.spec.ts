@@ -43,7 +43,6 @@ describe('AiModule config', () => {
     const { defaults } = await build();
 
     expect(defaults.providerOptions.openrouter).toEqual({
-      provider: { data_collection: 'deny' },
       reasoning: { enabled: false },
     });
   });
@@ -62,7 +61,6 @@ describe('AiModule config', () => {
     expect(models.default!.model.modelId).toBe('a/one:free');
     expect(models.default).not.toHaveProperty('pricing');
     expect(defaults.providerOptions.openrouter).toEqual({
-      provider: { data_collection: 'deny' },
       reasoning: { enabled: false },
       models: list,
     });
