@@ -131,6 +131,11 @@ MATERIALS = {  # name: (color, roughness, metallic)
     "FishFin": (srgb("#D99A32"), 0.35, 0.0),  # amber-500
     "FishEye": (srgb("#09090D"), 0.15, 0.0),  # ink-950
     "FishGlint": (srgb("#FBF8F1"), 0.2, 0.0),  # cream-50
+    "MouseBody": (srgb("#F1EBDD"), 0.85, 0.0),  # cream-100: felt, light enough to show on the app's dark pages
+    "MouseEar": (srgb("#B597DD"), 0.7, 0.0),  # violet-300: the inside of its ears
+    "MouseTail": (srgb("#9B72CF"), 0.6, 0.0),  # violet-400: a string
+    "MouseNose": (srgb("#E0A845"), 0.4, 0.0),  # amber-400
+    "MouseEye": (srgb("#09090D"), 0.15, 0.0),  # ink-950
 }
 
 
@@ -717,6 +722,28 @@ def fish(coll):
     return p.build("Fish", coll)
 
 
+def mouse(coll):
+    """A toy mouse, the one Arandu catches each day the person studies: a felt body in a teardrop headed toward +X,
+    its side to the camera, two round ears, a bead for an eye and a string for a tail curled over its back. Its origin
+    is the centre of its base."""
+    p = Part()
+    turn = lambda deg: Matrix.Rotation(math.radians(deg), 4, "Y")
+    blob(p, (-0.006, 0, 0.036), (0.047, 0.035, 0.036), "MouseBody")
+    blob(p, (0.036, 0, 0.03), (0.034, 0.024, 0.024), "MouseBody", turn(8))  # the head, narrowing to the nose
+    blob(p, (0.07, 0, 0.026), (0.007, 0.007, 0.007), "MouseNose")
+    for y in (-0.021, 0.021):  # the ears: a felt disc each, tipped back, with a violet inside
+        blob(p, (0.02, y, 0.071), (0.006, 0.026, 0.026), "MouseBody", turn(-18))
+        blob(p, (0.0235, y, 0.0715), (0.004, 0.019, 0.019), "MouseEar", turn(-18))
+    blob(p, (0.05, -0.0195, 0.038), (0.0055, 0.0055, 0.0055), "MouseEye")
+    blob(p, (0.0515, -0.0238, 0.0402), (0.0018, 0.0018, 0.0018), "FishGlint")
+    # Curled up over its back, not trailing behind: in the interface the mouse is a small mark, and a long tail would
+    # take half of its width.
+    tail = [(-0.047, 0, 0.03), (-0.066, 0, 0.034), (-0.079, -0.004, 0.05), (-0.074, -0.008, 0.07),
+            (-0.057, -0.01, 0.081), (-0.042, -0.01, 0.073), (-0.045, -0.01, 0.061)]
+    p.add(*tube(spline(tail, 40), 0.004, sides=8), "MouseTail")
+    return p.build("Mouse", coll)
+
+
 # ---------------------------------------------------------------- the room's furniture
 #
 # The furniture shares the cat's scale too: about 1.3 times a person's, so the cat and the books never
@@ -1222,6 +1249,7 @@ LAYOUT = {  # where each prop stands in the Blender scene; the export puts every
     "YarnBall": (-0.9, 0, 0),
     "Paw": (-1.5, 0, 0),
     "Fish": (-1.75, 0, 0),
+    "Mouse": (-1.62, -0.45, 0),
     "PlantPot": (-0.45, 0, 0.6),
     "LampMushroom": (0.0, 0, 0),
     "LampClassic": (0.45, 0, 0),
@@ -1280,7 +1308,7 @@ def build():
     coll = reset_collection()
     props = [book(coll, name) for name in BOOKS] + [book_open(coll)]
     props += [shelf(coll, name) for name in SHELVES]
-    props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball, paw, fish)]
+    props += [f(coll) for f in (plant_pot, lamp_pendant, lamp_mushroom, lamp_classic, lamp_desk, yarn_ball, ball, paw, fish, mouse)]
     props += [f(coll) for f in (desk, notebook, chair_gamer, sofa, paper_bin, trophy, grad_cap,
                                 pencil_cup, mug, neon_sign, string_lights, farol_santander, tv, side_table)]
     props += [paper_ball(coll, name) for name in PAPER_BALLS] + [pencil(coll, name) for name in PENCILS]

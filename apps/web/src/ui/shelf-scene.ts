@@ -23,17 +23,18 @@ const SHELVES: PropName[] = ["ShelfSmall", "ShelfMedium", "ShelfLarge"];
 const GAP = 0.006;
 /** Plank left free past the last book, where the page lays Arandu. */
 const CAT_ROOM = 0.26;
-/** Air above the tallest book, for the paw, and plank shown below its top. */
+/** Air above the tallest book, for the ball on the first one, and plank shown below its top. */
 const ABOVE = 0.12;
 const BELOW = 0.06;
 
 /**
- * Subjects as the landing's 3D books, standing on its shelf: each title down its spine, the first one glowing under
- * a paw (where the person starts). Still: drawn once, and again when the canvas changes size.
+ * Subjects as the landing's 3D books, standing on its shelf: each title down its spine, the first one glowing with
+ * the cat's toy ball on it (where the person starts; the paw is the game's currency, so it marks nothing). Still:
+ * drawn once, and again when the canvas changes size.
  */
 export async function runShelf(host: HTMLElement, titles: string[], onReady: () => void) {
   // The spines print in the page's display font: wait for it, or they print in a fallback.
-  const [gltf, paw] = await Promise.all([load(), new THREE.TextureLoader().loadAsync("/img/props/paw.webp"), document.fonts.ready]);
+  const [gltf] = await Promise.all([load(), document.fonts.ready]);
   const kit = makeKit(gltf);
   const canvas = host.appendChild(document.createElement("canvas"));
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -67,7 +68,7 @@ export async function runShelf(host: HTMLElement, titles: string[], onReady: () 
   row.position.x = -length / 2 + 0.05;
   scene.add(row);
 
-  // The first book glows a little, and the paw floats over it.
+  // The first book glows a little, and the ball rests on it.
   const first = books[0];
   if (first) {
     first.book.traverse((o) => {
@@ -76,11 +77,9 @@ export async function runShelf(host: HTMLElement, titles: string[], onReady: () 
         o.material.emissiveIntensity = 0.22;
       }
     });
-    paw.colorSpace = THREE.SRGBColorSpace;
-    const mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: paw, transparent: true }));
-    mark.scale.setScalar(0.07);
-    mark.position.set(row.position.x + first.book.position.x, first.s.y + 0.06, 0);
-    scene.add(mark);
+    const ball = kit.make("Ball");
+    ball.position.set(row.position.x + first.book.position.x, first.s.y, 0);
+    scene.add(ball);
   }
 
   // Framed on the books and the cat's stretch of plank, not the whole shelf: the books as big as the canvas allows, the
@@ -113,7 +112,6 @@ export async function runShelf(host: HTMLElement, titles: string[], onReady: () 
   return {
     stop() {
       observer.disconnect();
-      paw.dispose();
       kit.dispose();
       renderer.dispose();
       // dispose() keeps the canvas's WebGL context; the browser holds only a few at once.

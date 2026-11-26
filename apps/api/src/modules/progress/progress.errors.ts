@@ -6,26 +6,14 @@ export const subjectNotFound = () =>
     message: 'No such subject',
   });
 
-export const noNovelosLeft = () =>
+export const notEnoughPeixinhos = () =>
   new ConflictException({
-    code: 'no_novelos_left',
-    message: 'No novelos left',
+    code: 'not_enough_peixinhos',
+    message: 'Not enough peixinhos',
   });
 
-export const novelosLeft = () =>
+export const notEnoughCurrency = () =>
   new ConflictException({
-    code: 'novelos_left',
-    message: 'Re-reading gives a novelo only at 0',
-  });
-
-export const rereadUsed = () =>
-  new ConflictException({
-    code: 'reread_used',
-    message: 'This chapter already gave its novelo',
-  });
-
-export const chapterNotOpen = () =>
-  new ConflictException({
-    code: 'chapter_not_open',
-    message: 'This chapter is not open yet',
+    code: 'not_enough_currency',
+    message: 'Not enough currency',
   });

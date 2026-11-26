@@ -474,12 +474,11 @@ describe('POST /arandu/chat among the recommended careers', () => {
     ]);
   });
 
-  it('gives the courses on screen to the model', async () => {
+  it('gives the careers on screen to the model, without their places', async () => {
     await post(withChoices).expect(200);
 
-    expect(model.lastCall?.instructions).toContain(
-      '7: Arquitetura, Mackenzie, São Paulo',
-    );
+    expect(model.lastCall?.instructions).toContain('7: Arquitetura');
+    expect(model.lastCall?.instructions).not.toContain('Mackenzie');
   });
 
   it.each([
@@ -561,7 +560,7 @@ describe('career chat prompts', () => {
     );
   });
 
-  it('lists the courses on screen and the confirmation rule, or says the choice is always null', () => {
+  it('lists the careers on screen and the confirmation rule, or says the choice is always null', () => {
     const professions = [{ slug: 'direito', profession: direito() }];
     const withChoices = choosingInstructions(professions, undefined, [
       { courseId: 7, course: 'Direito', institution: 'USP', city: 'São Paulo' },
@@ -569,12 +568,12 @@ describe('career chat prompts', () => {
       { courseId: 11, course: 'Direito', institution: 'Unip', city: null },
     ]);
 
-    expect(withChoices).toContain('7: Direito, USP, São Paulo');
-    expect(withChoices).toContain('9: Direito, PUC, Santos');
-    expect(withChoices).toContain('11: Direito, Unip, distance learning');
+    // The person picks a career: a choice's place never reaches the model, so it cannot ask for one.
+    expect(withChoices).toContain('7: Direito');
+    expect(withChoices).toContain('11: Direito');
+    expect(withChoices).not.toContain('Unip');
+    expect(withChoices).toContain('never a place');
     expect(withChoices).toContain('short warm confirmation');
-    expect(withChoices).toContain('offered at more than one place');
-    expect(withChoices).toContain('which');
     expect(withChoices).toContain(
       'replaces the one about ending with exactly one question',
     );

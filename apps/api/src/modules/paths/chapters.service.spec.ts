@@ -4,6 +4,8 @@ import { AiModelError, AiOutputError, type AiService } from '@nestjs/ai';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../core/config/env.js';
+import { CONTINUE_PRICE, LESSON_PRICE } from '../progress/progress.logic.js';
+import type { ProgressRepository } from '../progress/progress.repository.js';
 import type { ProgressService } from '../progress/progress.service.js';
 import { ChaptersService } from './chapters.service.js';
 import { composeChapter, composeLesson } from './composer.js';
@@ -116,11 +118,11 @@ describe('ChaptersService', () => {
     | 'finishChapter'
     | 'lessons'
     | 'chapterFinished'
-    | 'missedElsewhere'
     | 'finishLesson',
     Fn
   >;
   let progress: { achievements: Fn };
+  let wallet: { pay: Fn };
   let config: { get: Mock<() => string | undefined> };
   let service: ChaptersService;
 
@@ -167,21 +169,22 @@ describe('ChaptersService', () => {
         .mockResolvedValue({ sabedoria: 15, peixinhos: 5, patinha: true }),
       lessons: vi.fn().mockResolvedValue([]),
       chapterFinished: vi.fn().mockResolvedValue(false),
-      missedElsewhere: vi.fn().mockResolvedValue([]),
       finishLesson: vi.fn().mockResolvedValue({
         sabedoria: 4,
-        peixinhos: 0,
         patinha: false,
+        caixaId: 1,
         chapterDone: false,
       }),
     };
     progress = { achievements: vi.fn().mockResolvedValue([]) };
+    wallet = { pay: vi.fn().mockResolvedValue({}) };
     config = { get: vi.fn(() => 'fc-key') };
     service = new ChaptersService(
       ai as unknown as AiService,
       paths as unknown as PathsRepository,
       progress as unknown as ProgressService,
       config as unknown as ConfigService<Env, true>,
+      wallet as unknown as ProgressRepository,
     );
   });
 
@@ -878,13 +881,11 @@ describe('ChaptersService', () => {
 
   describe('lessons', () => {
     const pieces = piecesOf(piecesReply());
-    const cards = [
-      {
-        title: 't',
-        text: 'x',
-        source: { label: 'l', url: 'https://a.org/s', quote: 'q' },
-      },
-    ];
+    const cards = ['a', 'b', 'c', 'd'].map((title) => ({
+      title,
+      text: 'x',
+      source: { label: 'l', url: 'https://a.org/s', quote: title },
+    }));
     const chapterOf = (topic: number) => ({
       discipline: { id: 7, name: 'Cálculo' },
       topic: { index: topic, text: discipline.topics[topic], total: 2 },
@@ -909,6 +910,13 @@ describe('ChaptersService', () => {
     });
     const done = (...lessons: number[]) =>
       lessons.map((lesson) => ({ lesson, missed: [] }));
+    const locked = async (work: Promise<unknown>) => {
+      const error = await work.catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'lesson_locked',
+      });
+    };
 
     beforeEach(() => {
       paths.chapterContent.mockImplementation((_d: number, topic: number) =>
@@ -920,81 +928,97 @@ describe('ChaptersService', () => {
       ]);
     });
 
-    it('lessons 1-3 are composed from the pieces for this person, the same on every call; only lesson 1 has the cards', async () => {
-      const first = await service.lesson('u', 7, 1, 1);
-      const again = await service.lesson('u', 7, 1, 1);
-      paths.lessons.mockResolvedValue(done(1));
-      const second = await service.lesson('u', 7, 1, 2);
+    describe('start', () => {
+      it('composes each lesson for this person, the same on every call, with 3 lives', async () => {
+        const first = await service.start('u', 7, 1, 1);
+        const again = await service.start('u', 7, 1, 1);
+        const second = await service.start('u', 7, 1, 2);
 
-      expect(first).toMatchObject({ index: 1, total: 4, cards });
-      expect(refsOf(first)).toEqual(expected(1));
-      expect(again).toEqual(first);
-      expect(refsOf(second)).toEqual(expected(2));
-      expect(second.cards).toBeNull();
-      expect(paths.subjectPieces).toHaveBeenCalledWith(7, discipline.topics);
-    });
+        expect(first).toMatchObject({ index: 1, total: 3, lives: 3 });
+        expect(refsOf(first)).toEqual(expected(1));
+        expect(again).toEqual(first);
+        expect(refsOf(second)).toEqual(expected(2));
+        expect(paths.subjectPieces).toHaveBeenCalledWith(7, discipline.topics);
+      });
 
-    it('refuses lesson 3 with 409 lesson_locked when only lesson 1 is done', async () => {
-      paths.lessons.mockResolvedValue(done(1));
+      it("gives each lesson its share of the chapter's cards", async () => {
+        paths.lessons.mockResolvedValue(done(1, 2));
 
-      const error = await service.lesson('u', 7, 1, 3).catch((e: unknown) => e);
+        const titles = await Promise.all(
+          [1, 2, 3].map(async (n) =>
+            (await service.start('u', 7, 1, n)).cards.map((c) => c.title),
+          ),
+        );
 
-      expect(error).toBeInstanceOf(ConflictException);
-      expect((error as ConflictException).getStatus()).toBe(409);
-      expect((error as ConflictException).getResponse()).toMatchObject({
-        code: 'lesson_locked',
+        expect(titles).toEqual([['a', 'b'], ['c'], ['d']]);
+      });
+
+      it('charges the lesson price in peixinhos each time, after composing it', async () => {
+        await service.start('u', 7, 1, 1);
+        await service.start('u', 7, 1, 1);
+
+        expect(wallet.pay).toHaveBeenCalledTimes(2);
+        expect(wallet.pay).toHaveBeenCalledWith('u', 'peixinhos', LESSON_PRICE);
+      });
+
+      it('serves nothing when the peixinhos are too few', async () => {
+        wallet.pay.mockRejectedValue(new ConflictException());
+
+        await expect(service.start('u', 7, 1, 1)).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+      });
+
+      it('opens lesson 2 before lesson 1', async () => {
+        await expect(service.start('u', 7, 1, 2)).resolves.toMatchObject({
+          index: 2,
+        });
+      });
+
+      it.each([[[]], [[1]], [[2]]])(
+        'refuses lesson 3 with 409 lesson_locked with lessons %j done, and charges nothing',
+        async (lessons) => {
+          paths.lessons.mockResolvedValue(done(...lessons));
+
+          await locked(service.start('u', 7, 1, 3));
+          expect(wallet.pay).not.toHaveBeenCalled();
+        },
+      );
+
+      it('opens lesson 3 once lessons 1 and 2 are done, or the chapter is finished', async () => {
+        paths.lessons.mockResolvedValue(done(1, 2));
+        await expect(service.start('u', 7, 1, 3)).resolves.toMatchObject({
+          index: 3,
+        });
+
+        paths.lessons.mockResolvedValue(done(1));
+        paths.chapterFinished.mockResolvedValue(true);
+        await expect(service.start('u', 7, 1, 3)).resolves.toMatchObject({
+          index: 3,
+        });
       });
     });
 
-    it('allows lesson 3 once the chapter is finished', async () => {
-      paths.lessons.mockResolvedValue(done(1));
-      paths.chapterFinished.mockResolvedValue(true);
+    describe('continue', () => {
+      it('charges the continue price in currency', async () => {
+        await service.continue('u', 7, 1, 2);
 
-      await expect(service.lesson('u', 7, 1, 3)).resolves.toMatchObject({
-        index: 3,
+        expect(wallet.pay).toHaveBeenCalledWith(
+          'u',
+          'currency',
+          CONTINUE_PRICE,
+        );
       });
-    });
 
-    it('lesson 4 brings back each miss of lessons 1-3 once, in another kind', async () => {
-      const one = (await service.lesson('u', 7, 1, 1)).exercises.find(
-        (e) => e.kind === 'escolha_uma',
-      )!;
-      paths.lessons.mockResolvedValue(done(1));
-      const two = (await service.lesson('u', 7, 1, 2)).exercises.find(
-        (e) => e.kind === 'escolha_a_frase_certa',
-      )!;
-      paths.lessons.mockResolvedValue([
-        { lesson: 1, missed: [missOf(one)] },
-        { lesson: 2, missed: [missOf(two)] },
-        { lesson: 3, missed: [missOf(one)] },
-      ]);
-
-      const review = await service.lesson('u', 7, 1, 4);
-
-      expect(refsOf(review)).toEqual([
-        { topic: 1, index: one.index },
-        { topic: 1, index: two.index },
-      ]);
-      expect(review.exercises[0]!.kind).not.toBe('escolha_uma');
-      expect(review.exercises[1]!.kind).not.toBe('escolha_a_frase_certa');
-      expect(review.cards).toBeNull();
-    });
-
-    it('lesson 4 adds an earlier miss of another chapter of the subject', async () => {
-      paths.lessons.mockResolvedValue(done(1, 2, 3));
-      paths.missedElsewhere.mockResolvedValue([
-        { topic: 0, index: 0, kind: 'escolha_uma' },
-      ]);
-
-      const review = await service.lesson('u', 7, 1, 4);
-
-      expect(refsOf(review).at(-1)).toEqual({ topic: 0, index: 0 });
+      it('refuses a locked lesson with 409 lesson_locked, and charges nothing', async () => {
+        await locked(service.continue('u', 7, 1, 3));
+        expect(wallet.pay).not.toHaveBeenCalled();
+      });
     });
 
     describe('finishLesson', () => {
       it('keeps only the misses that were in the lesson, once each, with the kind they were missed in', async () => {
-        paths.lessons.mockResolvedValue(done(1));
-        const [a, b] = (await service.lesson('u', 7, 1, 2)).exercises;
+        const [a, b] = (await service.start('u', 7, 1, 2)).exercises;
 
         await service.finishLesson('u', 7, 1, 2, [
           a!,
@@ -1025,8 +1049,8 @@ describe('ChaptersService', () => {
       it('on a replay with the same achievements before and after returns none', async () => {
         paths.finishLesson.mockResolvedValue({
           sabedoria: 0,
-          peixinhos: 0,
           patinha: false,
+          caixaId: null,
           chapterDone: false,
         });
         progress.achievements.mockResolvedValue([
@@ -1042,8 +1066,8 @@ describe('ChaptersService', () => {
       it('with sabedoria 0 still returns semana_de_patinhas earned by the study day', async () => {
         paths.finishLesson.mockResolvedValue({
           sabedoria: 0,
-          peixinhos: 0,
           patinha: true,
+          caixaId: 3,
           chapterDone: true,
         });
         progress.achievements
@@ -1054,7 +1078,10 @@ describe('ChaptersService', () => {
 
         const result = await service.finishLesson('u', 7, 1, 1, []);
 
-        expect(result.achievements).toEqual(['semana_de_patinhas']);
+        expect(result).toMatchObject({
+          caixaId: 3,
+          achievements: ['semana_de_patinhas'],
+        });
       });
     });
   });

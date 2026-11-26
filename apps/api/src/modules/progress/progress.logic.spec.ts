@@ -3,16 +3,12 @@ import {
   addDays,
   type Finish,
   dayOf,
-  MAX_NOVELOS,
   nextMidnight,
-  noveloPrice,
-  refill,
 } from './progress.logic.js';
 
 // 02:59Z is still 23:59 on the 9th in São Paulo; 03:00Z is 00:00 on the 10th.
 const BEFORE_MIDNIGHT = new Date('2026-03-10T02:59:00.000Z');
 const AT_MIDNIGHT = new Date('2026-03-10T03:00:00.000Z');
-const YESTERDAY = new Date('2026-03-09T15:00:00.000Z');
 
 describe('dayOf', () => {
   it('counts the day in São Paulo, not in UTC', () => {
@@ -29,65 +25,6 @@ describe('nextMidnight', () => {
     ['2026-12-31T12:00:00.000Z', '2027-01-01T03:00:00.000Z'],
   ])('after %s comes %s', (now, midnight) => {
     expect(nextMidnight(new Date(now)).toISOString()).toBe(midnight);
-  });
-});
-
-describe('refill', () => {
-  it('keeps the count on the same São Paulo day', () => {
-    expect(refill(1, YESTERDAY, BEFORE_MIDNIGHT)).toEqual({
-      novelos: 1,
-      at: YESTERDAY,
-    });
-  });
-
-  it('gives all novelos back once São Paulo midnight passes', () => {
-    expect(refill(0, YESTERDAY, AT_MIDNIGHT)).toEqual({
-      novelos: MAX_NOVELOS,
-      at: AT_MIDNIGHT,
-    });
-  });
-
-  it('does not reset at 03:00Z when at is already on that São Paulo day', () => {
-    const at = new Date('2026-03-10T03:30:00.000Z');
-    expect(refill(1, at, new Date('2026-03-10T20:00:00.000Z'))).toEqual({
-      novelos: 1,
-      at,
-    });
-  });
-
-  it('clamps an old 5-novelo row to 3 on the same day', () => {
-    expect(refill(5, YESTERDAY, BEFORE_MIDNIGHT)).toEqual({
-      novelos: 3,
-      at: YESTERDAY,
-    });
-  });
-
-  it('is 3 after a day change even from an old 5', () => {
-    expect(refill(5, YESTERDAY, AT_MIDNIGHT).novelos).toBe(3);
-  });
-});
-
-describe('noveloPrice', () => {
-  const day = '2026-03-10';
-  const now = new Date('2026-03-10T15:00:00.000Z');
-
-  it.each([
-    [0, 15],
-    [1, 20],
-    [2, 35],
-    [3, 50],
-    [4, 50],
-    [9, 50],
-  ])('with %i bought today the next costs %i', (bought, price) => {
-    expect(noveloPrice(bought, day, now)).toBe(price);
-  });
-
-  it('starts again at 15 on a new day', () => {
-    expect(noveloPrice(4, '2026-03-09', now)).toBe(15);
-  });
-
-  it('is 15 when nothing was ever bought', () => {
-    expect(noveloPrice(0, null, now)).toBe(15);
   });
 });
 

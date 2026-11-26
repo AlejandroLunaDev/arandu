@@ -37,7 +37,6 @@ const profile = (over: Record<string, unknown> = {}) => ({
 const turn = (over: Record<string, unknown> = {}) => ({
   profile: profile(),
   reply: 'Próxima pergunta?',
-  quickReplies: ['a', 'b'],
   ...over,
 });
 const messyProfile = (over: Record<string, unknown> = {}) =>
@@ -104,7 +103,6 @@ describe('POST /arandu/onboarding', () => {
     expect(res.body).toMatchObject({
       sessionId: SESSION_ID,
       reply: 'Próxima pergunta?',
-      quickReplies: ['a', 'b'],
       done: false,
     });
     expect(model.lastCall?.lastUserMessage).toBe('Start the onboarding.');
@@ -153,7 +151,6 @@ describe('POST /arandu/onboarding', () => {
     expect(res.body).toEqual({
       sessionId: SESSION_ID,
       reply: `${SAFE_LEAD} Oi, o que você faz?`,
-      quickReplies: [],
       profile: profile({ covered: ['situation', 'interests'] }),
       progress: { answered: 2, total: 7 },
       done: false,
@@ -192,26 +189,16 @@ describe('POST /arandu/onboarding', () => {
     expect(model.calls).toHaveLength(1);
   });
 
-  it('replaces an abusive model reply with the safe reply and no quick replies', async () => {
-    await start({ reply: 'vai se foder', quickReplies: ['a', 'b'] });
+  it('replaces an abusive model reply with the safe reply', async () => {
+    await start({ reply: 'vai se foder' });
 
     const res = await answer().expect(200);
 
     expect(res.body.reply).toBe(SAFE_REPLY);
-    expect(res.body.quickReplies).toEqual([]);
     expect(memory.addMessages).toHaveBeenCalledWith(SESSION_ID, [
       { role: 'user', content: 'Oi' },
       { role: 'assistant', content: SAFE_REPLY },
     ]);
-  });
-
-  it('filters out the abusive quick replies and keeps the rest', async () => {
-    await start({ quickReplies: ['a', 'seu viado', 'b'] });
-
-    const res = await answer().expect(200);
-
-    expect(res.body.reply).toBe('Próxima pergunta?');
-    expect(res.body.quickReplies).toEqual(['a', 'b']);
   });
 
   it('404s without calling the model for a session that is not the person own', async () => {
@@ -224,13 +211,12 @@ describe('POST /arandu/onboarding', () => {
     expect(memory.addMessages).not.toHaveBeenCalled();
   });
 
-  it('is done, with no quick replies, once the profile covers every topic', async () => {
+  it('is done once the profile covers every topic', async () => {
     await start({ profile: profile({ covered: ALL_TOPICS }) });
 
     const res = await answer().expect(200);
 
     expect(res.body.done).toBe(true);
-    expect(res.body.quickReplies).toEqual([]);
     expect(res.body.progress).toEqual({ answered: 7, total: 7 });
   });
 
@@ -306,7 +292,6 @@ describe('POST /arandu/onboarding', () => {
     const res = await answer().expect(200);
 
     expect(res.body.done).toBe(true);
-    expect(res.body.quickReplies).toEqual([]);
   });
 
   it('is not done at the 9th answer', async () => {
@@ -320,17 +305,15 @@ describe('POST /arandu/onboarding', () => {
     expect(res.body.done).toBe(false);
   });
 
-  it('dedupes covered, reports progress and caps quick replies at 5', async () => {
+  it('dedupes covered and reports progress', async () => {
     await start({
       profile: profile({ covered: ['situation', 'situation', 'interests'] }),
-      quickReplies: ['1', '2', '3', '4', '5', '6', '7'],
     });
 
     const res = await answer().expect(200);
 
     expect(res.body.profile.covered).toEqual(['situation', 'interests']);
     expect(res.body.progress).toEqual({ answered: 2, total: 7 });
-    expect(res.body.quickReplies).toEqual(['1', '2', '3', '4', '5']);
     expect(res.body.done).toBe(false);
   });
 

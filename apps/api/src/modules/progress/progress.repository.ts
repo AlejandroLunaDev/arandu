@@ -1,6 +1,7 @@
 import type {
   BookClosing,
   BookReflectionRequest,
+  DailyGift,
   Wallet,
 } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
@@ -8,15 +9,15 @@ import type { TransactionSql } from 'postgres';
 import { PersonGoneError } from '../memory/memory.repository.js';
 import { SQL, type Sql } from '../../core/database/database.module.js';
 import {
+  CONTINUE_PRICE,
   CURIOSITY_QUESTIONS,
+  DAILY_PEIXINHOS,
   type Finish,
-  MAX_NOVELOS,
+  LESSON_PRICE,
   nextMidnight,
-  noveloPrice,
-  refill,
   TIME_ZONE,
 } from './progress.logic.js';
-import { noNovelosLeft, novelosLeft, rereadUsed } from './progress.errors.js';
+import { notEnoughCurrency, notEnoughPeixinhos } from './progress.errors.js';
 import { one } from '../../core/database/one.js';
 
 export { TIME_ZONE };
@@ -24,17 +25,58 @@ export { TIME_ZONE };
 type Tx = Sql | TransactionSql;
 
 /**
- * Everything that gave sabedoria or counts as studying, aliased by the caller: chapters finished in one pass and lessons
- * (#123). League, season, totals and patinhas read this, never chapter_results alone.
+ * Everything that counts as studying, aliased by the caller: chapters finished in one pass and lessons (#123). The
+ * patinhas and the days studied read this.
  */
-export const sabedoriaRows = (sql: Tx) => sql`(
+export const studyRows = (sql: Tx) => sql`(
   select user_id, sabedoria, completed_at from public.chapter_results
   union all
   select user_id, sabedoria, completed_at from public.lesson_results)`;
 
-/** The wallet columns every query returns, for toWallet. */
-export const walletColumns = (sql: Tx) =>
-  sql`novelos, novelos_at, peixinhos, marcadores, novelos_bought, novelos_bought_on::text as novelos_bought_on`;
+/**
+ * Everything that gave sabedoria, aliased by the caller: studying, and the caixas opened (#145), on the day they were
+ * opened. League, season and totals read this, never chapter_results alone.
+ */
+export const sabedoriaRows = (sql: Tx) => sql`(
+  select user_id, sabedoria, completed_at from public.chapter_results
+  union all
+  select user_id, sabedoria, completed_at from public.lesson_results
+  union all
+  select user_id, (contents ->> 'sabedoria')::int, opened_at from public.caixas
+  where opened_at is not null and contents ? 'sabedoria')`;
+
+/** The wallet columns every query returns, for toWallet; `giftDue` while the São Paulo day's gift is not given. */
+export const walletColumns = (sql: Tx) => sql`peixinhos, currency, marcadores,
+  peixinhos_on is distinct from (now() at time zone ${TIME_ZONE})::date as "giftDue"`;
+
+/** The day's gift: what is missing to reach DAILY_PEIXINHOS, while it is due; more than that is kept. */
+const giftOf = (row: WalletRow) =>
+  row.giftDue ? Math.max(0, DAILY_PEIXINHOS - row.peixinhos) : 0;
+
+/**
+ * Locks the wallet, created on first use with a day's peixinhos (not the column's older default), and gives the day's
+ * gift if it is still due. Returns the wallet after it and the peixinhos the gift gave (0 when already given).
+ */
+export async function openWallet(
+  tx: Tx,
+  userId: string,
+): Promise<{ row: WalletRow; gift: number }> {
+  await tx`
+    insert into public.wallets (user_id, peixinhos) values (${userId}, ${DAILY_PEIXINHOS}) on conflict do nothing`;
+  const row = one(
+    await tx<WalletRow[]>`
+    select ${walletColumns(tx)} from public.wallets where user_id = ${userId} for update`,
+  );
+  if (!row.giftDue) return { row, gift: 0 };
+  const gift = giftOf(row);
+  const given = one(
+    await tx<WalletRow[]>`
+    update public.wallets set peixinhos = peixinhos + ${gift},
+      peixinhos_on = (now() at time zone ${TIME_ZONE})::date, updated_at = now()
+    where user_id = ${userId} returning ${walletColumns(tx)}`,
+  );
+  return { row: given, gift };
+}
 
 /**
  * SQL for how many leading topics of the discipline aliased `d` have a stored chapter for the same topic text: the chapters a
@@ -61,25 +103,22 @@ export interface Studied {
 }
 
 export interface WalletRow {
-  novelos: number;
-  novelos_at: Date;
   peixinhos: number;
+  currency: number;
   marcadores: number;
-  /** Novelos bought on novelos_bought_on, the São Paulo day of the last purchase. */
-  novelos_bought: number;
-  novelos_bought_on: string | null;
+  giftDue: boolean;
 }
 
 export function toWallet(row: WalletRow, now: Date): Wallet {
-  const { novelos } = refill(row.novelos, row.novelos_at, now);
   return {
-    novelos,
-    maxNovelos: MAX_NOVELOS,
-    nextNoveloAt:
-      novelos < MAX_NOVELOS ? nextMidnight(now).toISOString() : null,
     peixinhos: row.peixinhos,
+    dailyPeixinhos: DAILY_PEIXINHOS,
+    dailyGift: giftOf(row),
+    nextRefillAt: nextMidnight(now).toISOString(),
+    lessonPrice: LESSON_PRICE,
+    currency: row.currency,
+    continuePrice: CONTINUE_PRICE,
     marcadores: row.marcadores,
-    refillPrice: noveloPrice(row.novelos_bought, row.novelos_bought_on, now),
   };
 }
 
@@ -102,66 +141,62 @@ export async function asPerson<T>(work: Promise<T>): Promise<T> {
 export class ProgressRepository {
   constructor(@Inject(SQL) private readonly sql: Sql) {}
 
-  /** The person's wallet row, created full on first use and locked for the rest of the transaction. */
+  /**
+   * The person's wallet row, created on first use and locked for the rest of the transaction. Spending gives the day's
+   * gift first, so a gift not yet opened never blocks a lesson.
+   */
   async lockWallet(tx: Tx, userId: string): Promise<WalletRow> {
-    await tx`insert into public.wallets (user_id) values (${userId}) on conflict do nothing`;
-    const row = one(
-      await tx<WalletRow[]>`
-      select ${walletColumns(tx)} from public.wallets where user_id = ${userId} for update`,
-    );
-    return row;
+    return (await openWallet(tx, userId)).row;
   }
 
-  wallet(userId: string): Promise<Wallet> {
-    return asPerson(
-      this.sql.begin(async (tx) =>
-        toWallet(await this.lockWallet(tx, userId), new Date()),
-      ),
+  /** The wallet as it is, its day's gift still waiting (`dailyGift`) until POST /me/daily-gift gives it. */
+  async wallet(userId: string): Promise<Wallet> {
+    const [row] = await this.sql<WalletRow[]>`
+      select ${walletColumns(this.sql)} from public.wallets where user_id = ${userId}`;
+    // No wallet yet: its first use creates it with a day's peixinhos, so nothing is missing that day.
+    return toWallet(
+      row ?? {
+        peixinhos: DAILY_PEIXINHOS,
+        currency: 0,
+        marcadores: 0,
+        giftDue: false,
+      },
+      new Date(),
     );
   }
 
-  /** A mistake. Free until the person's first chapter is finished; 409 at 0 novelos. */
-  spend(userId: string): Promise<Wallet> {
+  /** The day's gift, once per São Paulo day: what is missing to reach DAILY_PEIXINHOS. 0 once given. */
+  dailyGift(userId: string): Promise<DailyGift> {
     return asPerson(
       this.sql.begin(async (tx) => {
-        const row = await this.lockWallet(tx, userId);
-        const now = new Date();
-        const { finished } = one(
-          await tx<{ finished: boolean }[]>`
-          select exists (select 1 from public.chapter_results where user_id = ${userId}) as finished`,
-        );
-        if (!finished) return toWallet(row, now);
-        const { novelos } = refill(row.novelos, row.novelos_at, now);
-        if (novelos === 0) throw noNovelosLeft();
-        // novelos_at holds the day the count belongs to.
-        const updated = one(
-          await tx<WalletRow[]>`
-          update public.wallets set novelos = ${novelos - 1}, novelos_at = ${now}, updated_at = now()
-          where user_id = ${userId} returning ${walletColumns(tx)}`,
-        );
-        return toWallet(updated, now);
+        const { row, gift } = await openWallet(tx, userId);
+        return { peixinhos: gift, wallet: toWallet(row, new Date()) };
       }),
     );
   }
 
-  /** Re-reading a chapter's cards at 0 novelos gives one back, once per chapter; 409 otherwise. */
-  reread(userId: string, disciplineId: number, topic: number): Promise<Wallet> {
+  /**
+   * Takes peixinhos (entering a lesson) or currency (going on after a lesson's last life). 409 `not_enough_peixinhos`
+   * or `not_enough_currency` with too few, and nothing is taken.
+   */
+  pay(
+    userId: string,
+    what: 'peixinhos' | 'currency',
+    amount: number,
+  ): Promise<Wallet> {
     return asPerson(
       this.sql.begin(async (tx) => {
         const row = await this.lockWallet(tx, userId);
-        const now = new Date();
-        const { novelos, at } = refill(row.novelos, row.novelos_at, now);
-        if (novelos > 0) throw novelosLeft();
-        const inserted = await tx`
-          insert into public.chapter_rereads (user_id, discipline_id, topic) values (${userId}, ${disciplineId}, ${topic})
-          on conflict do nothing returning 1`;
-        if (!inserted.length) throw rereadUsed();
+        if (row[what] < amount)
+          throw what === 'peixinhos'
+            ? notEnoughPeixinhos()
+            : notEnoughCurrency();
         const updated = one(
           await tx<WalletRow[]>`
-          update public.wallets set novelos = 1, novelos_at = ${at}, updated_at = now()
+          update public.wallets set ${tx(what)} = ${tx(what)} - ${amount}, updated_at = now()
           where user_id = ${userId} returning ${walletColumns(tx)}`,
         );
-        return toWallet(updated, now);
+        return toWallet(updated, new Date());
       }),
     );
   }
@@ -208,18 +243,18 @@ export class ProgressRepository {
     return this.sql<{ completedAt: Date; day: string }[]>`
       select completed_at as "completedAt",
         to_char(completed_at at time zone ${TIME_ZONE}, 'YYYY-MM-DD') as day
-      from ${sabedoriaRows(this.sql)} s where user_id = ${userId} order by completed_at`;
+      from ${studyRows(this.sql)} s where user_id = ${userId} order by completed_at`;
   }
 
-  /** Lessons done per chapter of a subject, for the circles. */
+  /** The lessons done per chapter of a subject, for the path. */
   async lessonsDone(
     userId: string,
     disciplineId: number,
-  ): Promise<Map<number, number>> {
-    const rows = await this.sql<{ topic: number; n: number }[]>`
-      select topic, count(*)::int as n from public.lesson_results
+  ): Promise<Map<number, Set<number>>> {
+    const rows = await this.sql<{ topic: number; lessons: number[] }[]>`
+      select topic, array_agg(lesson::int) as lessons from public.lesson_results
       where user_id = ${userId} and discipline_id = ${disciplineId} group by topic`;
-    return new Map(rows.map((r) => [r.topic, r.n]));
+    return new Map(rows.map((r) => [r.topic, new Set(r.lessons)]));
   }
 
   /** Today's São Paulo day and the Monday of its week. */

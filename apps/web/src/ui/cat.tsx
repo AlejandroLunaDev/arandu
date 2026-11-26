@@ -12,6 +12,7 @@ const STILL: Record<CatMood, string> = {
   read: "looking-down",
   hop: "paws-up",
   stand: "standing",
+  walk: "standing",
   surprised: "paws-up",
   angry: "standing",
   sad: "lying",

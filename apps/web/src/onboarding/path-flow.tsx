@@ -7,7 +7,8 @@ import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
 import { getCareerPaths, getChapter, isGuest, saveJourney } from "./actions";
 import { AgeView, DoneView, GoogleView, HowView, RhythmView, SemesterView } from "./path-steps";
-import { type Place, type PlaceCourse, placeName } from "./places";
+import { Loading } from "@/ui/loading";
+import type { PlaceCourse } from "./places";
 import { ChapterView } from "./chapter-view";
 
 type Step = "semester" | "rhythm" | "how" | "chapter" | "done" | "age" | "google";
@@ -18,7 +19,7 @@ const SAMPLE = new Set<ChapterContent["exercises"][number]["kind"]>(["escolha_um
 // O11-O21, after the person picked a course at O10: its first semester, the weekly goal, a sample of the first chapter
 // (its cards and basic exercises), its end, the age and Google. Each choice is saved to the journey as it is made;
 // the sample is not: inside the app, chapter 1 starts from zero as a full round.
-export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place: Place; onBack: () => void }) {
+export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("semester");
   const [paths, setPaths] = useState<CareerPaths | null>(null);
@@ -34,7 +35,7 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
   // The offerings only list courses whose path can be opened, so the picked one is there with a first subject.
   const path = paths?.paths.find((p) => p.courseId === course.courseId);
   const first = path?.subjects[0];
-  const name = placeName(place.institution);
+  const career = course.profession.name;
   const next = { busy, failed };
 
   // The first chapter comes while the person picks the goal and reads how the game works (O12-O13): "Continuar" at O13
@@ -51,14 +52,15 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
       <p className="type-body p-4 text-center text-error" role="alert">
         Não consegui abrir esse caminho agora. Tenta de novo mais tarde?
       </p>
-    ) : null;
+    ) : (
+      <Loading />
+    );
 
   if (step === "semester")
     return (
       <SemesterView
         {...next}
         course={course}
-        place={name}
         path={path}
         onBack={onBack}
         onNext={() =>
@@ -91,8 +93,7 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
     return (
       <HowView
         {...next}
-        course={course.course}
-        place={name}
+        course={career}
         onBack={() => setStep("rhythm")}
         onNext={() =>
           attempt(async () => {
@@ -108,13 +109,13 @@ export function PathFlow({ course, place, onBack }: { course: PlaceCourse; place
       <ChapterView
         {...next}
         chapter={chapter}
-        caption={`${course.course} · ${name} · ${chapter.discipline.name}`}
+        caption={`${career} · ${chapter.discipline.name}`}
         onClose={() => setStep("how")}
         onDone={() => setStep("done")}
       />
     );
 
-  if (step === "done") return <DoneView {...next} course={course.course} subject={first.name} place={name} onNext={() => setStep("age")} />;
+  if (step === "done") return <DoneView {...next} course={career} subject={first.name} onNext={() => setStep("age")} />;
 
   if (step === "age")
     return (

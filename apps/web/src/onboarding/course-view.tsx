@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { AranduSays, useReveal } from "@/ui/arandu-says";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { AranduSays, type Pose, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Composer } from "@/ui/composer";
 import { MainButton } from "@/ui/main-button";
@@ -9,16 +9,16 @@ import { useAttempt } from "@/ui/use-attempt";
 import ui from "@/ui/ui.module.css";
 import styles from "./onboarding.module.css";
 import { askAboutCareers } from "./actions";
-import { type Place, type PlaceCourse, placeName, toChoice } from "./places";
+import { type Place, type PlaceCourse, toChoice } from "./places";
 
 /** A moment to read Arandu's confirmation before the next screen, once it is all written out. */
 const READ_MS = 1200;
 
 /**
  * Arandu's words, one by one, each answer anew; dimmed while he thinks of the next. With onRead, it is called once
- * the words are out and the person had a moment to read them.
+ * the words are out and the person had a moment to read them. Its children go under the words (their sources).
  */
-export function Answer({ text, busy, onRead }: { text: string; busy: boolean; onRead?: () => void }) {
+export function Answer({ text, busy, onRead, pose = "sit", children }: { text: string; busy: boolean; onRead?: () => void; pose?: Pose; children?: ReactNode }) {
   const { shown, done } = useReveal(text);
   // Once: the save onRead starts re-renders with a new onRead, which must not call it again.
   const fired = useRef(false);
@@ -33,15 +33,18 @@ export function Answer({ text, busy, onRead }: { text: string; busy: boolean; on
   }, [done, onRead]);
   return (
     <div className={busy ? styles.thinking : undefined}>
-      <AranduSays text={text} shown={shown} pose="sit" />
+      <AranduSays text={text} shown={shown} pose={pose} low>
+        {children}
+      </AranduSays>
     </div>
   );
 }
 
-const WAIT = "Deixa eu ver o que sei sobre esse curso.";
+const WAIT = "Deixa eu ver o que sei sobre essa carreira.";
 
-// O10, one course at one place: Arandu tells about it on his own, the person asks more in their own words, and
-// "Escolher" goes on with it, or saying so does ("quero essa": Arandu confirms and the next screen comes).
+// O10, one career: Arandu tells about it on his own, the person asks more in their own words, and "Escolher" goes on
+// with it, or saying so does ("quero essa": Arandu confirms and the next screen comes). `course` at `place` stands for
+// the career where a courseId is needed; the place itself is never shown as chosen.
 export function CourseView({
   place,
   course,
@@ -59,7 +62,7 @@ export function CourseView({
 }) {
   const talk = useAttempt();
   const [chat, setChat] = useState<{ sessionId: string; reply: string; chosen: number | null } | null>(null);
-  const where = `${placeName(place.institution)}, ${place.city ? `em ${place.city}` : "a distância"}`;
+  const career = course.profession.name;
   const chosen = chat?.chosen ?? null;
   const ask = (message: string, sessionId?: string) =>
     talk.attempt(async () => {
@@ -71,7 +74,7 @@ export function CourseView({
   useEffect(() => {
     if (opened.current) return;
     opened.current = true;
-    ask(`Me conta sobre o curso de ${course.course} na ${where}.`);
+    ask(`Me conta sobre a carreira de ${career}.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on opening
   }, []);
 
@@ -80,24 +83,24 @@ export function CourseView({
       <div className={ui.backBar}>
         <Back onBack={onBack} />
       </div>
-      <div className={styles.body}>
+      <div className={`${styles.body} ${styles.low}`}>
         <header className={styles.courseHead}>
-          <p className={styles.meta}>{where}</p>
-          <h1>{course.course}</h1>
+          <h1>{career}</h1>
         </header>
         <Answer key={chat?.reply ?? WAIT} text={chat?.reply ?? WAIT} busy={talk.busy} onRead={chosen === null ? undefined : () => onChoose(chosen)} />
       </div>
-      <footer className={styles.foot}>
-        {(failed || talk.failed) && (
-          <p className={styles.error} role="alert">
-            {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
-          </p>
-        )}
-        <MainButton disabled={busy} onClick={() => onChoose(course.courseId)}>
-          Escolher {course.course}
-        </MainButton>
-      </footer>
-      <Composer placeholder="Pergunte sobre o curso" busy={talk.busy} onSend={(text) => ask(text, chat?.sessionId)} />
+      <Composer placeholder="Pergunte sobre a carreira" busy={talk.busy} onSend={(text) => ask(text, chat?.sessionId)}>
+        <footer className={styles.foot}>
+          {(failed || talk.failed) && (
+            <p className={styles.error} role="alert">
+              {failed ? "Não consegui seguir agora. Tenta de novo?" : "Não consegui responder agora. Pergunta de novo?"}
+            </p>
+          )}
+          <MainButton disabled={busy} onClick={() => onChoose(course.courseId)}>
+            Escolher {career}
+          </MainButton>
+        </footer>
+      </Composer>
     </main>
   );
 }

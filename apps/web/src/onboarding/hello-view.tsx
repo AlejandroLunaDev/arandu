@@ -1,23 +1,29 @@
 "use client";
 
-import { Said, useReveal } from "@/ui/arandu-says";
+import { Said, Trail, useReveal } from "@/ui/arandu-says";
 import { Cat } from "@/ui/cat";
 import { MainButton } from "@/ui/main-button";
 import ui from "@/ui/ui.module.css";
+import { Wordmark } from "@/ui/wordmark";
 import styles from "./onboarding.module.css";
 
 const HELLO = "Oi, eu sou o Arandu! Vou te ajudar a escolher o que estudar na faculdade. Antes de decidir, você prova matérias de verdade de cada curso.";
 
-// O01: Arandu says hello, the cat under its bubble, and the person starts, or signs in with Google to the account
+// O01: the logo at the top, Arandu saying hello with the cat under his thought, and the person starts, or signs in with Google to the account
 // they already have and comes back to /app, whose front door takes them on.
 export function HelloView({ busy, failed, onStart, onGoogle }: { busy: boolean; failed: boolean; onStart: () => void; onGoogle: () => void }) {
   const { shown, done } = useReveal(HELLO);
   return (
     <main className={styles.screen}>
       <div className={styles.glow} />
+      {/* The logo, big at the top: this screen is the person's first contact with the app, and the only one that shows it. */}
+      <p className={`${ui.wordmark} ${styles.brand}`}>
+        <Wordmark />
+      </p>
       <section className={styles.hello}>
         <div className={`${ui.bubble} ${styles.bubble}`} role="status">
           <Said text={HELLO} shown={shown} />
+          <Trail on={done} />
         </div>
         <Cat mood="sit" size={220} className={styles.heroCat} />
       </section>

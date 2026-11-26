@@ -10,12 +10,14 @@ const list = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
 describe('progress routes', () => {
   let app: INestApplication;
   const wallet = {
-    novelos: 2,
-    maxNovelos: 3,
-    nextNoveloAt: '2026-03-11T03:00:00.000Z',
-    peixinhos: 0,
+    peixinhos: 50,
+    dailyPeixinhos: 60,
+    dailyGift: 10,
+    nextRefillAt: '2026-03-11T03:00:00.000Z',
+    lessonPrice: 15,
+    currency: 0,
+    continuePrice: 5,
     marcadores: 0,
-    refillPrice: 15,
   };
   const repo = {
     wallet: vi.fn(),
@@ -28,10 +30,9 @@ describe('progress routes', () => {
     studyTimes: vi.fn(),
     lessonsDone: vi.fn(),
     discipline: vi.fn(),
-    spend: vi.fn(),
-    reread: vi.fn(),
     reflection: vi.fn(),
     saveReflection: vi.fn(),
+    dailyGift: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -49,8 +50,6 @@ describe('progress routes', () => {
     repo.studyTimes.mockResolvedValue([]);
     repo.lessonsDone.mockResolvedValue(new Map());
     repo.discipline.mockResolvedValue({ id: 7, name: 'C', topics: ['a', 'b'] });
-    repo.spend.mockResolvedValue(wallet);
-    repo.reread.mockResolvedValue(wallet);
     repo.reflection.mockResolvedValue({
       chapters: [],
       questions: 2,
@@ -177,68 +176,17 @@ describe('progress routes', () => {
     });
   });
 
-  describe('POST /me/novelos/spend', () => {
-    it('spends for the user and returns the wallet', async () => {
-      const res = await server().post('/me/novelos/spend').expect(200);
-
-      expect(repo.spend).toHaveBeenCalledWith(USER_ID);
-      expect(res.body).toEqual(wallet);
-    });
+  it("gives the day's gift on POST /me/daily-gift", async () => {
+    repo.dailyGift.mockResolvedValue({ peixinhos: 10, wallet });
+    const res = await server().post('/me/daily-gift').expect(200);
+    expect(repo.dailyGift).toHaveBeenCalledWith(USER_ID);
+    expect(res.body).toEqual({ peixinhos: 10, wallet });
   });
 
-  describe('POST /chapters/:disciplineId/:topic/reread', () => {
-    it('gives back for the current chapter', async () => {
-      const res = await server().post('/chapters/7/0/reread').expect(200);
-
-      expect(repo.reread).toHaveBeenCalledWith(USER_ID, 7, 0);
-      expect(res.body).toEqual(wallet);
-    });
-
-    it('gives back for a finished chapter', async () => {
-      repo.finishes.mockResolvedValue([
-        {
-          disciplineId: 7,
-          topic: 0,
-          mistakes: 0,
-          day: '2026-03-10',
-          completedAt: new Date('2026-03-10T15:00:00Z'),
-        },
-      ]);
-
-      await server().post('/chapters/7/0/reread').expect(200);
-
-      expect(repo.reread).toHaveBeenCalledWith(USER_ID, 7, 0);
-    });
-
-    it('409s for a locked chapter', async () => {
-      await server().post('/chapters/7/1/reread').expect(409);
-
-      expect(repo.reread).not.toHaveBeenCalled();
-    });
-
-    it('404s for an unknown subject', async () => {
-      repo.discipline.mockResolvedValue(null);
-
-      await server().post('/chapters/7/0/reread').expect(404);
-
-      expect(repo.reread).not.toHaveBeenCalled();
-    });
-
-    it('404s for a topic out of range', async () => {
-      await server().post('/chapters/7/2/reread').expect(404);
-
-      expect(repo.reread).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      '/chapters/0/0/reread',
-      '/chapters/7/-1/reread',
-      '/chapters/7/201/reread',
-      '/chapters/x/0/reread',
-    ])('404s for %s', async (url) => {
+  it.each(['/me/novelos/spend', '/chapters/7/0/reread'])(
+    'has no novelos route: %s is a 404',
+    async (url) => {
       await server().post(url).expect(404);
-
-      expect(repo.reread).not.toHaveBeenCalled();
-    });
-  });
+    },
+  );
 });

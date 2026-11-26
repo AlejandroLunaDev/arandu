@@ -27,7 +27,6 @@ import { profileReadingInstructions } from './profile-reading.prompt.js';
 const onboardingTurn = z.object({
   profile: profileSchema,
   reply: z.string(),
-  quickReplies: z.array(z.string()),
 });
 
 const EMPTY_PROFILE: AranduProfile = {
@@ -83,7 +82,7 @@ export class OnboardingService {
     const said: ChatMessage = { role: 'user', content: message };
     const before = await this.memory.covered(sessionId);
     // Nothing is recorded, so the next turn rebuilds the full profile from the history as if this one never happened.
-    // Arandu asks the step's question again; its quick replies were not stored, so the person writes the answer.
+    // Arandu asks the step's question again.
     if (blocksMessage(message)) {
       // The last real question: a stored safe line is skipped, so it never repeats itself.
       const asked = history.findLast(
@@ -92,7 +91,6 @@ export class OnboardingService {
       return {
         sessionId,
         reply: asked ? `${SAFE_LEAD} ${asked}` : SAFE_REPLY,
-        quickReplies: [],
         profile: { ...boundProfile(EMPTY_PROFILE), covered: before },
         progress: { answered: before.length, total: TOPICS.length },
         done: false,
@@ -140,14 +138,8 @@ export class OnboardingService {
     const profile = { ...read, covered };
     const answers = messages.filter((m) => m.role === 'user').length;
     const done = covered.length === TOPICS.length || answers >= MAX_ANSWERS;
-    // A replaced reply drops its quick replies too: they answered the question it no longer asks.
-    const safe = !isAbusive(object.reply);
     return {
-      reply: safe ? object.reply : SAFE_REPLY,
-      quickReplies:
-        done || !safe
-          ? []
-          : object.quickReplies.filter((q) => !isAbusive(q)).slice(0, 5),
+      reply: isAbusive(object.reply) ? SAFE_REPLY : object.reply,
       profile,
       progress: { answered: covered.length, total: TOPICS.length },
       done,

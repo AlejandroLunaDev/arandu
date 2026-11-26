@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Cat } from "./cat";
 import type { CatMood } from "./cat-scene";
 import styles from "./ui.module.css";
@@ -9,6 +9,8 @@ import styles from "./ui.module.css";
 export type Pose = CatMood;
 
 const WORD_MS = 70;
+/** How long he walks from the bubble's tail to his place under it: the CSS waits 0.3s, then moves him for 0.9s. */
+const WALK_MS = 1200;
 
 /** How many of the text's words are out: Arandu says them one by one, or all at once with reduced motion.
  * It starts at none, so the bubble's live region mounts empty and screen readers announce the text when it comes. */
@@ -37,13 +39,58 @@ export function Said({ text, shown }: { text: string; shown: number }) {
   );
 }
 
-/** Arandu's bubble, the cat at its tail. */
-export function AranduSays({ text, shown, pose }: { text: string; shown: number; pose: Pose }) {
+/**
+ * The thought's trail: three small bubbles from Arandu's words down to him, the smallest nearest him. They belong
+ * under the words (inside a `ui.bubble`), where he is once the words are over him, and come one after another when
+ * `on`, the biggest first.
+ */
+export function Trail({ on }: { on: boolean }) {
   return (
-    <section className={styles.talk}>
-      <Cat mood={pose} size={104} className={styles.talkCat} />
+    <span className={styles.trail} data-on={on || undefined} aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+/**
+ * Arandu's thought, the cat at its trail: a cat does not talk, so what he tells is what goes through his head. `free`, on a screen where the person answers in the field below: once he has
+ * said it all the bubble floats up a little and he walks out from beside it to wait under it. Sitting there he is on
+ * his own: the 3D cat taps, stretches, turns and watches the pointer until the answer comes. `low`, on a screen that is
+ * only a talk and its buttons: he sits under his words from the start, as on the first screen.
+ */
+export function AranduSays({
+  text,
+  shown,
+  pose,
+  free = false,
+  low = false,
+  children,
+}: {
+  text: string;
+  shown: number;
+  pose: Pose;
+  free?: boolean;
+  low?: boolean;
+  /** What goes under the words, inside their line: the sources they rest on. */
+  children?: ReactNode;
+}) {
+  const done = shown >= text.split(" ").length;
+  const said = free && done;
+  const [arrived, setArrived] = useState(false);
+  useEffect(() => {
+    if (!said) return;
+    const id = setTimeout(() => setArrived(true), WALK_MS);
+    return () => clearTimeout(id);
+  }, [said]);
+  return (
+    <section className={styles.talk} data-free={free || undefined} data-said={said || undefined} data-low={low || undefined}>
+      <Cat mood={!said ? pose : arrived ? "sit" : "walk"} size={104} className={styles.talkCat} />
       <div className={styles.bubble} role="status">
         <Said text={text} shown={shown} />
+        {children && <div className={styles.under}>{children}</div>}
+        {(free || low) && <Trail on={done} />}
       </div>
     </section>
   );

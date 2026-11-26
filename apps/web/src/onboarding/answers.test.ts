@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { AranduProfile, OnboardingAnswer } from "@arandu/contracts";
-import { nextQuestion, toMessage, toProfileInput, withAnswer } from "./answers.ts";
+import { nextQuestion, toProfileInput, withAnswer } from "./answers.ts";
 
 describe("nextQuestion", () => {
   it("starts on situation", () => assert.equal(nextQuestion([]).topic, "situation"));
@@ -14,12 +14,6 @@ describe("nextQuestion", () => {
       nextQuestion(["situation", "likedSubjects", "hardSubjects", "interests", "workStyle", "admired", "careerIdea"]).topic,
       "careerIdea",
     ));
-});
-
-describe("toMessage", () => {
-  it("joins picks, then words", () => assert.equal(toMessage(["Exatas", "Física"], "Gosto de contas"), "Exatas, Física. Gosto de contas"));
-  it("words only", () => assert.equal(toMessage([], "só texto"), "só texto"));
-  it("picks only", () => assert.equal(toMessage(["A"], null), "A"));
 });
 
 describe("withAnswer", () => {

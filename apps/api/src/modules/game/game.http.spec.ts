@@ -87,13 +87,13 @@ describe('game routes', () => {
   });
 
   describe('POST /me/shop/:item', () => {
-    it.each(['novelos', 'marcador'])('buys %s', async (item) => {
+    it.each(['marcador'])('buys %s', async (item) => {
       await server().post(`/me/shop/${item}`).expect(200);
 
       expect(repo.buy).toHaveBeenCalledWith(USER_ID, item);
     });
 
-    it.each(['cachecol', 'caixa', 'Novelos'])('404s for %s', async (item) => {
+    it.each(['cachecol', 'caixa', 'novelos'])('404s for %s', async (item) => {
       await server().post(`/me/shop/${item}`).expect(404);
 
       expect(repo.buy).not.toHaveBeenCalled();

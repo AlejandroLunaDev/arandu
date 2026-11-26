@@ -38,6 +38,7 @@ SHOTS = {  # file name: objects in the shot, direction from the shot toward the 
     "ball": (["Ball"], FRONT),
     "paw": (["Paw"], FRONT),
     "fish": (["Fish"], FRONT),
+    "mouse": (["Mouse"], FRONT),
 }
 BOOK_COLORS = {  # the landing's book colors
     "BookThick": "#6B3FA0", "Book": "#B97F22", "BookShort": "#9B72CF",
@@ -114,7 +115,8 @@ def sun(name, toward, strength):
     return obj
 
 
-def render_all():
+def render_all(only=None):
+    """Render every shot, or only the ones named in `only`."""
     scene, r = bpy.context.scene, bpy.context.scene.render
     BUILD["build"]()
     dress_books()
@@ -143,6 +145,8 @@ def render_all():
         background.inputs["Strength"].default_value = 0.6
         os.makedirs(OUT, exist_ok=True)
         for file, (names, toward) in SHOTS.items():
+            if only and file not in only:
+                continue
             objs = [bpy.data.objects[n] for n in names]
             if "LampPendantCord" in names:
                 bpy.data.objects["LampPendantCord"].scale.z = 0.35

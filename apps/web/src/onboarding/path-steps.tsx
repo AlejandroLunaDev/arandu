@@ -43,17 +43,14 @@ function Step({ say, pose, button, busy, failed, onNext, onBack, ready = true, c
   );
 }
 
-// O11: the picked course's first semester, its subjects as books; the first one is where the path starts.
-export function SemesterView({ course, place, path, ...next }: Next & { course: PlaceCourse; place: string; path: CareerPath }) {
+// O11: the picked career's first semester, its subjects as books; the first one is where the path starts.
+export function SemesterView({ course, path, ...next }: Next & { course: PlaceCourse; path: CareerPath }) {
   const first = path.subjects[0];
   return (
-    <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.course} na ${place}.`} pose="hop" button={`Experimentar ${course.course}`}>
+    <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.profession.name}.`} pose="hop" button={`Experimentar ${course.profession.name}`}>
       <div className={p.card}>
         <div className={p.head}>
-          <span className={p.pill}>{course.course}</span>
-          <span className={p.meta}>
-            {place} · {path.city ?? "A distância"}
-          </span>
+          <span className={p.pill}>{course.profession.name}</span>
         </div>
         <p className={p.why}>{course.reason}</p>
         <p className={p.label}>
@@ -65,7 +62,7 @@ export function SemesterView({ course, place, path, ...next }: Next & { course: 
         </div>
         {first && (
           <p className={p.why}>
-            A patinha marca onde você começa: <strong className={p.paw}>{first.name}</strong>.
+            A bolinha marca onde você começa: <strong className={p.paw}>{first.name}</strong>.
           </p>
         )}
       </div>
@@ -97,18 +94,18 @@ export function RhythmView({ course, goal, onGoal, ...next }: Next & { course: s
       <div className={p.week} aria-hidden="true">
         {["S", "T", "Q", "Q", "S", "S", "D"].map((day, i) => (
           <span key={i} className={p.day} data-on={(goal && LIT[goal].includes(i)) || undefined}>
-            <Image src="/img/props/paw.webp" alt="" width={34} height={34} />
+            <Image src="/img/props/mouse.webp" alt="" width={34} height={22} />
             {day}
           </span>
         ))}
       </div>
-      <p className={styles.hint}>Cada dia de estudo vira uma patinha.</p>
+      <p className={styles.hint}>Cada dia de estudo, o Arandu pega um ratinho.</p>
     </Step>
   );
 }
 
 // O13: the game in three things, before the first chapter.
-export function HowView({ course, place, ...next }: Next & { course: string; place: string }) {
+export function HowView({ course, ...next }: Next & { course: string }) {
   return (
     <Step {...next} say="Antes de começar, o jogo em três coisas." pose="sit" button="Experimentar o primeiro capítulo">
       <div className={p.rows}>
@@ -117,22 +114,22 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
           <div>
             <strong>Um caminho de capítulos</strong>
             <span>
-              As matérias de verdade do 1º semestre de {course} na {place}, um capítulo curto por vez.
+              As matérias de verdade do 1º semestre de {course}, um capítulo curto por vez.
             </span>
           </div>
         </div>
         <div className={p.row}>
-          <Image src="/img/props/yarn.webp" alt="" width={46} height={46} />
+          <Image src="/img/props/fish.webp" alt="" width={46} height={46} />
           <div>
-            <strong>Novelos</strong>
-            <span>São 3 por dia: errou, gasta um. Eles voltam à meia-noite. Nesta amostra, errar não gasta.</span>
+            <strong>Peixinhos</strong>
+            <span>Entrar numa lição custa peixinhos, e todo dia o Arandu te dá mais. Nesta amostra, é por conta dele.</span>
           </div>
         </div>
         <div className={p.row}>
-          <Image src="/img/props/paw.webp" alt="" width={46} height={46} />
+          <Image src="/img/props/mouse.webp" alt="" width={46} height={30} />
           <div>
-            <strong>Patinhas</strong>
-            <span>Cada dia que você estuda vira uma patinha.</span>
+            <strong>Ratinhos</strong>
+            <span>Cada dia que você estuda, o Arandu pega um ratinho.</span>
           </div>
         </div>
       </div>
@@ -141,7 +138,7 @@ export function HowView({ course, place, ...next }: Next & { course: string; pla
 }
 
 // O19: the sample of the first chapter is over. It gave nothing: inside the app, chapter 1 starts from zero.
-export function DoneView({ course, subject, place, ...next }: Next & { course: string; subject: string; place: string }) {
+export function DoneView({ course, subject, ...next }: Next & { course: string; subject: string }) {
   const say = `Esse foi um gostinho de ${course}. Guardando seu progresso, o primeiro capítulo começa de verdade, com mais exercícios.`;
   const { shown, done } = useReveal(say);
   return (
@@ -150,9 +147,7 @@ export function DoneView({ course, subject, place, ...next }: Next & { course: s
         <section className={p.done}>
           <Cat mood="hop" size={190} label="Arandu comemorando" className={p.doneCat} />
           <h1>Você provou o primeiro capítulo!</h1>
-          <p className={p.meta}>
-            {subject} · {place}
-          </p>
+          <p className={p.meta}>{subject}</p>
         </section>
         <div className={`${ui.bubble} ${p.loose}`} role="status">
           <Said text={say} shown={shown} />

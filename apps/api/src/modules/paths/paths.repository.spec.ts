@@ -84,13 +84,14 @@ function txRepo(answers: Answers) {
   const replies: [string, unknown[]][] = [
     ['union all', []],
     ['pg_advisory', []],
-    ['as studied', [{ done: 0, finished: false, studied: true }]],
+    ['as studied', [{ done: [], finished: false, studied: true }]],
     ['into public.lesson_results', [{}]],
+    ['into public.caixas', [{ id: 9 }]],
     ['count(distinct', [{ mistakes: 0 }]],
     ['into public.chapter_results', [{}]],
     ['sum(sabedoria)', [{ earned: 0 }]],
     ['as today', [{ today: 1 }]],
-    ['wallets', []],
+    ['wallets', [{ peixinhos: 0, currency: 0, marcadores: 0, giftDue: false }]],
   ];
   const tx = Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -111,26 +112,37 @@ function txRepo(answers: Answers) {
   return { repo: new PathsRepository(sql), calls, into };
 }
 
-const state = (done: number, finished: boolean, studied = true) => ({
+const state = (done: number[], finished: boolean, studied = true) => ({
   'as studied': [{ done, finished, studied }],
 });
 const miss = (index: number) => ({ topic: 0, index });
 
 describe('PathsRepository.finishLesson', () => {
-  it('locks lesson 3 while only lesson 1 is done', async () => {
-    const { repo, into } = txRepo(state(1, false));
-    await expect(repo.finishLesson('u', 7, 1, 3, [])).rejects.toMatchObject({
-      status: 409,
-      response: { code: 'lesson_locked' },
+  it.each([[[]], [[1]], [[2]]])(
+    'locks lesson 3 with lessons %j done',
+    async (done) => {
+      const { repo, into } = txRepo(state(done, false));
+      await expect(repo.finishLesson('u', 7, 1, 3, [])).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'lesson_locked' },
+      });
+      expect(into('lesson_results')).toBeUndefined();
+      expect(into('caixas')).toBeUndefined();
+    },
+  );
+
+  it('opens lesson 2 before lesson 1', async () => {
+    const { repo } = txRepo(state([], false));
+    await expect(repo.finishLesson('u', 7, 1, 2, [])).resolves.toMatchObject({
+      sabedoria: 4,
     });
-    expect(into('lesson_results')).toBeUndefined();
   });
 
   it('does not lock a finished chapter and gives it no sabedoria', async () => {
-    const { repo, into } = txRepo(state(1, true));
+    const { repo, into } = txRepo(state([1], true));
     await expect(repo.finishLesson('u', 7, 1, 3, [])).resolves.toMatchObject({
       sabedoria: 0,
-      chapterDone: false,
+      chapterDone: true,
     });
     expect(into('lesson_results')?.values).toContain(0);
   });
@@ -139,13 +151,13 @@ describe('PathsRepository.finishLesson', () => {
     [false, true],
     [true, false],
   ])(
-    'first finish of lesson 1 gives 4 (studied %s, patinha %s)',
+    'first finish of lesson 1 gives 4 and a caixa (studied %s, patinha %s)',
     async (studied, patinha) => {
-      const { repo, into } = txRepo(state(0, false, studied));
+      const { repo, into } = txRepo(state([], false, studied));
       expect(await repo.finishLesson('u', 7, 1, 1, [miss(2)])).toEqual({
         sabedoria: 4,
-        peixinhos: 0,
         patinha,
+        caixaId: 9,
         chapterDone: false,
       });
       expect(into('lesson_results')?.values).toEqual([
@@ -156,60 +168,45 @@ describe('PathsRepository.finishLesson', () => {
         { json: [miss(2)] },
         4,
       ]);
+      expect(into('caixas')?.values).toEqual(['u', 'lesson:7:1:1']);
     },
   );
 
-  it('gives nothing on a replay', async () => {
-    const { repo } = txRepo({
-      ...state(1, false),
+  it('gives nothing on a replay, and no caixa', async () => {
+    const { repo, into } = txRepo({
+      ...state([1], false),
       'into public.lesson_results': [],
     });
     expect(await repo.finishLesson('u', 7, 1, 1, [])).toEqual({
       sabedoria: 0,
-      peixinhos: 0,
       patinha: false,
+      caixaId: null,
       chapterDone: false,
     });
+    expect(into('caixas')).toBeUndefined();
   });
 
-  it('finishes the chapter at lesson 4 with its mistakes and relampago', async () => {
+  it('finishes the chapter at lesson 3 with the distinct mistakes of its lessons', async () => {
     const { repo, into, calls } = txRepo({
-      ...state(3, false),
+      ...state([1, 2], false),
       'count(distinct': [{ mistakes: 2 }],
     });
-    expect(await repo.finishLesson('u', 7, 1, 4, [miss(1)])).toEqual({
+    expect(await repo.finishLesson('u', 7, 1, 3, [miss(1)])).toEqual({
       sabedoria: 4,
-      peixinhos: 10,
       patinha: false,
+      caixaId: 9,
       chapterDone: true,
     });
-    expect(into('chapter_results')?.values).toEqual(['u', 7, 1, 2, 1]);
-    expect(calls.some((c) => c.sql.includes('update public.wallets'))).toBe(
-      true,
-    );
-  });
-
-  it('passes a null relampago when the chapter had no mistakes', async () => {
-    const { repo, into } = txRepo(state(3, false));
-    await repo.finishLesson('u', 7, 1, 4, [miss(1)]);
-    expect(into('chapter_results')?.values).toEqual(['u', 7, 1, 0, null]);
-  });
-
-  it('gives no peixinhos when the chapter was already stored', async () => {
-    const { repo, calls } = txRepo({
-      ...state(3, false),
-      'into public.chapter_results': [],
-    });
-    expect(await repo.finishLesson('u', 7, 1, 4, [])).toMatchObject({
-      peixinhos: 0,
-      chapterDone: true,
-    });
+    expect(into('chapter_results')?.values).toEqual(['u', 7, 1, 2]);
+    expect(
+      calls.find((c) => c.sql.includes('count(distinct'))?.sql,
+    ).not.toContain('r.lesson <');
+    // The lesson's caixa is its reward: the wallet is not touched.
     expect(calls.some((c) => c.sql.includes('update public.wallets'))).toBe(
       false,
     );
   });
 });
-
 describe('PathsRepository.finishChapter', () => {
   it.each([
     [12, 3],

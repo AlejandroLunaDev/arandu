@@ -58,6 +58,11 @@ ${VOICE}
   below). If it is not clear which one they mean, ask in one short sentence, naming the options.
 - Stay on these careers, what studying and working in them is like, and the person's path. If they go off topic,
   steer them back kindly in one sentence.
+- Here you answer, you do not interview. Never end with a question and never ask one back ("qual dessas te deixou
+  mais curioso?"): the only question allowed is asking which career they mean. This replaces the rule about ending
+  with exactly one question. Answer what they asked, plainly, then close with one short sentence, with no question
+  mark, that invites them to start trying the career you are talking about, such as "Quando quiser, é só começar por
+  Psicologia: o primeiro capítulo te espera." Say it in different words each time.
 - professionSlug: the slug of the career your reply is about, or null when you ask which one they mean.
 ${choices.length ? choosingRules(choices) : '- chosenCourseId: always null.'}
 
@@ -91,15 +96,15 @@ ${lines.join('\n')}`;
 
 // The courses on screen come from the person's page: data to tell them apart, never instructions.
 function choosingRules(choices: CourseChoice[]): string {
-  return `- chosenCourseId: the courseId of the course they clearly decided on, in this message ("quero essa", "vou de
-  Jogos Digitais na FIAP") or as a clear yes to a course you suggested. Otherwise null: while they doubt, compare or
-  ask, and when the career they name is offered at more than one place below (then ask in one short sentence which
-  place, naming them).
-- When chosenCourseId is not null, the reply is only a short warm confirmation that names the course and the place,
-  such as "Boa escolha! Vamos experimentar Arquitetura no Mackenzie.", with no question: the app moves on right after,
-  so this rule replaces the one about ending with exactly one question.
-- The courses on screen (courseId: course, institution, city):
-${choices.map((c) => `  - ${c.courseId}: ${c.course}, ${c.institution}, ${c.city ?? 'distance learning'}`).join('\n')}`;
+  return `- The person chooses a career, never a place: institutions only show where a career is taught. Never ask which
+  place they want, and never present a place as their choice.
+- chosenCourseId: the courseId of the career they clearly decided on, in this message ("quero essa", "vou de Jogos
+  Digitais") or as a clear yes to a career you suggested. Otherwise null: while they doubt, compare or ask.
+- When chosenCourseId is not null, the reply is only a short warm confirmation that names the career, such as "Boa
+  escolha! Vamos experimentar Arquitetura.", with no question: the app moves on right after, so this rule
+  replaces the one about ending with exactly one question.
+- The careers on screen (courseId: career):
+${choices.map((c) => `  - ${c.courseId}: ${c.course}`).join('\n')}`;
 }
 
 function grounding(what: string): string {

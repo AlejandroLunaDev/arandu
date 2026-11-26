@@ -1,12 +1,12 @@
 /* Arandu's pieces shared by the app's screens, ported from the Telas boards (Nuevas Pantallas). Their
    sizes are the boards' own; colors are design tokens. */
 
-/* Arandu talking: the cat at the bubble's tail. */
+/* Arandu thinking aloud: the cat beside his thought. */
 .talk {
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  padding: 12px 16px 4px;
+  padding: 12px 16px 8px;
 }
 
 .talkCat {
@@ -14,32 +14,244 @@
   margin: 0 -8px -6px -10px;
 }
 
+/* Arandu's words, in one plain line: nothing in it pulls the eye off them. */
 .bubble {
+  --cloud: var(--ink-850);
+
   position: relative;
   box-sizing: border-box;
   flex: 1;
   min-height: 56px;
   margin: 0;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border: 2px solid var(--violet-400);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--ink-900) 55%, transparent);
+  border-radius: 20px;
+  background: var(--cloud);
   font-size: 16px;
   line-height: 22px;
+  white-space: pre-line;
 }
 
-/* The tail points at the cat, on the bubble's left. */
-.talk .bubble::before {
-  content: "";
+/* Under the words, inside their line: where they come from. */
+.under {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  white-space: normal;
+}
+
+/* A cat does not talk: the words are his thought, so no tail points at him. Where he sits under them, a trail of
+   three small bubbles goes from them down to him, the smallest nearest him (Trail in arandu-says.tsx). They come last,
+   one after another from the biggest, once the words are in their place: while he is beside them they would sit on top of him. */
+.trail {
   position: absolute;
-  bottom: 16px;
-  left: -6px;
-  width: 10px;
-  height: 10px;
-  border-bottom: 2px solid var(--violet-400);
-  border-left: 2px solid var(--violet-400);
-  background: var(--ink-900);
-  rotate: 45deg;
+  top: 100%;
+  left: 50%;
+  pointer-events: none;
+}
+
+.trail i {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--violet-400);
+  border-radius: 50%;
+  background: var(--cloud);
+  opacity: 0;
+}
+
+.trail i:nth-child(1) {
+  --nth: 2;
+
+  top: 36px;
+  left: -19px;
+  width: 7px;
+  height: 7px;
+}
+
+.trail i:nth-child(2) {
+  --nth: 1;
+
+  top: 22px;
+  left: -12px;
+  width: 11px;
+  height: 11px;
+}
+
+.trail i:nth-child(3) {
+  --nth: 0;
+
+  top: 5px;
+  left: -2px;
+  width: 16px;
+  height: 16px;
+}
+
+.trail[data-on] i {
+  animation: pop 0.3s cubic-bezier(0.3, 1.4, 0.6, 1) calc(var(--after, 0.15s) + var(--nth) * 0.24s) both;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* A talk with nothing under it but the screen's buttons: as on the first screen, he sits low, just over them, and his
+   words stand over him, with room between for the thought's trail. */
+.talk[data-low] {
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 50px;
+}
+
+.talk[data-low] .talkCat {
+  width: clamp(104px, 18dvh, 150px);
+  margin: 0;
+}
+
+.talk[data-low] .bubble {
+  flex: none;
+  width: 100%;
+  max-width: 330px;
+}
+
+/* A talk that frees the cat (arandu-says.tsx): room above for his words to float into and below for him to wait in,
+   so neither leaves the talk's own box. The words end in the middle of the screen (it starts 90px to the right of
+   the talk's left edge, so half of that to the left), and he ends under it: 50cqi is half the talk's width, and his
+   box's middle starts 42px from its left. */
+.talk[data-free] {
+  container-type: inline-size;
+  padding-top: 48px;
+  padding-bottom: 130px;
+}
+
+.talk[data-free] .talkCat {
+  transition: translate 0.9s cubic-bezier(0.4, 0, 0.6, 1) 0.3s;
+}
+
+/* The trail waits for the words to reach their place: 0.35s, then the 2.6s they take. */
+.talk[data-free] .trail {
+  --after: 3s;
+}
+
+/* His words let go of him and drift up and to the middle like a thought: a slow lift-off, a little past its place,
+   back down into it. Then it stays still: words that move are hard to read. */
+.talk[data-said] .bubble {
+  translate: -45px -40px;
+  animation: drift-up 2.6s cubic-bezier(0.37, 0, 0.63, 1) 0.35s backwards;
+}
+
+@keyframes drift-up {
+  0% {
+    translate: 0 0;
+  }
+
+  72% {
+    translate: -45px -45px;
+  }
+
+  100% {
+    translate: -45px -40px;
+  }
+}
+
+.talk[data-said] .talkCat {
+  translate: calc(50cqi - 42px) 110px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talk[data-free] .talkCat {
+    transition: none;
+  }
+
+  .trail[data-on] i {
+    opacity: 1;
+    animation: none;
+  }
+
+  .talk[data-said] .bubble {
+    animation: none;
+  }
+}
+
+/* The way through a run of steps (paw-steps.tsx): a trail of paw prints walking to the right, a left foot then a
+   right one. With many steps the prints get smaller, never fewer. */
+.steps {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.steps svg {
+  flex: 0 1 20px;
+  min-width: 0;
+  height: 20px;
+  fill: var(--ink-600);
+  translate: 0 -3px;
+  rotate: 78deg;
+}
+
+.steps svg:nth-child(even) {
+  translate: 0 3px;
+  rotate: 102deg;
+}
+
+.steps svg[data-on] {
+  fill: var(--amber-400);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--amber-400) 45%, transparent));
+}
+
+/* The newest print lands. */
+@media (prefers-reduced-motion: no-preference) {
+  .steps svg[data-now] {
+    animation: step 0.35s ease-out both;
+  }
+}
+
+@keyframes step {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+/* The logo's wordmark (wordmark.tsx): arandu, one word, its u a cat on its back. Its face, tracking and leading are
+   measured from the logo, so they are not steps of the type scale; whoever holds it sets the size. */
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-bricolage), var(--font-display);
+  font-weight: 700;
+  line-height: 0.76;
+  letter-spacing: -0.02em;
+}
+
+/* The cat's u sits on the baseline; its head and paws rise above the x-height, like the d. */
+.wordU {
+  width: 0.8em;
+  height: 0.72em;
+  margin-left: 0.05em;
+  overflow: visible;
+  fill: currentColor;
+}
+
+.wordEar {
+  fill: var(--violet-400);
+}
+
+.wordEye {
+  fill: var(--amber-500);
 }
 
 /* The words still to come hold their place, so the bubble is the text's size from the first word. */
@@ -71,6 +283,23 @@
   background: var(--violet-900);
   font-size: 13px;
   line-height: 18px;
+}
+
+/* Over the composer, the last line sent: a few lines of it at most, so a long answer does not push the screen up. */
+.echo {
+  flex: none;
+  margin-bottom: 4px;
+  animation: fade-in 0.35s ease both;
+}
+
+/* The clamp sits inside the bubble's padding, or a fifth line would show through it. */
+.echo span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow-wrap: anywhere;
 }
 
 /* The main button: ink with a violet rim and two cat ears on top. */
@@ -165,7 +394,8 @@
   box-sizing: border-box;
   display: flex;
   flex: 1;
-  align-items: center;
+  /* The field can grow to several lines: its button stays at the bottom. */
+  align-items: flex-end;
   gap: 4px;
   min-height: 44px;
   padding: 4px 4px 4px 14px;
@@ -178,20 +408,48 @@
   box-shadow: inset 0 0 0 1.5px var(--violet-400);
 }
 
-/* 16px, so iOS does not zoom in on focus. */
-.field input {
+/* The text and its hidden copy share one grid cell: the copy sets the height, the textarea fills it. One line is 36px
+   tall; past six lines the textarea scrolls. */
+.grow {
+  display: grid;
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  font: 400 16px var(--font-body);
 }
 
-.field input::placeholder {
+/* 16px, so iOS does not zoom in on focus. */
+.grow::after,
+.grow textarea {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  min-width: 0;
+  max-height: 146px;
+  padding: 7px 0;
+  font: 400 16px/22px var(--font-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.grow::after {
+  content: attr(data-text) " ";
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.grow textarea {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  outline: none;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--text);
+  resize: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-600) transparent;
+}
+
+.grow textarea::placeholder {
   color: var(--ink-500);
 }
 
@@ -362,4 +620,12 @@
 
 .shelf[data-live] > canvas {
   opacity: 1;
+}
+
+/* The patinha, the game's currency (patinha.tsx). */
+.patinha {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import type {
+  AskReply,
   AranduChatReply,
   AranduProfile,
   CareerPaths,
@@ -12,7 +13,8 @@ import type {
   Recommendations,
   ChapterContent,
 } from "@arandu/contracts";
-import { api } from "@/app-shell/api";
+import { updateTag } from "next/cache";
+import { MINE, api } from "@/app-shell/api";
 import { ensureGuest } from "@/auth/sign-in";
 import { careerPaths, chapterContent } from "./catalog";
 
@@ -32,8 +34,13 @@ export async function answerOnboarding(sessionId: string, message: string): Prom
   return api<OnboardingReply>("/arandu/onboarding", { method: "POST", body: { sessionId, message } });
 }
 
+/** The journey is what the app's door reads (app-shell/entry-gate.tsx): a change drops the cached copy. */
 export async function saveJourney(update: JourneyUpdate): Promise<void> {
-  await api<Journey>("/me/journey", { method: "PATCH", body: update });
+  try {
+    await api<Journey>("/me/journey", { method: "PATCH", body: update });
+  } finally {
+    updateTag(MINE);
+  }
 }
 
 export async function recommend(profile: AranduProfile): Promise<Recommendations> {
@@ -59,6 +66,14 @@ export async function getCareerPaths(slug: string): Promise<CareerPaths> {
 export async function getChapter(disciplineId: number, topic: number): Promise<ChapterContent> {
   if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a chapter");
   return chapterContent(disciplineId, topic);
+}
+
+/** T1: a question about a chapter's cards, asked while reading them (never during the exercises). */
+export async function askAboutChapter(disciplineId: number, topic: number, question: string): Promise<AskReply> {
+  if (!isIndex(disciplineId) || !isIndex(topic)) throw new Error("Not a chapter");
+  const asked = typeof question === "string" ? question.trim().slice(0, 1000) : "";
+  if (!asked) throw new Error("No question");
+  return api<AskReply>(`/chapters/${disciplineId}/${topic}/ask`, { method: "POST", body: { question: asked } });
 }
 
 /** O20: whether the person still has to link Google (O21), or already came in with it. */

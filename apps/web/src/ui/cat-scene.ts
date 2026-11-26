@@ -9,8 +9,9 @@ import { TILT } from "@/landing/stage/rooms";
 /**
  * What Arandu is feeling or doing: each one clips of arandu.glb (blender/arandu) and a face, eased into from the
  * last. "surprised" jerks upright once and then sits wide-eyed; "angry" is a playful cross, never at the person.
+ * "walk" steps on the spot, seen from the side and headed right: whoever shows him moves his box along.
  */
-export type CatMood = "sit" | "lie" | "read" | "hop" | "stand" | "surprised" | "angry" | "sad";
+export type CatMood = "sit" | "lie" | "read" | "hop" | "stand" | "walk" | "surprised" | "angry" | "sad";
 
 // One download for every cat on the page; each gets its own copy of the skinned model.
 let model: Promise<GLTF> | null = null;
@@ -29,6 +30,7 @@ const TARGET: Record<CatMood, Target> = {
   read: { sit: 1, lie: 0, hold: 1, lids: 0.25, ears: 0, arch: 0 },
   hop: { sit: 0, lie: 0, hold: 0, lids: 0, ears: 0, arch: 0 },
   stand: { sit: 0, lie: 0, hold: 0, lids: 0, ears: 0, arch: 0 },
+  walk: { sit: 0, lie: 0, hold: 0, lids: 0, ears: 0, arch: 0 },
   surprised: { sit: 1, lie: 0, hold: 0, lids: 0, ears: 0, arch: 0 },
   angry: { sit: 1, lie: 0, hold: 0, lids: 0.45, ears: 1, arch: 1 },
   sad: { sit: 1, lie: 0, hold: 0, lids: 0.4, ears: 0.6, arch: 0 },
@@ -123,6 +125,7 @@ export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => vo
   let crossUntil = 0;
   let pokes: number[] = [];
   let stride = 0;
+  let heading = FACING;
   let frame = 0;
   let ready = false;
 
@@ -186,12 +189,15 @@ export async function runCat(host: HTMLElement, mood: CatMood, onReady: () => vo
     }
     // The turn: up from sitting, a walk round in place, and down again facing you.
     const turning = doing === "turn" ? envelope(phase) : 0;
-    if (turning) stride += dt * 1.6;
+    const walking = mood === "walk";
+    if (turning || walking) stride += dt * 1.6;
+    // Walking he turns his side to you, headed right; then back to three quarters.
+    heading += ((walking ? 0 : FACING) - heading) * k;
     // The stretch is a side view: from the front the play bow reads as a crouch.
     const side = doing === "stretch" ? envelope(phase) * 1.1 : 0;
-    cat.yaw.rotation.y = FACING + side + (doing === "turn" ? Math.PI * 2 * phase * phase * (3 - 2 * phase) : 0);
-    // Busy turning or stretching, he stops following the pointer, or his head twists against his body.
-    const busy = doing === "turn" || doing === "stretch";
+    cat.yaw.rotation.y = heading + side + (doing === "turn" ? Math.PI * 2 * phase * phase * (3 - 2 * phase) : 0);
+    // Busy walking, turning or stretching, he stops following the pointer, or his head twists against his body.
+    const busy = walking || doing === "turn" || doing === "stretch";
 
     if (mood === "sad") look.set(camera.position.x, camera.position.y - half * 2, 2);
     else if (pointer) look.set(pointer.x * half * 3, camera.position.y + pointer.y * half * 3, 3);
