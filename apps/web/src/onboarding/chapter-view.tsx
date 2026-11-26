@@ -53,6 +53,10 @@ const KIND: Partial<Record<Exercise["kind"], string>> = {
 export type Lives = {
   /** Mistakes the lesson allows (Lesson.lives). */
   count: number;
+  /** Lives left when the lesson reopens (a reload): it opens on P6 when none are. */
+  left?: number;
+  /** Told each time the lives change, so a reload keeps them. */
+  onLeft: (left: number) => void;
   wallet: Wallet;
   /** Pays to go on after the last life: the wallet after it, or null when the currency is short. */
   goOn: () => Promise<Wallet | null>;
@@ -74,14 +78,14 @@ type Props = {
 };
 
 export function ChapterView({ chapter, caption, busy, failed, lives, onClose, onDone }: Props) {
-  const [card, setCard] = useState(0);
+  const [card, setCard] = useState(lives?.left === 0 ? chapter.cards.length : 0);
   const [queue, setQueue] = useState(() => chapter.exercises.map((_, i) => i));
   const [attempt, setAttempt] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [sheet, setSheet] = useState<{ right: boolean; title: string } | null>(null);
   // Every exercise is right: the result is being saved, or failed to and waits for another try.
   const [ended, setEnded] = useState(false);
-  const [hearts, setHearts] = useState(lives?.count ?? 0);
+  const [hearts, setHearts] = useState(lives?.left ?? lives?.count ?? 0);
   const [wallet, setWallet] = useState(lives?.wallet ?? null);
   const [missed, setMissed] = useState<number[]>([]);
 
@@ -96,7 +100,10 @@ export function ChapterView({ chapter, caption, busy, failed, lives, onClose, on
     setSheet({ right, title: title ?? (right ? "Isso!" : "Quase.") });
     if (right) return;
     if (current !== undefined && !missed.includes(current)) setMissed([...missed, current]);
-    if (lives) setHearts(Math.max(0, hearts - 1));
+    if (!lives) return;
+    const left = Math.max(0, hearts - 1);
+    setHearts(left);
+    lives.onLeft(left);
   };
   // The API takes up to 100 mistakes a chapter.
   const save = () => onDone(Math.min(mistakes, 100), missed);
@@ -150,6 +157,7 @@ export function ChapterView({ chapter, caption, busy, failed, lives, onClose, on
             if (paid) {
               setWallet(paid);
               setHearts(lives.count);
+              lives.onLeft(lives.count);
             }
             return paid !== null;
           }}
