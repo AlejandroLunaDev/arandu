@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+const list = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const env = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
@@ -16,18 +22,15 @@ const env = z.object({
   /** Shared with the web's Next server, the only caller besides the health check and the landing's books. */
   INTERNAL_API_SECRET: z.string().min(32),
   OPENROUTER_API_KEY: z.string().min(1),
+  /**
+   * OpenRouter model ids, comma-separated: the first answers and OpenRouter tries the rest in order when it fails
+   * (a rate limit included). Unset or empty: the model in core/ai/ai.module.ts.
+   */
+  OPENROUTER_MODELS: z.string().default('').transform(list),
   /** Firecrawl, for the pages chapters are written from: only the generation script uses it, never a request. */
   FIRECRAWL_API_KEY: z.string().min(1).optional(),
   /** Origins allowed to call the API from a browser, comma-separated (the web app). */
-  CORS_ORIGINS: z
-    .string()
-    .default('http://localhost:3000')
-    .transform((list) =>
-      list
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ),
+  CORS_ORIGINS: z.string().default('http://localhost:3000').transform(list),
 });
 
 export type Env = z.infer<typeof env>;

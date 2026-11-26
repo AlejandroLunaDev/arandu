@@ -5,6 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.js';
 
 const logger = new Logger('AI');
+/** The model when OPENROUTER_MODELS is not set, and the only one with a price. */
+const HAIKU = 'anthropic/claude-haiku-5.5';
 
 /**
  * The language model behind Arandu, through OpenRouter. AiService adds timeouts (60 s), retries of what the provider
@@ -27,17 +29,23 @@ const logger = new Logger('AI');
         // The students are minors (LGPD): route only to providers that neither store nor train on prompts.
         // Reasoning off: Haiku 5.5's thinking spent 307 of 400 output tokens and cut replies mid-sentence.
         // A model's own providerOptions replace these defaults (not merged), so each model repeats them.
+        // With more than one model OpenRouter falls back through `models` itself, within the same request.
+        const [id = HAIKU, ...fallbacks] = config.get('OPENROUTER_MODELS', {
+          infer: true,
+        });
         const routing = {
           provider: { data_collection: 'deny' },
           reasoning: { enabled: false },
+          ...(fallbacks.length > 0 && { models: [id, ...fallbacks] }),
         };
         return {
           models: {
             // Prices in USD per million tokens, from openrouter.ai/anthropic/claude-haiku-5.5 (2026-11-17).
+            // shortcut: another model logs no cost; add its price here if it is kept.
             // Chapters are written from pages Firecrawl downloads (modules/paths/firecrawl.ts), not from a model's search.
             default: {
-              model: openrouter('anthropic/claude-haiku-5.5'),
-              pricing: { input: 0.1, output: 0.5 },
+              model: openrouter(id),
+              ...(id === HAIKU && { pricing: { input: 0.1, output: 0.5 } }),
             },
           },
           defaults: {
