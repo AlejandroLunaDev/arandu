@@ -124,7 +124,7 @@ export function ChapterView({ chapter, caption, busy, failed, lives, onClose, on
 
   return (
     <main className={styles.screen}>
-      <header className={p.top}>
+      <header className={p.top} data-lesson>
         <button type="button" className={p.close} aria-label="Fechar" onClick={onClose}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 6l12 12M18 6L6 18" />

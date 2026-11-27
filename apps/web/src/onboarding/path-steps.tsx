@@ -43,8 +43,9 @@ function Step({ say, pose, button, busy, failed, onNext, onBack, ready = true, c
   );
 }
 
-// O11: the picked career's first semester, its subjects as books; the first one is where the path starts.
-export function SemesterView({ course, path, ...next }: Next & { course: PlaceCourse; path: CareerPath }) {
+// O11: the picked career's first semester, its subjects as books. Tapping one starts the path there; the button starts
+// at the first, where the ball rests.
+export function SemesterView({ course, path, onPick, ...next }: Next & { course: PlaceCourse; path: CareerPath; onPick: (index: number) => void }) {
   const first = path.subjects[0];
   return (
     <Step {...next} say={`Boa escolha! Olha o que vem no 1º semestre de ${course.profession.name}.`} pose="hop" button={`Experimentar ${course.profession.name}`}>
@@ -57,14 +58,17 @@ export function SemesterView({ course, path, ...next }: Next & { course: PlaceCo
           1º semestre · {path.subjects.length} {path.subjects.length === 1 ? "livro" : "livros"}
         </p>
         <div className={p.shelf}>
-          <Shelf titles={path.subjects.map((subject) => subject.name)} />
+          <Shelf titles={path.subjects.map((subject) => subject.name)} onPick={(i) => !next.busy && onPick(i)} />
           <Cat mood="lie" size={92} className={p.kittyCat} />
         </div>
-        {first && (
-          <p className={p.why}>
-            A bolinha marca onde você começa: <strong className={p.paw}>{first.name}</strong>.
-          </p>
-        )}
+        {first &&
+          (path.subjects.length > 1 ? (
+            <p className={p.why}>Toca num livro pra começar por ele.</p>
+          ) : (
+            <p className={p.why}>
+              A bolinha marca onde você começa: <strong className={p.paw}>{first.name}</strong>.
+            </p>
+          ))}
       </div>
       <p className={styles.hint}>Dá pra trocar de carreira depois, quando quiser.</p>
     </Step>

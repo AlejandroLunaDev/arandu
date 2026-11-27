@@ -490,4 +490,53 @@
   outline-offset: 2px;
 }
 
+/* The onboarding's screens with its way out over them, at the top right, across from the back button. */
+.flow {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
 
+.leave {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  gap: 6px;
+}
+
+/* The question's paw trail stops short of it. */
+.flow .bar {
+  padding-right: 156px;
+}
+
+/* A sample lesson has its own way out (Fechar) where this would stand. */
+.flow:has([data-lesson]) .leave {
+  display: none;
+}
+
+.leave > * {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ink-800);
+  border-radius: 99px;
+  background: var(--ink-850);
+  color: var(--ink-400);
+  font: 600 12px / 1 var(--font-display);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.leave > *:hover {
+  color: var(--text);
+}
+
+.leave > *:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

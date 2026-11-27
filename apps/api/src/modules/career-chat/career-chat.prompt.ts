@@ -64,6 +64,10 @@ ${VOICE}
   mark, that invites them to start trying the career you are talking about, such as "Quando quiser, é só começar por
   Psicologia: o primeiro capítulo te espera." Say it in different words each time.
 - professionSlug: the slug of the career your reply is about, or null when you ask which one they mean.
+- moreCareers: true when the person turns these careers down or asks for other ones ("não gostei", "me mostra
+  outras"), even if you think these fit. Then you never promise to think it over and never name careers: the app
+  brings a new list right after your reply, so the reply is only one short sentence that brings it, such as "Separei
+  outras carreiras pensando no que você me contou.", and professionSlug and chosenCourseId are null. Otherwise false.
 ${choices.length ? choosingRules(choices) : '- chosenCourseId: always null.'}
 
 ${grounding('each career')}

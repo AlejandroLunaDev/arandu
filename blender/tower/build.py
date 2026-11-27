@@ -16,12 +16,12 @@ the tower: a square board, three posts up to the next board, a house at the back
 out to each side and one out to the front. Every module is built in the bay's own space (the floor's
 top at Z = 0, the front toward -Y, the next floor BAY above) with its origin at the bay's origin, so a
 module is placed with its bay's transform and nothing else. A side module is built for the left post:
-mirror it on X for the right one. A module Arandu can sit on carries two empties: "<name>Seat" where he
-sits, and "<name>Sign" where its sign goes. A house takes a SignBoard on its roof, and any other spot a
-SignTag hung under its edge, which the web turns to face the camera. A sign's face has the material
-TowerSign and UVs that fill the whole texture, for the web to write on.
+mirror it on X for the right one. A spot carries an empty "<name>Seat": where Arandu lies in a house, and where
+the web stands a lesson's book on any other spot. A house also carries "<name>Sign", where a Chalkboard stands on
+its roof, which the web turns to face the camera. Its face has the material TowerSign and UVs that fill the whole
+texture, for the web to write the chapter on in chalk.
 
-Colours are the design tokens. Arandu is black, so every place he sits is cream (TowerSeat), houses are
+Colours are the design tokens. Every place Arandu sits is near-black (TowerSeat), and only the sisal posts are light; houses are
 a lighter violet than the frame, and amber marks the special lesson. Plush and rope get a tiling normal
 map each, made here and packed into the file, over box-projected UVs in metres.
 
@@ -51,14 +51,15 @@ add_box, add_lathe = _props["add_box"], _props["add_lathe"]
 _props["MATERIALS"].update({
     "TowerPlush": (srgb("#573383"), 1.0, 0.0),  # violet-700: the frame, lighter than the sofa to read on the dark page
     "TowerHouse": (srgb("#8456BC"), 1.0, 0.0),  # violet-500: a chapter's house is the landmark
-    "TowerSeat": (srgb("#F1EBDD"), 1.0, 0.0),  # cream-100: where Arandu sits. He is black, so his seats are light
+    "TowerSeat": (srgb("#1F1C27"), 1.0, 0.0),  # ink-850: where Arandu sits; only the posts stay light
     "TowerSisal": (srgb("#DDD3C0"), 1.0, 0.0),  # cream-300 rope
     "TowerInside": (srgb("#09090D"), 0.9, 0.0),  # ink-950, the dark inside a house
     "TowerHammock": (srgb("#D99A32"), 1.0, 0.0),  # amber-500: the special lesson's hammock stands out
     "PompomFur": (srgb("#E0A845"), 1.0, 0.0),  # amber-400
-    "TowerSign": (srgb("#FBF8F1"), 0.8, 0.0),  # cream-50, a sign's face
+    "TowerSign": (srgb("#1F1C27"), 0.95, 0.0),  # ink-850, the chalkboard's face
     "TowerSignRim": (srgb("#2E1B46"), 0.9, 0.0),  # violet-900
-    "TowerSignInk": (srgb("#09090D"), 0.9, 0.0),  # ink-950, the preview's sample labels only
+    "TowerSignInk": (srgb("#FBF8F1"), 0.9, 0.0),  # cream-50 chalk, the preview's sample labels only
+    "TowerWood": (srgb("#8A5A12"), 0.8, 0.0),  # amber-700: the chalkboard's frame and easel
 })
 
 TREES, KIT, PREVIEW = "TowerTrees", "TowerKit", "TowerPreview"
@@ -140,15 +141,16 @@ def carved(coll, name, outer, cutters, inside):
     return obj
 
 
-def box(coll, name, lo, hi, doors, wall=0.04):
+def box(coll, name, lo, hi, doors, wall=0.04, door=(0.24, 0.31)):
     """A plush box, dark inside, with arched doors. lo, hi: its corners. doors: (face, offset) pairs: the face is
-    "front", "left" or "right", and the offset moves the door along that face from its middle."""
+    "front", "left" or "right", and the offset moves the door along that face from its middle. door: an arch's
+    width and height."""
     size = [h - l for l, h in zip(lo, hi)]
     mid = [(l + h) / 2 for l, h in zip(lo, hi)]
     outer, hollow = Part(), Part()
     add_box(outer, size, mid, "TowerHouse", 0.04)
     add_box(hollow, [s - 2 * wall for s in size], mid, "TowerInside", 0.02)
-    w, h = 0.24, 0.31
+    w, h = door
     arch = prism([(-w / 2, 0.0), (w / 2, 0.0)] + arc(w / 2, 0.0, h - w / 2, 0.0, math.pi, 16), 0.0, 0.2)
     cutters = [hollow]
     for face, off in doors:  # each arch goes through its wall, from 0.1 outside to 0.1 inside
@@ -164,19 +166,30 @@ def box(coll, name, lo, hi, doors, wall=0.04):
     return carved(coll, name, outer, cutters, lambda c: all(lo[a] + k < c[a] < hi[a] - k for a in range(3)))
 
 
-def barrel(coll, name, floor, r, h, wall=0.04):
-    """A round plush barrel, dark inside, with a round door in its front and a darker lid. floor: its floor's centre."""
+def barrel(coll, name, floor, r, h, wall=0.04, door_r=0.115, door_z=None):
+    """A round plush barrel, dark inside, with a round door in its front and a darker lid. floor: its floor's centre.
+    door_r: the door's radius; door_z: its centre's height over the floor, halfway up by default."""
     x, y, z = floor
     m = Matrix.Translation(floor)
     outer, hollow, door = Part(), Part(), Part()
     add_lathe(outer, [(0.0, 0.0), (r - 0.03, 0.0), (r, 0.03), (r, h - 0.03), (r - 0.03, h), (0.0, h)],
               ["TowerHouse"] * 4 + ["TowerPlush"], m, seg=48)
     add_lathe(hollow, [(0.0, wall), (r - wall, wall), (r - wall, h - wall), (0.0, h - wall)], "TowerInside", m, seg=48)
-    add_lathe(door, [(0.0, -0.1), (0.115, -0.1), (0.115, 0.1), (0.0, 0.1)], "TowerInside",
-              Matrix.Translation((x, y - r, z + h / 2)) @ LAY, seg=32)
+    add_lathe(door, [(0.0, -0.1), (door_r, -0.1), (door_r, 0.1), (0.0, 0.1)], "TowerInside",
+              Matrix.Translation((x, y - r, z + (h / 2 if door_z is None else door_z))) @ LAY, seg=32)
     k = wall - 0.006  # as in box(): the hollow's own faces only
     return carved(coll, name, outer, [hollow, door],
                   lambda c: math.hypot(c[0] - x, c[1] - y) < r - k and z + k < c[2] < z + h - k)
+
+
+def cushioned(house, wall=0.04):
+    """house with a round dark cushion on its floor, made one object with it: Arandu lies on it."""
+    p = Part()
+    cylinder(p, (0, 0.15), wall - 0.005, wall + 0.025, 0.23, "TowerSeat")
+    pad = p.build(house.name + "Cushion", house.users_collection[0])
+    with bpy.context.temp_override(active_object=house, selected_editable_objects=[house, pad]):
+        bpy.ops.object.join()
+    return house
 
 
 def tunnel(part, at, r, length, wall=0.045):
@@ -415,15 +428,16 @@ def grand_tree(coll, name="GrandTree"):
 
 FLOOR = 0.92  # a bay's square floor board
 BAY = 1.5  # metres from one floor's top to the next
-HOUSE = 0.42  # a house's height
-SIDE, FRONT, SLING = 1.0, 0.55, 0.95  # heights over the floor: a side spot, the front spot and the hammock's ends
-SIDE_POST, FRONT_POST = (-0.37, -0.1), (-0.22, -0.36)  # the left post and the front one; the right mirrors the left
+HOUSE = 0.6  # a house's height: Arandu lies inside it (0.72 long, 0.46 wide, 0.41 tall), his head in the door
+SIDE, FRONT, SLING = 1.0, 0.55, 1.1  # heights over the floor: a side spot, the front spot and the hammock's ends
+SIDE_POST, FRONT_POST = (-0.37, -0.1), (-0.44, -0.44)  # the left post and the front one; the right mirrors the left
+FRONT_X = -0.62  # the front spots' middle: left of a house's door, so they never hide Arandu in it
 HOUSES = ["HouseBox", "HouseWide", "HouseBarrel"]
 SIDES = ["SidePlatform", "SideLadder", "SideBasket", "SideBed"]
-FRONTS = ["FrontBowl", "FrontStep", "FrontTunnel"]
+FRONTS = ["FrontBowl", "FrontStep"]
 
 
-SIGNS = {"SignTag": ((0.44, 0.14), -0.142), "SignBoard": ((0.5, 0.15), 0.125)}  # a face's size, and its centre's height
+SIGNS = {"Chalkboard": ((0.6, 0.36), 0.36)}  # a face's size, and its centre's height
 
 
 def spot(obj, seat, sign):
@@ -438,12 +452,12 @@ def spot(obj, seat, sign):
     return obj
 
 
-def sign(coll, name, fixings):
-    """A sign: a rim, and a cream face toward -Y whose UVs fill the whole texture. fixings(part) adds what holds it."""
+def sign(coll, name, fixings, rim="TowerSignRim", border=0.024):
+    """A sign: a rim, and a face toward -Y whose UVs fill the whole texture. fixings(part) adds what holds it."""
     (w, h), mid = SIGNS[name]
     p = Part()
     fixings(p)
-    add_box(p, (w + 0.024, 0.016, h + 0.024), (0, 0, mid), "TowerSignRim", 0.006)
+    add_box(p, (w + border, 0.02, h + border), (0, 0, mid), rim, 0.006)
     add_box(p, (w, 0.006, h), (0, -0.008, mid), "TowerSign")
     obj = p.build(name, coll, uv=True)
     me = obj.data
@@ -545,19 +559,21 @@ def build_kit(coll):
     stretches(p, front, (0, 0.4, 0.92, ceiling))
     p.build("Posts", coll)
 
-    # Houses stand at the back of the floor. Arandu sits in front of one, beside the front spot.
+    # Houses stand at the back of the floor, hollow and big enough for Arandu to lie in, his head in the door and his
+    # front paws out on the floor, looking out: his seat is on the cream cushion inside, under his hips.
     # The board stands off the roof's middle: there the front post would cover its first letters.
-    beside, roof = (0.27, -0.2, 0), (0.1, 0.04, HOUSE)
-    spot(box(coll, "HouseBox", (-0.26, -0.01, 0), (0.26, 0.41, HOUSE), [("front", 0.08)]), beside, roof)
-    spot(box(coll, "HouseWide", (-0.34, -0.01, 0), (0.34, 0.41, HOUSE), [("front", -0.16), ("front", 0.16)]), beside, roof)
-    spot(barrel(coll, "HouseBarrel", (0, 0.2, 0), 0.23, HOUSE), beside, roof)
+    inside, roof = (0, 0.0, 0.065), (0, 0.15, HOUSE)  # the chalkboard stands in the roof's middle
+    lo, hi, door = (-0.3, -0.14, 0), (0.3, 0.44, HOUSE), (0.4, 0.5)
+    spot(cushioned(box(coll, "HouseBox", lo, hi, [("front", 0)], door=door)), inside, roof)
+    windows = [("left", 0.05), ("right", 0.05)]  # the same house, with a door through each side too
+    spot(cushioned(box(coll, "HouseWide", lo, hi, [("front", 0)] + windows, door=door)), inside, roof)
+    spot(cushioned(barrel(coll, "HouseBarrel", (0, 0.15, 0), 0.29, HOUSE, door_r=0.24, door_z=0.28)), inside, roof)
 
     # Side spots reach out past the floor's left edge, on the left post.
     out = (-0.55, left[1], SIDE)  # a side board's centre: the post goes through its inner end
-    under = (-0.78, left[1], SIDE - BOARD)  # its sign hangs under its outer edge
     p = Part()
     board(p, (0.52, 0.42), out, pad=True)
-    spot(p.build("SidePlatform", coll), (-0.64, left[1], SIDE), under)
+    spot(p.build("SidePlatform", coll), (-0.64, left[1], SIDE), None)
 
     p = Part()  # the same board on a ladder that stands on the floor's edge
     board(p, (0.52, 0.42), out, pad=True)
@@ -565,43 +581,36 @@ def build_kit(coll):
     for leg in legs:
         cylinder(p, leg, 0, SIDE - BOARD, 0.03)
     for z in (0.24, 0.48, 0.72):
-        p.add(*tube([legs[0] + (z,), legs[1] + (z,)], 0.03, sides=10), "TowerSisal")
-    spot(p.build("SideLadder", coll), (-0.64, left[1], SIDE), under)
+        p.add(*tube([legs[0] + (z,), legs[1] + (z,)], 0.03, sides=10), "TowerPlush")
+    spot(p.build("SideLadder", coll), (-0.64, left[1], SIDE), None)
 
     p = Part()
     basket(p, (-0.67, -0.16, SIDE), 0.26, 0.2, [left])
-    spot(p.build("SideBasket", coll), (-0.67, -0.16, SIDE - 0.15), (-0.98, -0.16, SIDE - 0.03))
+    spot(p.build("SideBasket", coll), (-0.67, -0.16, SIDE - 0.15), None)
 
     p = Part()  # a bed held off the post by a neck
     bed(p, (0.5, 0.42), (-0.71, left[1], SIDE))
     p.add(*tube([(-0.5, left[1], SIDE - 0.03), left + (SIDE - 0.03,)], 0.04, sides=12), "TowerPlush")
     cylinder(p, left, SIDE - 0.1, SIDE + 0.03, R + 0.024)
-    spot(p.build("SideBed", coll), (-0.71, left[1], SIDE + 0.05), (-0.94, left[1], SIDE - BOARD))
+    spot(p.build("SideBed", coll), (-0.71, left[1], SIDE + 0.05), None)
 
-    # Front spots reach out past the floor's front edge, on the front post.
+    # Front spots reach out past the floor's front-left corner, on the front post. Nothing stands before a house's
+    # door, which the camera looks straight into: Arandu lies in it.
+    x = FRONT_X
     p = Part()
-    basket(p, (front[0], -0.67, FRONT), 0.26, 0.2, [front])
-    spot(p.build("FrontBowl", coll), (front[0], -0.67, FRONT - 0.15), (front[0], -0.98, FRONT - 0.03))
+    basket(p, (x, -0.67, FRONT), 0.26, 0.2, [front])
+    spot(p.build("FrontBowl", coll), (x, -0.67, FRONT - 0.15), None)
 
     p = Part()
-    board(p, (0.5, 0.44), (-0.2, -0.5, FRONT), pad=True)
-    spot(p.build("FrontStep", coll), (-0.2, -0.58, FRONT), (-0.2, -0.69, FRONT - BOARD))
-
-    p = Part()  # a wider step with a tunnel under it
-    board(p, (0.6, 0.44), (-0.1, -0.5, FRONT), pad=True)
-    tunnel(p, (0.02, -0.5, FRONT - BOARD - 0.16), 0.16, 0.42)
-    spot(p.build("FrontTunnel", coll), (-0.12, -0.6, FRONT), (-0.32, -0.69, FRONT - BOARD))
+    board(p, (0.5, 0.44), (x, -0.5, FRONT), pad=True)
+    spot(p.build("FrontStep", coll), (x, -0.58, FRONT), None)
 
     p = Part()  # the special lesson: an amber hammock slung between the left and right posts
     a, b = (left[0] + 0.1, left[1], SLING), (right[0] - 0.1, right[1], SLING)
     hammock(p, a, b, 0.19, 0.18, (left + (SLING + 0.22,), right + (SLING + 0.22,)), "TowerHammock")
     for at in (left, right):
         cylinder(p, at, SLING + 0.16, SLING + 0.28, R + 0.024)
-    spot(p.build("Hammock", coll), (0, left[1], SLING - 0.15), (left[0] + 0.12, left[1] - 0.21, SLING - 0.03))  # at one end, clear of the house sign under it
-
-    p = Part()  # a tunnel lying on a floor that has no house
-    tunnel(p, (0, 0.2, 0.19), 0.19, 0.42)
-    p.build("Tunnel", coll)
+    spot(p.build("Hammock", coll), (0, left[1], SLING - 0.15), None)
 
     p = Part()  # the book's start: its own posts in place of Posts, and three beds over the first house
     stretches(p, left, (0, 0.7, 1.38))
@@ -619,15 +628,16 @@ def build_kit(coll):
     pompom(p, (0, 0, 0), length=0.3)
     p.build("Bolinha", coll)
 
-    def string(part):  # two, wide apart: the tag is as wide as a board, so that "Lição 1" can be read on it
-        for x in (-0.15, 0.15):
-            part.add(*tube([(x, 0, 0), (x, 0, -0.06)], 0.004, sides=6), "TowerSisal")
+    (w, h), mid = SIGNS["Chalkboard"]
 
-    def stake(part):  # one, under the board's middle: the web turns the board on it to face the camera
-        cylinder(part, (0, 0), 0, 0.05, 0.014, "TowerSignRim")
+    def easel(part):  # two wooden legs splayed under the board, a bar between them and a tray for the chalk
+        for x in (-1, 1):
+            part.add(*tube([(x * (w / 2 - 0.06), 0.012, mid + h / 2), (x * (w / 2 + 0.01), 0.03, 0)], 0.013, sides=8), "TowerWood")
+        part.add(*tube([(-(w / 2 - 0.02), 0.014, 0.1), (w / 2 - 0.02, 0.014, 0.1)], 0.009, sides=8), "TowerWood")
+        add_box(part, (w * 0.7, 0.04, 0.014), (0, -0.018, mid - h / 2 - 0.02), "TowerWood", 0.004)
 
-    sign(coll, "SignTag", string)  # hangs from its origin
-    sign(coll, "SignBoard", stake)  # stands on a house's roof
+    # On a house's roof, its chapter written on it in chalk (the web writes it): turned to the camera on its legs.
+    sign(coll, "Chalkboard", easel, rim="TowerWood", border=0.05)
 
     mods = [o for o in coll.objects if o.parent is None]
     for i, o in enumerate(mods):  # a row behind the trees, to look at
@@ -668,13 +678,12 @@ def build_tower(coll, chapters=5, seed=1, at=(0, 0, 0)):
         coll.objects.link(o)
         if what:
             seats.append((what, m @ kit[name + "Seat"].location))
-        if label:  # its sign faces the bay's front and is never mirrored; the label is a sample of what the web writes
-            kind = "SignBoard" if name in HOUSES else "SignTag"
+        if label:  # a house's sign faces the bay's front and is never mirrored; the label is a sample of what the web writes
             at = Matrix.Translation(m @ kit[name + "Sign"].location) @ turn
-            place(kind, at)
-            (_, h), mid = SIGNS[kind]
+            place("Chalkboard", at)
+            (_, h), mid = SIGNS["Chalkboard"]
             text = bpy.data.curves.new("Label", "FONT")
-            text.body, text.align_x, text.align_y, text.size = label, "CENTER", "CENTER", h * (0.5 if kind == "SignBoard" else 0.72)
+            text.body, text.align_x, text.align_y, text.size = label, "CENTER", "CENTER", h * 0.5
             text.materials.append(_props["material"]("TowerSignInk"))
             sample = bpy.data.objects.new("Label", text)
             sample.matrix_world = at @ Matrix.Translation((0, -0.012, mid)) @ LAY
@@ -692,16 +701,16 @@ def build_tower(coll, chapters=5, seed=1, at=(0, 0, 0)):
         else:
             place("Posts", m)
         if hung == "special":
-            place("Hammock", m, "special", "*")
-        elif hung != "crown":
+            place("Hammock", m, "special")
+        elif hung != "crown":  # a lesson has no sign: the web stands its book on the seat
             c = hung[1]
-            place(pick("side", SIDES), m, "chapter %d lesson 1" % (c + 1), "1")
-            place(pick("side", SIDES), m @ flip, "chapter %d lesson 2" % (c + 1), "2")
-            place(pick("front", FRONTS), m, "chapter %d lesson 3" % (c + 1), "3")
+            place(pick("side", SIDES), m, "chapter %d lesson 1" % (c + 1))
+            place(pick("side", SIDES), m @ flip, "chapter %d lesson 2" % (c + 1))
+            place(pick("front", FRONTS), m, "chapter %d lesson 3" % (c + 1))
         if floor == "tunnel":
-            place("Tunnel", m)
+            pass  # the floor under the hammock stays bare
         elif floor == "end":  # the pompom hangs under the front spot, and Arandu sits on the floor by it
-            place("Bolinha", m @ Matrix.Translation((-0.2, -0.64, FRONT - BOARD)))
+            place("Bolinha", m @ Matrix.Translation((FRONT_X, -0.64, FRONT - BOARD)))
             seats.append(("end", m @ Vector((0.1, -0.25, 0))))
         else:
             place(pick("house", HOUSES), m, "chapter %d" % (floor[1] + 1), "Capítulo %d" % (floor[1] + 1))

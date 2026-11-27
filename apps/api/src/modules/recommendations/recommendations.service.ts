@@ -4,7 +4,10 @@ import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { CareersRepository } from '../careers/careers.repository.js';
 import { MemoryService } from '../memory/memory.service.js';
-import { recommendationsInstructions } from './recommendations.prompt.js';
+import {
+  type MoreCareers,
+  recommendationsInstructions,
+} from './recommendations.prompt.js';
 
 /** Careers for a profile (§4.1 step 4, S4), only among those with a real first-term curriculum. */
 @Injectable()
@@ -24,8 +27,14 @@ export class RecommendationsService {
     return this.recommend(profile);
   }
 
-  async recommend(profile: AranduProfile): Promise<Recommendations> {
-    const careers = await this.careers.withFirstTerm();
+  /** With `more`, other careers than the ones the person saw, weighing what they said about them. */
+  async recommend(
+    profile: AranduProfile,
+    more?: MoreCareers,
+  ): Promise<Recommendations> {
+    const careers = (await this.careers.withFirstTerm()).filter(
+      (c) => !more?.seen.includes(c.profession.slug),
+    );
     const slugs = careers.map((c) => c.profession.slug) as [
       string,
       ...string[],
@@ -36,7 +45,7 @@ export class RecommendationsService {
       schema: z.object({
         careers: z.array(z.object({ slug: z.enum(slugs), reason: z.string() })),
       }),
-      instructions: recommendationsInstructions(careers),
+      instructions: recommendationsInstructions(careers, more),
       prompt: `The person's profile:\n${JSON.stringify(profile, null, 2)}`,
       maxOutputTokens: 600,
     });

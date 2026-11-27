@@ -25,6 +25,8 @@ export type CatPose = {
   hold: number;
   /** How far he lies down, 0..1: the lie clip takes over from the sit clip, and his head rests. */
   lie: number;
+  /** How far he lies awake in a house's door, paws crossed, 0..1: the rest clip takes over from the sit clip. */
+  rest?: number;
   /** A world point to look at, or null to look around on his own. */
   look: THREE.Vector3 | null;
   /** 0..1 through the startle clip (he jerks upright, tail up), which starts and ends sitting. */
@@ -285,9 +287,12 @@ export function makeCat(gltf: GLTF, rim = "violet-400"): Cat {
       const shot = Math.min(1, tap + startle + stretch);
       const arch = clamp(p.arch ?? 0, 0, 1) * (1 - shot);
       const rest = (1 - shot) * (1 - arch);
-      act.sit?.setEffectiveWeight(p.sit * rest * (1 - p.hold) * (1 - p.lie));
+      const lying = p.rest ?? 0;
+      act.sit?.setEffectiveWeight(p.sit * rest * (1 - p.hold) * (1 - p.lie) * (1 - lying));
       act.read?.setEffectiveWeight(p.sit * rest * p.hold);
-      act.lie?.setEffectiveWeight(p.sit * rest * p.lie);
+      // A model without the rest clip lies down in the lie one instead.
+      act.lie?.setEffectiveWeight(p.sit * rest * (p.lie + (act.rest ? 0 : lying)));
+      act.rest?.setEffectiveWeight(p.sit * rest * lying);
       act.walk?.setEffectiveWeight((1 - p.sit) * (1 - p.air) * rest);
       act.jump?.setEffectiveWeight(p.air * rest);
       act.tap?.setEffectiveWeight(tap);

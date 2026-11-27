@@ -115,8 +115,9 @@ def sun(name, toward, strength):
     return obj
 
 
-def render_all(only=None):
-    """Render every shot, or only the ones named in `only`."""
+def render_all(only=None, shoot=None):
+    """Render every shot, or only the ones named in `only`. shoot(file, objs), when given, renders a framed shot in
+    place of the one still (swim.py renders the fish's frames)."""
     scene, r = bpy.context.scene, bpy.context.scene.render
     BUILD["build"]()
     dress_books()
@@ -153,6 +154,9 @@ def render_all(only=None):
             for o in scene.objects:
                 o.hide_render = o not in objs and o not in lights
             frame(cam, [o for o in objs if o.type == "MESH"], toward)
+            if shoot:
+                shoot(file, objs)
+                continue
             r.filepath = os.path.join(OUT, file + ".png")
             bpy.ops.render.render(write_still=True)
             print("Props: rendered", r.filepath)

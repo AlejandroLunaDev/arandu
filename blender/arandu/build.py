@@ -28,7 +28,8 @@ import bpy
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
-COLL = "Arandu"
+NAME = "Arandu"  # the cat: names its collection, objects and materials (blender/sophia reuses this file)
+COLL = NAME
 
 # ---------------------------------------------------------------- palette (brand board v2)
 
@@ -56,7 +57,7 @@ NOSE = srgb("#6B3FA0")
 WHISKER = srgb("#B8B8BC")
 
 # Material slots, in this order. The names reach three.js unchanged.
-MATERIALS = ["AranduFur", "AranduEye", "AranduPupil", "AranduGlint", "AranduNose", "AranduWhisker"]
+MATERIALS = [NAME + "Fur", NAME + "Eye", NAME + "Pupil", NAME + "Glint", NAME + "Nose", NAME + "Whisker"]
 M_FUR, M_EYE, M_PUPIL, M_GLINT, M_NOSE, M_WHISKER = range(6)
 
 # ---------------------------------------------------------------- proportions (chibi)
@@ -402,12 +403,12 @@ def shape_body(shape):
 def fused_mesh(coll, shape):
     """Union every part through an SDF, fillet the joins, smooth, and decimate to the budget."""
     verts, faces = shape.merged()
-    src_me = bpy.data.meshes.new("AranduShapeSrc")
+    src_me = bpy.data.meshes.new(NAME + "ShapeSrc")
     src_me.from_pydata([tuple(v) for v in verts], [], faces)
-    src = bpy.data.objects.new("AranduShapeSrc", src_me)
+    src = bpy.data.objects.new(NAME + "ShapeSrc", src_me)
     coll.objects.link(src)
 
-    ng = bpy.data.node_groups.new("AranduSDF", "GeometryNodeTree")
+    ng = bpy.data.node_groups.new(NAME + "SDF", "GeometryNodeTree")
     ng.interface.new_socket("Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
     ng.interface.new_socket("Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
     N, L = ng.nodes, ng.links
@@ -437,11 +438,11 @@ def fused_mesh(coll, shape):
     dg = bpy.context.evaluated_depsgraph_get()
     dg.update()
     me = bpy.data.meshes.new_from_object(src.evaluated_get(dg), preserve_all_data_layers=False, depsgraph=dg)
-    me.name = "AranduBody"
+    me.name = NAME + "Body"
     bpy.data.objects.remove(src)
     bpy.data.meshes.remove(src_me)
     bpy.data.node_groups.remove(ng)
-    body = bpy.data.objects.new("AranduBody", me)
+    body = bpy.data.objects.new(NAME + "Body", me)
     coll.objects.link(body)
     print("fused surface: %d raw triangles, decimated to %d" % (raw_tris, sum(len(p.vertices) - 2 for p in me.polygons)))
     return body
@@ -484,6 +485,14 @@ def fur_data(p, n, head, ear_inside, on_ear):
     comb = comb - n * comb.dot(n)
     comb = comb.normalized() if comb.length > 1e-6 else tangent_frame(n)[0]
     return max(0.0, min(1.0, length)), comb
+
+
+# ---------------------------------------------------------------- the coat
+
+
+def coat(p, n, head, inside):
+    """The fur colour at a body vertex: head is its head share, inside how far it is in an ear."""
+    return mix(mix(FUR_LOW, FUR_TOP, smooth(-0.6, 0.9, n.z)), EAR_IN, inside)
 
 
 # ---------------------------------------------------------------- the rig
@@ -533,8 +542,8 @@ def bone_specs():
 
 
 def build_armature(coll):
-    data = bpy.data.armatures.new("Arandu")
-    arm = bpy.data.objects.new("Arandu", data)
+    data = bpy.data.armatures.new(NAME)
+    arm = bpy.data.objects.new(NAME, data)
     coll.objects.link(arm)
     for o in bpy.context.view_layer.objects:
         o.select_set(False)
@@ -756,7 +765,7 @@ def material(name, color=None, vertex_colors=False, roughness=0.5, emit=None, em
 
 
 def assemble(geo, coll, arm):
-    me = bpy.data.meshes.new("AranduMesh")
+    me = bpy.data.meshes.new(NAME + "Mesh")
     me.from_pydata([tuple(v) for v in geo.v], [], geo.f)
     me.polygons.foreach_set("material_index", geo.m)
     me.polygons.foreach_set("use_smooth", [True] * len(geo.f))
@@ -769,15 +778,15 @@ def assemble(geo, coll, arm):
     me.attributes.new("_fur", "FLOAT", "POINT").data.foreach_set("value", geo.fur)
     me.attributes.new("_comb", "FLOAT_VECTOR", "POINT").data.foreach_set("vector", [x for c in geo.comb for x in c])
     for mat in (
-        material("AranduFur", vertex_colors=True, roughness=0.62),
-        material("AranduEye", vertex_colors=True, roughness=0.12, emit=AMBER, emit_strength=0.35),
-        material("AranduPupil", PUPIL, roughness=0.08),
-        material("AranduGlint", GLINT, roughness=0.3, emit=GLINT, emit_strength=1.0),
-        material("AranduNose", NOSE, roughness=0.3),
-        material("AranduWhisker", WHISKER, roughness=0.5),
+        material(NAME + "Fur", vertex_colors=True, roughness=0.62),
+        material(NAME + "Eye", vertex_colors=True, roughness=0.12, emit=AMBER, emit_strength=0.35),
+        material(NAME + "Pupil", PUPIL, roughness=0.08),
+        material(NAME + "Glint", GLINT, roughness=0.3, emit=GLINT, emit_strength=1.0),
+        material(NAME + "Nose", NOSE, roughness=0.3),
+        material(NAME + "Whisker", WHISKER, roughness=0.5),
     ):
         me.materials.append(mat)
-    obj = bpy.data.objects.new("AranduMesh", me)
+    obj = bpy.data.objects.new(NAME + "Mesh", me)
     coll.objects.link(obj)
     groups = {}
     for i, w in enumerate(geo.w):
@@ -829,7 +838,7 @@ def build():
         inside = max(e_l * ear_inner(p, 1), e_r * ear_inner(p, -1))
         fur, comb = fur_data(p, n, head, inside, max(e_l, e_r) > 0.5)
         geo.v.append(p)
-        geo.c.append(mix(mix(FUR_LOW, FUR_TOP, smooth(-0.6, 0.9, n.z)), EAR_IN, inside))
+        geo.c.append(coat(p, n, head, inside))
         geo.w.append(w)
         geo.fur.append(fur)
         geo.comb.append(tuple(comb))
@@ -844,7 +853,7 @@ def build():
     obj = assemble(geo, coll, arm)
     tris = sum(len(f) - 2 for f in geo.f)
     low = min(v.z for v in geo.v)
-    print("Arandu: %d vertices, %d triangles, %d bones, lowest point z=%.4f" % (len(geo.v), tris, len(arm.data.bones), low))
+    print(NAME + ": %d vertices, %d triangles, %d bones, lowest point z=%.4f" % (len(geo.v), tris, len(arm.data.bones), low))
     return arm, obj
 
 

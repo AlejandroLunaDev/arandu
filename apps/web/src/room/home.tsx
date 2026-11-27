@@ -43,7 +43,7 @@ export function HomeView({ home, league }: { home: Home; league: League }) {
           <span className="sr-only"> peixinhos</span>
         </p>
       </header>
-      {wallet.dailyGift > 0 && <DailyGift amount={wallet.dailyGift} />}
+      <DailyGift amount={wallet.dailyGift} />
       <RoomStage />
       <nav className={styles.ways} aria-label="Para onde ir">
         <Link className={styles.side} href="/app/catalogo">
@@ -61,11 +61,11 @@ export function HomeView({ home, league }: { home: Home; league: League }) {
             <span>Viva uma matéria de verdade</span>
           </Link>
         )}
-        <Link className={styles.side} href="/app/liga">
+        <Link className={styles.side} href="/app/liga" data-new={league.promotion || undefined}>
           {/* The leagues go from Calouro to Sábio: a laurel, the crown of the wise, not a trophy. */}
           <Image src="/img/props/laurel.webp" alt="" width={30} height={30} />
           {league.league.name}
-          {league.promotion && <i>Nova liga</i>}
+          {league.promotion && <span className="sr-only">, nova liga</span>}
         </Link>
       </nav>
     </main>

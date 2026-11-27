@@ -1,21 +1,24 @@
 /** A lesson or a chapter on the tower, as the person meets it. */
 export type SpotState = "done" | "open" | "locked";
 
-/** One storey of the tower: a chapter (its house and its three lessons round it) or a special lesson. */
-export type Storey = { chapter: number } | { special: number };
+/**
+ * One storey of the tower: a chapter (its house and its three lessons round it), a special lesson, or the low storey
+ * over a chapter that carries its chalkboard, its name on it.
+ */
+export type Storey = { chapter: number } | { special: number } | { title: number };
 
 export const chapterKey = (chapter: number) => `c${chapter}`;
 export const lessonKey = (chapter: number, lesson: number) => `c${chapter}l${lesson}`;
 export const specialKey = (after: number) => `s${after}`;
 
 /**
- * The tower's storeys from the top: one a chapter, and a special lesson on a storey of its own after every
- * `specialEvery` chapters, never after the last.
+ * The tower's storeys from the top: each chapter under its chalkboard's, and a special lesson on a storey of its own
+ * after every `specialEvery` chapters, never after the last.
  */
 export function towerPlan(chapters: number, specialEvery = 2): Storey[] {
   const storeys: Storey[] = [];
   for (let c = 0; c < chapters; c++) {
-    storeys.push({ chapter: c });
+    storeys.push({ title: c }, { chapter: c });
     if ((c + 1) % specialEvery === 0 && c < chapters - 1) storeys.push({ special: c + 1 });
   }
   return storeys;

@@ -1,4 +1,5 @@
 .room {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -103,6 +104,18 @@
   touch-action: none;
 }
 
+/* The first entry's loading, where the room will stand, until the stage is up (run-stage: data-ready) or fails. */
+.wait {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.scene:has([data-ready]) .wait,
+:global(.no3d) .wait {
+  display: none;
+}
+
 /* On a wide screen the room is cut to the app's column, however close the camera comes. */
 .cut {
   clip-path: inset(0 var(--cut-right, 0) 0 var(--cut-left, 0));
@@ -166,19 +179,29 @@
   height: 30px;
 }
 
-/* A promotion not seen yet: a dot on the trophy, its words read. */
-.side i {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 14px;
-  height: 14px;
-  overflow: hidden;
-  border: 2px solid var(--bg);
-  border-radius: 99px;
-  background: var(--error);
-  color: transparent;
-  font-size: 1px;
+/* A promotion not seen yet: the league glows and its laurel sways, never a dot. */
+.side[data-new] {
+  border-color: var(--amber-400);
+  animation: glow 1.6s ease-in-out infinite;
+}
+
+.side[data-new] img {
+  animation: sway 1.6s ease-in-out infinite;
+}
+
+@keyframes glow {
+  50% {
+    box-shadow: 0 0 18px 2px color-mix(in srgb, var(--amber-400) 55%, transparent);
+  }
+}
+
+@keyframes sway {
+  25% {
+    transform: rotate(-8deg) scale(1.08);
+  }
+  75% {
+    transform: rotate(8deg) scale(1.08);
+  }
 }
 
 /* As wide as its words need, not the row: the sides frame it. */
@@ -224,58 +247,193 @@
 
 .side:focus-visible,
 .go:focus-visible,
-.gift button:focus-visible {
+.gift:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* The day's gift of peixinhos, until the person takes it. */
+/* The day's gift of peixinhos: a small fish on the room's left that twinkles until it is tapped. */
 .gift {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1.5px solid var(--amber-600);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--amber-400) 10%, transparent);
-}
-
-.gift img {
-  flex: none;
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-}
-
-.gift div {
-  flex: 1;
-  min-width: 0;
-}
-
-.gift strong {
-  display: block;
-  font: 700 14px/1.25 var(--font-bricolage), var(--font-display);
-}
-
-.gift span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.gift button {
-  flex: none;
-  min-height: 44px;
-  padding: 0 14px;
+  position: absolute;
+  top: 54px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  /* The fish is small; its tap area stays a finger wide. */
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 0;
-  border-radius: 12px;
-  background: var(--amber-400);
-  color: var(--ink-950);
-  font: 700 14px/1 var(--font-body);
+  border-radius: 99px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--amber-300) 45%, transparent), transparent 70%);
+  cursor: pointer;
+  animation: twinkle 1.4s ease-in-out infinite;
 }
 
-.gift button:disabled {
-  opacity: 0.6;
+/* On a pointer it reads as something to take: it grows and brightens under the mouse. */
+.gift:hover .swim {
+  transform: scale(1.25);
+  filter: drop-shadow(0 0 10px var(--amber-300)) brightness(1.2);
+}
+
+/* The peixinho swimming: blender/props/swim.py's strip of 16 frames, played in steps. */
+.swim {
+  display: block;
+  aspect-ratio: 238 / 164;
+  background: url("/img/props/fish-swim.webp") 0 0 / 1600% 100% no-repeat;
+  animation: swim 0.9s steps(16) infinite;
+}
+
+@keyframes swim {
+  to {
+    background-position-x: calc(100% * 16 / 15);
+  }
+}
+
+.gift .swim {
+  width: 30px;
+  filter: drop-shadow(0 0 5px var(--amber-300));
+  transition:
+    transform 0.15s ease-out,
+    filter 0.15s ease-out;
+}
+
+.gift:disabled {
+  animation-play-state: paused;
+}
+
+/* It could not be taken: a shake, and it twinkles on for another try. */
+.gift[data-failed] .swim {
+  animation:
+    swim 0.9s steps(16) infinite,
+    shake 0.4s ease-in-out;
+}
+
+@keyframes twinkle {
+  50% {
+    transform: translateY(-3px) scale(1.12);
+    filter: brightness(1.35);
+  }
+}
+
+@keyframes shake {
+  25% {
+    transform: translateX(-4px) rotate(-8deg);
+  }
+  75% {
+    transform: translateX(4px) rotate(8deg);
+  }
+}
+
+/* Taken: a big fish shines in the middle of the dimmed screen with what was won, until a tap anywhere, as Clash Royale's
+   rewards. */
+.caught {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--ink-950) 70%, transparent);
+  color: inherit;
+  cursor: pointer;
+  animation: caught 0.25s ease-out;
+}
+
+/* catch-scene.ts's bubbles and sparks, over the whole screen, behind the fish. */
+.burst {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.caught .swim {
+  position: relative;
+  width: 160px;
+  filter: drop-shadow(0 0 16px var(--amber-300));
+  animation:
+    swim 0.9s steps(16) infinite,
+    leap 0.9s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.caught strong {
+  position: relative;
+  color: var(--amber-300);
+  font: 800 34px/1 var(--font-bricolage), var(--font-display);
+  text-shadow: 0 0 12px var(--amber-600);
+}
+
+.caught span {
+  position: relative;
+  color: var(--cream-50);
+  font: 700 15px/1.3 var(--font-bricolage), var(--font-display);
+  text-shadow: 0 1px 6px var(--ink-950);
+}
+
+@keyframes caught {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes leap {
+  0% {
+    transform: scale(0.3);
+  }
+  40% {
+    transform: scale(1.1) rotate(-6deg);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Closed: the fish swims up to the wallet, shrinking, and the rest fades with it. */
+.caught[data-leaving] {
+  pointer-events: none;
+  animation: leave 0.7s ease-in forwards;
+}
+
+.caught[data-leaving] .swim {
+  animation:
+    swim 0.45s steps(16) infinite,
+    fly 0.7s cubic-bezier(0.5, -0.3, 0.8, 0.6) forwards;
+}
+
+.caught[data-leaving] strong,
+.caught[data-leaving] span:not(.swim) {
+  animation: leave 0.25s ease-in forwards;
+}
+
+@keyframes leave {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes fly {
+  to {
+    transform: translate(min(38vw, 170px), -44vh) scale(0.15); /* toward the wallet, top right of the app's column */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caught[data-leaving] .swim {
+    animation: none;
+  }
+
+  .gift,
+  .side[data-new],
+  .side[data-new] img,
+  .swim,
+  .gift .swim,
+  .caught .swim {
+    animation: none;
+  }
 }

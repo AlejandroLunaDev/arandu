@@ -32,7 +32,7 @@ const BELOW = 0.06;
  * the cat's toy ball on it (where the person starts; the paw is the game's currency, so it marks nothing). Still:
  * drawn once, and again when the canvas changes size.
  */
-export async function runShelf(host: HTMLElement, titles: string[], onReady: () => void) {
+export async function runShelf(host: HTMLElement, titles: string[], onReady: () => void, onPick?: (index: number) => void) {
   // The spines print in the page's display font: wait for it, or they print in a fallback.
   const [gltf] = await Promise.all([load(), document.fonts.ready]);
   const kit = makeKit(gltf);
@@ -55,6 +55,7 @@ export async function runShelf(host: HTMLElement, titles: string[], onReady: () 
     const s = kit.size(name);
     const book = kit.book(name, LOOKS[i % LOOKS.length]!, title);
     book.position.set(x + s.x / 2, 0, 0);
+    book.userData.index = i;
     row.add(book);
     x += s.x + GAP;
     return { book, s };
@@ -109,8 +110,39 @@ export async function runShelf(host: HTMLElement, titles: string[], onReady: () 
   const observer = new ResizeObserver(draw);
   observer.observe(canvas);
 
+  // With onPick, a book is a button: the one under the pointer rises a little, and a tap picks it.
+  const ray = new THREE.Raycaster();
+  const at = new THREE.Vector2();
+  const under = (e: PointerEvent | MouseEvent) => {
+    const r = canvas.getBoundingClientRect();
+    at.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(at, camera);
+    for (let o: THREE.Object3D | null = ray.intersectObject(row, true)[0]?.object ?? null; o; o = o.parent)
+      if (typeof o.userData.index === "number") return o.userData.index as number;
+    return null;
+  };
+  let hot: number | null = null;
+  const onMove = (e: PointerEvent) => {
+    const now = under(e);
+    if (now === hot) return;
+    hot = now;
+    books.forEach(({ book }, i) => (book.position.y = i === hot ? 0.012 : 0));
+    canvas.toggleAttribute("data-hot", hot !== null);
+    draw();
+  };
+  const onClick = (e: MouseEvent) => {
+    const index = under(e);
+    if (index !== null) onPick?.(index);
+  };
+  if (onPick) {
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("click", onClick);
+  }
+
   return {
     stop() {
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("click", onClick);
       observer.disconnect();
       kit.dispose();
       renderer.dispose();

@@ -189,7 +189,8 @@ export function BookPages() {
 
   // On a touch screen the pages also turn under a swipe, sideways, as a book's leaves do.
   const onSwipeStart = (e: PointerEvent) => {
-    swipe.current = e.pointerType === "mouse" ? null : { x: e.clientX, y: e.clientY };
+    // A second finger makes it a pinch (run-stage), not a swipe.
+    swipe.current = e.pointerType === "mouse" || !e.isPrimary ? null : { x: e.clientX, y: e.clientY };
   };
   const onSwipeEnd = (e: PointerEvent) => {
     const from = swipe.current;

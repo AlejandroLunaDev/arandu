@@ -15,6 +15,7 @@ type Step = "semester" | "rhythm" | "how" | "chapter" | "done" | "age" | "google
 
 /** The sample holds the four kinds of a subject's first chapter, however many more the chapter has (O15-O18). */
 const SAMPLE = new Set<ChapterContent["exercises"][number]["kind"]>(["escolha_uma", "una_os_pares", "verdadeiro_ou_falso", "complete_a_frase"]);
+const sample = (c: ChapterContent): ChapterContent => ({ ...c, exercises: c.exercises.filter((e) => SAMPLE.has(e.kind)) });
 
 // O11-O21, after the person picked a course at O10: its first semester, the weekly goal, a sample of the first chapter
 // (its cards and basic exercises), its end, the age and Google. Each choice is saved to the journey as it is made;
@@ -24,8 +25,11 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
   const [step, setStep] = useState<Step>("semester");
   const [paths, setPaths] = useState<CareerPaths | null>(null);
   const [goal, setGoal] = useState<3 | 5 | 7 | null>(null);
-  const [chapter, setChapter] = useState<ChapterContent | null>(null);
+  /** The sample chapter, with the subject it belongs to: one of a subject picked before is not this one's. */
+  const [loaded, setLoaded] = useState<{ id: number; chapter: ChapterContent } | null>(null);
   const [lost, setLost] = useState(false);
+  /** The subject the person starts with: the book they tapped on the shelf, the first one otherwise. */
+  const [start, setStart] = useState(0);
   const { busy, failed, attempt } = useAttempt();
 
   useEffect(() => {
@@ -34,17 +38,18 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
 
   // The offerings only list courses whose path can be opened, so the picked one is there with a first subject.
   const path = paths?.paths.find((p) => p.courseId === course.courseId);
-  const first = path?.subjects[0];
+  const first = path?.subjects[start] ?? path?.subjects[0];
   const career = course.profession.name;
   const next = { busy, failed };
 
   // The first chapter comes while the person picks the goal and reads how the game works (O12-O13): "Continuar" at O13
   // opens it at once instead of waiting for it.
   const firstId = first?.disciplineId;
+  const chapter = loaded && loaded.id === firstId ? loaded.chapter : null;
   useEffect(() => {
     // A failed prefetch is not an error yet: "Continuar" asks again.
     if (firstId !== undefined)
-      getChapter(firstId, 0).then((s) => setChapter({ ...s, exercises: s.exercises.filter((e) => SAMPLE.has(e.kind)) }), () => undefined);
+      getChapter(firstId, 0).then((s) => setLoaded({ id: firstId, chapter: sample(s) }), () => undefined);
   }, [firstId]);
 
   if (!path || !first)
@@ -63,9 +68,19 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
         course={course}
         path={path}
         onBack={onBack}
+        onPick={(index) => {
+          const picked = path.subjects[index];
+          if (!picked) return;
+          setStart(index);
+          attempt(async () => {
+            await saveJourney({ disciplineId: picked.disciplineId });
+            setStep("rhythm");
+          });
+        }}
         onNext={() =>
           attempt(async () => {
-            await saveJourney({ disciplineId: first.disciplineId });
+            setStart(0);
+            await saveJourney({ disciplineId: path.subjects[0]!.disciplineId });
             setStep("rhythm");
           })
         }
@@ -97,7 +112,7 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
         onBack={() => setStep("rhythm")}
         onNext={() =>
           attempt(async () => {
-            if (!chapter) setChapter(await getChapter(first.disciplineId, 0));
+            if (!chapter) setLoaded({ id: first.disciplineId, chapter: sample(await getChapter(first.disciplineId, 0)) });
             setStep("chapter");
           })
         }

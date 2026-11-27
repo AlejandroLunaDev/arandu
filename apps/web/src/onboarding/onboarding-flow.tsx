@@ -1,6 +1,7 @@
 "use client";
 
 import type { AranduProfile, OnboardingAnswer, OnboardingReply } from "@arandu/contracts";
+import Link from "next/link";
 import { useState } from "react";
 import { signInWithGoogle } from "@/auth/actions";
 import { useAttempt } from "@/ui/use-attempt";
@@ -12,6 +13,7 @@ import { byInstitution, type Place, type PlaceCourse } from "./places";
 import { PlacesView } from "./places-view";
 import { ProfileView } from "./profile-view";
 import { QuestionView } from "./question-view";
+import styles from "./onboarding.module.css";
 
 // O01-O10. Arandu (POST /arandu/onboarding) phrases each question and reacts to the last answer; the person
 // answers in their own words, writing or talking. Once every topic is covered the
@@ -24,23 +26,61 @@ const heard = (p: AranduProfile) =>
   [p.likedSubjects, p.hardSubjects, p.interests, p.workStyle, p.admired].some((list) => list.length > 0);
 
 export function OnboardingFlow() {
+  // Recomeçar mounts the flow anew: a new conversation, nothing of the last one on screen.
+  const [run, setRun] = useState(0);
+  return <Flow key={run} onRestart={() => setRun((n) => n + 1)} />;
+}
+
+function Flow({ onRestart }: { onRestart: () => void }) {
   const [turn, setTurn] = useState<OnboardingReply | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswer[]>([]);
   const [profileShown, setProfileShown] = useState(false);
   const [fixed, setFixed] = useState(false);
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [chosen, setChosen] = useState<PlaceCourse | null>(null);
+  /** What Arandu said bringing the list from the chat, when the person asked for other careers. */
+  const [say, setSay] = useState<string | undefined>();
+  /** Each list brought from the chat: its number keys the screen, and the careers of the earlier ones stay out of it. */
+  const [list, setList] = useState(0);
+  const [seen, setSeen] = useState<string[]>([]);
   const { busy, failed, attempt } = useAttempt();
 
   if (!turn)
     return <HelloView busy={busy} failed={failed} onStart={() => attempt(async () => setTurn(await startOnboarding()))} onGoogle={() => attempt(signInWithGoogle)} />;
 
-  if (chosen) return <PathFlow course={chosen} onBack={() => setChosen(null)} />;
+  // At every step after the first, a way out of the onboarding and a way to start it over.
+  const leave = (
+    <nav className={styles.leave} aria-label="Sair ou recomeçar">
+      <button type="button" onClick={onRestart}>
+        Recomeçar
+      </button>
+      <Link href="/">Sair</Link>
+    </nav>
+  );
+  const screen = (view: React.ReactNode) => (
+    <div className={styles.flow}>
+      {view}
+      {leave}
+    </div>
+  );
+
+  if (chosen) return screen(<PathFlow course={chosen} onBack={() => setChosen(null)} />);
 
   if (places)
-    return (
+    return screen(
       <PlacesView
+        // A new list is a new screen: Arandu's words come out again and nothing stays open.
+        key={list}
         places={places}
+        say={say}
+        seen={seen}
+        onMore={(careers, said) => {
+          const shown = places.flatMap((p) => p.courses.map((c) => c.profession.slug));
+          setSeen((before) => [...new Set([...before, ...shown])].slice(-40));
+          setPlaces(byInstitution(careers));
+          setSay(said);
+          setList((n) => n + 1);
+        }}
         busy={busy}
         failed={failed}
         onBack={() => setPlaces(null)}
@@ -56,7 +96,7 @@ export function OnboardingFlow() {
     );
 
   if (profileShown)
-    return (
+    return screen(
       <ProfileView
         profile={turn.profile}
         reply={fixed ? turn.reply : null}
@@ -99,7 +139,7 @@ export function OnboardingFlow() {
       setTurn(next);
     });
 
-  return (
+  return screen(
     <QuestionView
       // A new turn is a new question: its words come out one by one again.
       key={turn.reply}

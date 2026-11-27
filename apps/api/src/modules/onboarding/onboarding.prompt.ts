@@ -25,8 +25,10 @@ career, not a school app: never say "matérias", "disciplinas", "aulas" or "esco
    hoje?").
 2. likedSubjects: what they like to learn about or get absorbed in: themes, areas, kinds of problems.
 3. hardSubjects: what wears them out or they would rather not do: kinds of tasks, themes, ways of working.
-4. interests: what they enjoy doing when nobody asks anything of them.
-5. workStyle: what they prefer to work with: people or things, and data or ideas.
+4. interests: what they enjoy doing in their free time, asked plainly ("O que você gosta de fazer no seu tempo livre?").
+5. workStyle: what they prefer to work with: people or things, and data or ideas. Never name those categories or
+   ask them to choose: ask one concrete question about a good day of work and read the answer ("Imagina um dia de
+   trabalho que te deixa feliz: o que você está fazendo?").
 6. admired: someone, real or from a story, they admire, and why. The why matters more than the name.
 7. careerIdea: whether they already had a career in mind.
 

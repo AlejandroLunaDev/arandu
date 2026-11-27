@@ -353,3 +353,65 @@ a.stat::after {
 .next p {
   margin: 0;
 }
+
+/* An opened lesson's pages, laid over its 3D book (tower-scene.ts opens it as tall as --open, in the stage's middle):
+   on the left what the chapter is about, on the right the way in. */
+.pages {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: calc(var(--open, 300) * 1.4px);
+  height: calc(var(--open, 300) * 1px);
+  color: var(--ink-950);
+  outline: none;
+  translate: -50% -50%;
+  animation: pages-in 0.25s ease-out;
+  transition:
+    scale 0.6s ease-in,
+    opacity 0.4s ease-in 0.2s;
+}
+
+/* Começar: the book comes at you, into its page, as the lesson loads. */
+.pages[data-zoom] {
+  scale: 2.4;
+  opacity: 0;
+}
+
+@keyframes pages-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8% 9%;
+  overflow: hidden;
+}
+
+.page .cap[data-amber] {
+  color: var(--amber-700);
+}
+
+.page .note {
+  color: var(--ink-700);
+}
+
+.pageText {
+  margin: 0;
+  font: 600 clamp(12px, calc(var(--open, 300) * 0.05px), 16px) / 1.35 var(--font-display);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pages {
+    animation: none;
+    transition: none;
+  }
+}

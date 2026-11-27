@@ -288,7 +288,12 @@ describe('POST /arandu/chat among the recommended careers', () => {
     chosenCourseId?: number | null;
   }) => {
     model = fakeModel({
-      object: { chosenCourseId: null, ...object, reply: 'Claro!' },
+      object: {
+        chosenCourseId: null,
+        moreCareers: false,
+        ...object,
+        reply: 'Claro!',
+      },
     });
     memory = fakeMemoryRepository();
     firstTerm = vi.fn(async (slug: string) =>
@@ -448,12 +453,81 @@ describe('POST /arandu/chat among the recommended careers', () => {
     expect(memory.createSession).not.toHaveBeenCalled();
   });
 
+  it('brings other careers than the ones on screen when the person asks for them, from what they said', async () => {
+    await app.close();
+    model = fakeModel(
+      {
+        object: {
+          professionSlug: null,
+          chosenCourseId: null,
+          moreCareers: true,
+          reply: 'Separei outras carreiras.',
+        },
+      },
+      {
+        object: {
+          careers: [{ slug: 'quimica', reason: 'Porque você curte química.' }],
+        },
+      },
+    );
+    memory = fakeMemoryRepository();
+    memory.read.mockResolvedValue({
+      profile: { likedSubjects: ['química'] },
+      summary: null,
+      sessions: [],
+    });
+    const quimica = {
+      profession: { slug: 'quimica', name: 'Química' },
+      offerings: [],
+    };
+    const withFirstTerm = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          profession: { slug: 'arquitetura', name: 'Arquitetura' },
+          offerings: [],
+        },
+        {
+          profession: { slug: 'medicina', name: 'Medicina' },
+          offerings: [],
+        },
+        quimica,
+      ]);
+    app = await createHttpApp([CareerChatModule], model, [
+      withMemory(memory),
+      [CareersRepository, { firstTerm, withFirstTerm }],
+      [ProgressRepository, { studied: vi.fn().mockResolvedValue([]) }],
+    ]);
+
+    const res = await post({
+      ...body,
+      message: 'Não gostei, me mostra outras',
+      seenSlugs: ['medicina'],
+    }).expect(200);
+
+    expect(res.body).toMatchObject({
+      reply: 'Separei outras carreiras.',
+      professionSlug: null,
+      chosenCourseId: null,
+      recommendations: {
+        careers: [{ ...quimica, reason: 'Porque você curte química.' }],
+      },
+    });
+    // The careers seen, on screen or in an earlier list, are not offered again, and the person's words reach the pick.
+    expect(model.lastCall?.instructions).not.toMatch(/^arquitetura:/m);
+    expect(model.lastCall?.instructions).not.toMatch(/^medicina:/m);
+    expect(model.lastCall?.instructions).toContain(
+      'Não gostei, me mostra outras',
+    );
+  });
+
   it('replaces an abusive model reply and drops its chosen course, even when the id is on screen', async () => {
     await app.close();
     model = fakeModel({
       object: {
         professionSlug: 'arquitetura',
         chosenCourseId: 9,
+        moreCareers: false,
         reply: 'arrombado',
       },
     });
