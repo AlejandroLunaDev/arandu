@@ -149,6 +149,11 @@ export interface AranduChatReply {
    * web moves on. Null while they doubt, ask, or name a career offered at several places (Arandu asks which).
    */
   chosenCourseId: number | null;
+  /**
+   * Only among the recommended careers, when the person turned the list down or asked for other careers: a new list,
+   * none of the ones they saw. The web shows it at once; the reply is a short sentence that brings it.
+   */
+  recommendations?: Recommendations;
 }
 
 /** The onboarding's topics, one question each (docs/05-functional-map.md S1). */

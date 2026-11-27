@@ -26,6 +26,8 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
   const [goal, setGoal] = useState<3 | 5 | 7 | null>(null);
   const [chapter, setChapter] = useState<ChapterContent | null>(null);
   const [lost, setLost] = useState(false);
+  /** The subject the person starts with: the book they tapped on the shelf, the first one otherwise. */
+  const [start, setStart] = useState(0);
   const { busy, failed, attempt } = useAttempt();
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
 
   // The offerings only list courses whose path can be opened, so the picked one is there with a first subject.
   const path = paths?.paths.find((p) => p.courseId === course.courseId);
-  const first = path?.subjects[0];
+  const first = path?.subjects[start] ?? path?.subjects[0];
   const career = course.profession.name;
   const next = { busy, failed };
 
@@ -63,9 +65,19 @@ export function PathFlow({ course, onBack }: { course: PlaceCourse; onBack: () =
         course={course}
         path={path}
         onBack={onBack}
+        onPick={(index) => {
+          const picked = path.subjects[index];
+          if (!picked) return;
+          setStart(index);
+          attempt(async () => {
+            await saveJourney({ disciplineId: picked.disciplineId });
+            setStep("rhythm");
+          });
+        }}
         onNext={() =>
           attempt(async () => {
-            await saveJourney({ disciplineId: first.disciplineId });
+            setStart(0);
+            await saveJourney({ disciplineId: path.subjects[0]!.disciplineId });
             setStep("rhythm");
           })
         }

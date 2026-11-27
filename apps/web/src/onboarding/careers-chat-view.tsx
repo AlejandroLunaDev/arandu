@@ -1,5 +1,6 @@
 "use client";
 
+import type { CareerOption } from "@arandu/contracts";
 import { AranduSays, useReveal } from "@/ui/arandu-says";
 import { Back } from "@/ui/back";
 import { Composer } from "@/ui/composer";
@@ -27,6 +28,7 @@ export function CareersChatView({
   busy,
   failed,
   onChoose,
+  onMore,
   onBack,
 }: {
   courses: { place: Place; course: PlaceCourse }[];
@@ -35,6 +37,8 @@ export function CareersChatView({
   busy: boolean;
   failed: boolean;
   onChoose: (courseId: number) => void;
+  /** The person asked for other careers: the new list, and what Arandu said bringing it. */
+  onMore: (careers: CareerOption[], say: string) => void;
   onBack: () => void;
 }) {
   const { shown } = useReveal(SAY);
@@ -44,7 +48,8 @@ export function CareersChatView({
   const ask = (message: string) =>
     talk.attempt(async () => {
       const choices = courses.slice(0, 12).map(({ place, course }) => toChoice(place, course));
-      const { sessionId, reply, professionSlug, chosenCourseId } = await askAboutCareers(slugs, message, chat?.sessionId, choices);
+      const { sessionId, reply, professionSlug, chosenCourseId, recommendations } = await askAboutCareers(slugs, message, chat?.sessionId, choices);
+      if (recommendations?.careers.length) return onMore(recommendations.careers, reply);
       onChat({ sessionId, reply, slug: professionSlug, chosen: chosenCourseId });
     });
   const chosen = chat?.chosen ?? null;

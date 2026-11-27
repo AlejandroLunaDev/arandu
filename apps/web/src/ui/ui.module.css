@@ -622,6 +622,11 @@
   opacity: 1;
 }
 
+/* A book under the pointer is a button (shelf-scene.ts). */
+.shelf > canvas[data-hot] {
+  cursor: pointer;
+}
+
 /* The patinha, the game's currency (patinha.tsx). */
 .patinha {
   flex: none;

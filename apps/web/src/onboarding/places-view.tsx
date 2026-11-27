@@ -1,5 +1,6 @@
 "use client";
 
+import type { CareerOption } from "@arandu/contracts";
 import { useState } from "react";
 import { safeUrl, thumb } from "@/landing/book/book-data";
 import { AranduSays, useReveal } from "@/ui/arandu-says";
@@ -22,14 +23,23 @@ const NONE = { public: "Nenhuma pública nesta lista.", private: "Nenhuma privad
 /** Places a career shows before "Ver mais": a career can be taught at dozens. */
 const SHOWN = 4;
 
-type Props = { places: Place[]; busy: boolean; failed: boolean; onChoose: (courseId: number) => void; onBack: () => void };
+type Props = {
+  places: Place[];
+  /** What Arandu says over the list: his own words when he brought it from the chat. */
+  say?: string;
+  busy: boolean;
+  failed: boolean;
+  onChoose: (courseId: number) => void;
+  onMore: (careers: CareerOption[], say: string) => void;
+  onBack: () => void;
+};
 
 // O10: the recommended careers, each one once with why it fits, on a screen of their own. The person picks a career,
 // never a place: tapping one opens it with Arandu telling about it (CourseView), and "Conversar com o Arandu" opens a
 // chat about all of them (CareersChatView); either one chooses. Under each career, the places where it is taught are
 // information only: the ones with a photo or a logo first, and a filter for public or private ones.
-export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
-  const { shown, done } = useReveal(SAY);
+export function PlacesView({ places, say = SAY, busy, failed, onChoose, onMore, onBack }: Props) {
+  const { shown, done } = useReveal(say);
   /** The career open on its own screen, by the course that stands for it; or the chat about all of them. */
   const [view, setView] = useState<number | "chat" | null>(null);
   // The chat with Arandu outlives a visit to a career: back from it, the conversation goes on.
@@ -63,6 +73,7 @@ export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
         busy={busy}
         failed={failed}
         onChoose={onChoose}
+        onMore={onMore}
         onBack={() => setView(null)}
       />
     );
@@ -73,7 +84,7 @@ export function PlacesView({ places, busy, failed, onChoose, onBack }: Props) {
         <Back onBack={onBack} />
       </div>
       <div className={styles.body}>
-        <AranduSays text={SAY} shown={shown} pose="stand" />
+        <AranduSays text={say} shown={shown} pose="stand" />
         {done && (
           <div className={`${styles.places} ${ui.after}`}>
             {kinds.has("public") && kinds.has("private") && (

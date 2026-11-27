@@ -22,6 +22,7 @@ import {
   ProgressRepository,
   type Studied,
 } from '../progress/progress.repository.js';
+import { RecommendationsService } from '../recommendations/recommendations.service.js';
 import {
   careerChatInstructions,
   choosingInstructions,
@@ -51,6 +52,7 @@ export class CareerChatService {
     private readonly careers: CareersRepository,
     private readonly memory: MemoryService,
     private readonly progress: ProgressRepository,
+    private readonly recommendations: RecommendationsService,
   ) {}
 
   /** Answers the person's message, in a new session without sessionId, remembering what Arandu knows of them. */
@@ -137,6 +139,7 @@ export class CareerChatService {
       };
 
     const said: ChatMessage = { role: 'user', content: message };
+    const memory = await this.memory.read(userId);
     const { object } = await this.ai.generateObject({
       label: 'arandu-choosing',
       // The career and the choice come first, so the model decides what it talks about before it writes.
@@ -145,11 +148,12 @@ export class CareerChatService {
           .enum(professionSlugs as [string, ...string[]])
           .nullable(),
         chosenCourseId: z.number().int().nullable(),
+        moreCareers: z.boolean(),
         reply: z.string().min(1),
       }),
       instructions: choosingInstructions(
         professions,
-        await this.memory.read(userId),
+        memory,
         choices,
         await this.progress.studied(userId),
       ),
@@ -158,6 +162,26 @@ export class CareerChatService {
     const safe = !isAbusive(object.reply);
     const reply = safe ? object.reply : SAFE_REPLY;
     await this.memory.record(id, [said, { role: 'assistant', content: reply }]);
+    // Other careers than the ones on screen, from the profile and what the person said here about them.
+    if (safe && object.moreCareers && memory.profile) {
+      const recommendations = await this.recommendations.recommend(
+        memory.profile,
+        {
+          seen: professionSlugs,
+          said: [...history, said]
+            .filter((m) => m.role === 'user')
+            .map((m) => m.content),
+        },
+      );
+      return {
+        sessionId: id,
+        reply,
+        sources: [],
+        professionSlug: null,
+        chosenCourseId: null,
+        recommendations,
+      };
+    }
     const about = professions.find((p) => p.slug === object.professionSlug);
     return {
       sessionId: id,
