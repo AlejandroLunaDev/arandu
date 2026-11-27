@@ -53,9 +53,11 @@ export async function askAboutCareers(
   message: string,
   sessionId?: string,
   choices?: CourseChoice[],
+  seenSlugs?: string[],
 ): Promise<AranduChatReply> {
-  if (!Array.isArray(professionSlugs) || !professionSlugs.every((s) => typeof s === "string" && SLUG.test(s))) throw new Error("Not career slugs");
-  return api<AranduChatReply>("/arandu/chat", { method: "POST", body: { professionSlugs, message, sessionId, choices } });
+  const slugs = (list: unknown) => Array.isArray(list) && list.every((s) => typeof s === "string" && SLUG.test(s));
+  if (!slugs(professionSlugs) || (seenSlugs !== undefined && !slugs(seenSlugs))) throw new Error("Not career slugs");
+  return api<AranduChatReply>("/arandu/chat", { method: "POST", body: { professionSlugs, message, sessionId, choices, seenSlugs } });
 }
 
 export async function getCareerPaths(slug: string): Promise<CareerPaths> {

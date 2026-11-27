@@ -58,7 +58,7 @@ export function SemesterView({ course, path, onPick, ...next }: Next & { course:
           1º semestre · {path.subjects.length} {path.subjects.length === 1 ? "livro" : "livros"}
         </p>
         <div className={p.shelf}>
-          <Shelf titles={path.subjects.map((subject) => subject.name)} onPick={next.busy ? undefined : onPick} />
+          <Shelf titles={path.subjects.map((subject) => subject.name)} onPick={(i) => !next.busy && onPick(i)} />
           <Cat mood="lie" size={92} className={p.kittyCat} />
         </div>
         {first &&

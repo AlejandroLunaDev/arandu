@@ -51,8 +51,14 @@ export function runCatch(canvas: HTMLCanvasElement): () => void {
   const blow = (i: number, burst: boolean) => {
     const a = Math.random() * Math.PI * 2;
     const out = burst ? 0.8 + Math.random() * 1.6 : 0.2 + Math.random() * 0.4;
-    pos.set([FISH.x, FISH.y, (Math.random() - 0.5) * 0.6], i * 3);
-    vel.set([Math.cos(a) * out, Math.sin(a) * out * 0.6 + 0.5, 0], i * 3);
+    // Each number on its own, no array: this runs in the draw loop.
+    const k = i * 3;
+    pos[k] = FISH.x;
+    pos[k + 1] = FISH.y;
+    pos[k + 2] = (Math.random() - 0.5) * 0.6;
+    vel[k] = Math.cos(a) * out;
+    vel[k + 1] = Math.sin(a) * out * 0.6 + 0.5;
+    vel[k + 2] = 0;
     size[i] = 0.07 + Math.random() ** 2 * 0.24;
     wobble[i] = Math.random() * Math.PI * 2;
   };
@@ -103,11 +109,18 @@ export function runCatch(canvas: HTMLCanvasElement): () => void {
   const spark = (i: number) => {
     const a = Math.random() * Math.PI * 2;
     const out = 1.5 + Math.random() * 3;
-    sparkAt.set([FISH.x, FISH.y, 0.4], i * 3);
-    sparkVel.set([Math.cos(a) * out, Math.sin(a) * out, (Math.random() - 0.5) * 2], i * 3);
+    const k = i * 3;
+    sparkAt[k] = FISH.x;
+    sparkAt[k + 1] = FISH.y;
+    sparkAt[k + 2] = 0.4;
+    sparkVel[k] = Math.cos(a) * out;
+    sparkVel[k + 1] = Math.sin(a) * out;
+    sparkVel[k + 2] = (Math.random() - 0.5) * 2;
     sparkLife[i] = 0.7 + Math.random() * 0.9;
     const c = inks[i % inks.length]!;
-    ink.set([c.r, c.g, c.b], i * 3);
+    ink[k] = c.r;
+    ink[k + 1] = c.g;
+    ink[k + 2] = c.b;
   };
   for (let i = 0; i < SPARKS; i++) spark(i);
 

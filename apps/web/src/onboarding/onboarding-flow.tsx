@@ -40,6 +40,9 @@ function Flow({ onRestart }: { onRestart: () => void }) {
   const [chosen, setChosen] = useState<PlaceCourse | null>(null);
   /** What Arandu said bringing the list from the chat, when the person asked for other careers. */
   const [say, setSay] = useState<string | undefined>();
+  /** Each list brought from the chat: its number keys the screen, and the careers of the earlier ones stay out of it. */
+  const [list, setList] = useState(0);
+  const [seen, setSeen] = useState<string[]>([]);
   const { busy, failed, attempt } = useAttempt();
 
   if (!turn)
@@ -67,12 +70,16 @@ function Flow({ onRestart }: { onRestart: () => void }) {
     return screen(
       <PlacesView
         // A new list is a new screen: Arandu's words come out again and nothing stays open.
-        key={say}
+        key={list}
         places={places}
         say={say}
+        seen={seen}
         onMore={(careers, said) => {
+          const shown = places.flatMap((p) => p.courses.map((c) => c.profession.slug));
+          setSeen((before) => [...new Set([...before, ...shown])].slice(-40));
           setPlaces(byInstitution(careers));
           setSay(said);
+          setList((n) => n + 1);
         }}
         busy={busy}
         failed={failed}

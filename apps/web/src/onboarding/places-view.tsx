@@ -31,6 +31,8 @@ type Props = {
   failed: boolean;
   onChoose: (courseId: number) => void;
   onMore: (careers: CareerOption[], say: string) => void;
+  /** The careers of the lists shown before this one. */
+  seen: string[];
   onBack: () => void;
 };
 
@@ -38,7 +40,7 @@ type Props = {
 // never a place: tapping one opens it with Arandu telling about it (CourseView), and "Conversar com o Arandu" opens a
 // chat about all of them (CareersChatView); either one chooses. Under each career, the places where it is taught are
 // information only: the ones with a photo or a logo first, and a filter for public or private ones.
-export function PlacesView({ places, say = SAY, busy, failed, onChoose, onMore, onBack }: Props) {
+export function PlacesView({ places, say = SAY, busy, failed, onChoose, onMore, seen, onBack }: Props) {
   const { shown, done } = useReveal(say);
   /** The career open on its own screen, by the course that stands for it; or the chat about all of them. */
   const [view, setView] = useState<number | "chat" | null>(null);
@@ -74,6 +76,7 @@ export function PlacesView({ places, say = SAY, busy, failed, onChoose, onMore, 
         failed={failed}
         onChoose={onChoose}
         onMore={onMore}
+        seen={seen}
         onBack={() => setView(null)}
       />
     );

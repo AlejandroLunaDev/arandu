@@ -127,6 +127,8 @@ export type AranduChatRequest =
       message: string;
       /** The courses on screen (up to 12, unique courseIds, from CareerOption.offerings), so Arandu can tell them apart by place. */
       choices?: CourseChoice[];
+      /** Every career shown in earlier lists (up to 40), so a new list never brings one of them back. */
+      seenSlugs?: string[];
     };
 
 export interface CourseChoice {

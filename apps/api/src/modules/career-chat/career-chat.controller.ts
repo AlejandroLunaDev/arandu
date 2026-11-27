@@ -37,6 +37,7 @@ const chatRequest = z.union([
           'courseIds must be unique',
         )
         .optional(),
+      seenSlugs: z.array(slug).max(40).optional(),
     })
     .strict(),
 ]);

@@ -487,6 +487,10 @@ describe('POST /arandu/chat among the recommended careers', () => {
           profession: { slug: 'arquitetura', name: 'Arquitetura' },
           offerings: [],
         },
+        {
+          profession: { slug: 'medicina', name: 'Medicina' },
+          offerings: [],
+        },
         quimica,
       ]);
     app = await createHttpApp([CareerChatModule], model, [
@@ -498,6 +502,7 @@ describe('POST /arandu/chat among the recommended careers', () => {
     const res = await post({
       ...body,
       message: 'Não gostei, me mostra outras',
+      seenSlugs: ['medicina'],
     }).expect(200);
 
     expect(res.body).toMatchObject({
@@ -508,8 +513,9 @@ describe('POST /arandu/chat among the recommended careers', () => {
         careers: [{ ...quimica, reason: 'Porque você curte química.' }],
       },
     });
-    // The careers seen are not offered again, and the person's words reach the pick.
+    // The careers seen, on screen or in an earlier list, are not offered again, and the person's words reach the pick.
     expect(model.lastCall?.instructions).not.toMatch(/^arquitetura:/m);
+    expect(model.lastCall?.instructions).not.toMatch(/^medicina:/m);
     expect(model.lastCall?.instructions).toContain(
       'Não gostei, me mostra outras',
     );

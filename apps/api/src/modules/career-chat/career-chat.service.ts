@@ -111,6 +111,7 @@ export class CareerChatService {
       sessionId,
       message,
       choices = [],
+      seenSlugs = [],
     }: Extract<AranduChatRequest, { professionSlugs: string[] }>,
   ): Promise<AranduChatReply> {
     // Every career is checked before a session is opened, so a wrong slug stores nothing.
@@ -167,7 +168,8 @@ export class CareerChatService {
       const recommendations = await this.recommendations.recommend(
         memory.profile,
         {
-          seen: professionSlugs,
+          // Earlier lists too: the chat session starts over with each list.
+          seen: [...new Set([...seenSlugs, ...professionSlugs])],
           said: [...history, said]
             .filter((m) => m.role === 'user')
             .map((m) => m.content),

@@ -29,6 +29,7 @@ export function CareersChatView({
   failed,
   onChoose,
   onMore,
+  seen,
   onBack,
 }: {
   courses: { place: Place; course: PlaceCourse }[];
@@ -39,6 +40,8 @@ export function CareersChatView({
   onChoose: (courseId: number) => void;
   /** The person asked for other careers: the new list, and what Arandu said bringing it. */
   onMore: (careers: CareerOption[], say: string) => void;
+  /** The careers of the lists shown before this one, never brought back. */
+  seen: string[];
   onBack: () => void;
 }) {
   const { shown } = useReveal(SAY);
@@ -48,7 +51,7 @@ export function CareersChatView({
   const ask = (message: string) =>
     talk.attempt(async () => {
       const choices = courses.slice(0, 12).map(({ place, course }) => toChoice(place, course));
-      const { sessionId, reply, professionSlug, chosenCourseId, recommendations } = await askAboutCareers(slugs, message, chat?.sessionId, choices);
+      const { sessionId, reply, professionSlug, chosenCourseId, recommendations } = await askAboutCareers(slugs, message, chat?.sessionId, choices, seen);
       if (recommendations?.careers.length) return onMore(recommendations.careers, reply);
       onChat({ sessionId, reply, slug: professionSlug, chosen: chosenCourseId });
     });
