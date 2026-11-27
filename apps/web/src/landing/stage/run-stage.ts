@@ -81,6 +81,8 @@ const ZOOM_LEAST = 1.2;
 /** How close the Quarto's camera may come (a pinch, the wheel), and how fast the wheel brings it. */
 const FREE_ZOOM = 3.5;
 const WHEEL = 0.0015;
+/** How close the Quarto's open book may come, the same way. */
+const BOOK_ZOOM = 3;
 /** The room's scale (px a metre) the steam's wisps are sized for (stage.module.css). */
 const STEAM_K = 190;
 /** The width (px) the hero's title card is laid out at (hero.module.css): the TV scales it to its screen. */
@@ -170,6 +172,7 @@ export function runStage(host: HTMLElement): () => void {
     stops.forEach((stop) => stop());
     renderer.dispose();
     canvas.remove();
+    delete host.dataset.ready;
   };
 
   const draco = new DRACOLoader().setDecoderPath("/draco/");
@@ -181,6 +184,8 @@ export function runStage(host: HTMLElement): () => void {
       draco.dispose();
       if (cancelled) return;
       stops.push(start(renderer, catGltf, propsGltf, league));
+      // The page can stop showing its loading: the room draws from the next frame on.
+      host.dataset.ready = "";
     })
     .catch((error: unknown) => {
       draco.dispose();
@@ -453,7 +458,44 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
     const [a, b] = [...fingers.values()];
     return a && b ? { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
   };
+  // The Quarto's open book closes in on its own, the same ways: its scale and how far its middle is off the screen's
+  // (px). The 3D book (openBook's apply) and its pages (book-pages.module.css: --book-*) follow it together.
+  const near = { z: 1, x: 0, y: 0 };
+  let nearPinch: { d: number; z: number; px: number; py: number } | null = null;
+  let nearHeight = 0;
+  let applyBook: (() => void) | null = null;
+  const bookOpen = () => !!free && !!book && book.progress() === 1 && !book.reversed();
+  const showNear = () => {
+    const s = document.documentElement.style;
+    s.setProperty("--book-z", String(near.z));
+    s.setProperty("--book-x", `${near.x}px`);
+    s.setProperty("--book-y", `${near.y}px`);
+    applyBook?.();
+  };
+  // Keeps the book's point (px, py), off its middle at scale 1, under the screen point (sx, sy) at scale z; its edges
+  // never come inside the screen's middle.
+  const nearBook = (z: number, sx: number, sy: number, px: number, py: number) => {
+    near.z = clamp(z, 1, BOOK_ZOOM);
+    const w = (near.z - 1) * nearHeight * 0.7;
+    const h = (near.z - 1) * nearHeight * 0.5;
+    near.x = clamp(sx - W / 2 - near.z * px, -w, w);
+    near.y = clamp(sy - H / 2 - near.z * py, -h, h);
+    showNear();
+  };
+  const onBookTouch = (e: TouchEvent) => {
+    // Two fingers on the open book are its pinch, never the page's own scroll or zoom.
+    if (nearPinch) e.preventDefault();
+  };
+  addEventListener("touchmove", onBookTouch, { passive: false });
   const onWheel = (e: WheelEvent) => {
+    if (bookOpen()) {
+      // Over the pages the wheel scrolls them; around the book it brings the book closer.
+      if (e.target instanceof Element && e.target.closest("[data-pages]")) return;
+      e.preventDefault();
+      const px = (e.clientX - W / 2 - near.x) / near.z;
+      const py = (e.clientY - H / 2 - near.y) / near.z;
+      return nearBook(near.z * Math.exp(-e.deltaY * WHEEL), e.clientX, e.clientY, px, py);
+    }
     if (!free || zoomed || book || !(e.target instanceof Node && free.scene.contains(e.target))) return;
     e.preventDefault();
     view(camera.zoom * Math.exp(-e.deltaY * WHEEL), e.clientX, e.clientY, worldX(e.clientX), worldY(e.clientY));
@@ -473,6 +515,13 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
         pinch = { d: two.d, zoom: camera.zoom, wx: worldX(two.x), wy: worldY(two.y) };
         return;
       }
+    }
+    // A finger on the open book, or a second one anywhere: the book's pinch, not a tap that shuts it.
+    if (e.pointerType === "touch" && bookOpen() && (fingers.size > 0 || target?.closest("[data-pages]"))) {
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const two = fingers.size === 2 ? twoFingers() : null;
+      if (two) nearPinch = { d: two.d, z: near.z, px: (two.x - W / 2 - near.x) / near.z, py: (two.y - H / 2 - near.y) / near.z };
+      return;
     }
     if (book) {
       if (!target?.closest("[data-pages]")) shutBook();
@@ -658,8 +707,17 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
       open.scale.setScalar(s0 + (s1 - s0) * s.fly);
       // Tipped back, it would look shorter: stretched as much, its pages stay the size of their print.
       open.scale.y /= Math.cos(TIP * s.open);
+      // Its own zoom (near), about its middle: its origin, the foot, goes down as the book grows up from it.
+      open.scale.multiplyScalar(near.z);
+      open.position.x += near.x / camera.zoom;
+      open.position.y -= (near.y + ((near.z - 1) * height) / 2) / camera.zoom;
       openTo(open, SHUT + (LEAN - SHUT) * s.open);
     };
+    gsap.killTweensOf(near);
+    Object.assign(near, { z: 1, x: 0, y: 0 });
+    nearHeight = height;
+    applyBook = apply;
+    showNear();
     prop.visible = false;
     scene.add(open);
     shown = open;
@@ -699,6 +757,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
           prop.visible = true;
           worlds[i]!.restore(prop);
           book = null;
+          applyBook = null;
           unpaper();
           delete document.documentElement.dataset.book;
           if (tvOff) tvPower(true);
@@ -722,6 +781,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
     document.documentElement.dataset.book = "";
     leafTurn?.kill();
     restDress();
+    // A book brought close goes back to its size as it shuts.
+    gsap.to(near, { z: 1, x: 0, y: 0, duration: 0.3 * (reduce ? 0.01 : 1), ease: "power2.out", onUpdate: showNear });
     // Shut before it has moved, a reversed timeline never completes: put it back at once.
     if (book.progress() > 0) return void book.reverse();
     const shut = book.eventCallback("onReverseComplete");
@@ -808,7 +869,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
     // Let go outside the window: no pointerup came, but no button is down any more.
     if (holding && e.pointerType === "mouse" && e.buttons === 0) return onUp(e);
     if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const two = pinch && twoFingers();
+    const two = (pinch || nearPinch) && twoFingers();
+    if (nearPinch && two) return nearBook((nearPinch.z * two.d) / nearPinch.d, two.x, two.y, nearPinch.px, nearPinch.py);
     if (pinch && two) return view((pinch.zoom * two.d) / pinch.d, two.x, two.y, pinch.wx, pinch.wy);
     if (pan) {
       if (e.pointerType === "mouse" && e.buttons === 0) pan = null;
@@ -819,7 +881,7 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
   };
   const onUp = (e: PointerEvent) => {
     fingers.delete(e.pointerId);
-    if (fingers.size < 2) pinch = null;
+    if (fingers.size < 2) pinch = nearPinch = null;
     pan = null;
     if (plaquePressed) {
       plaquePressed = false;
@@ -1430,6 +1492,8 @@ function start(renderer: THREE.WebGLRenderer, catGltf: Gltf, propsGltf: Gltf, le
     document.body.style.cursor = "";
     removeEventListener("pointerdown", onDown);
     removeEventListener("wheel", onWheel);
+    removeEventListener("touchmove", onBookTouch);
+    gsap.killTweensOf(near);
     book?.kill();
     clearTimeout(taps?.timer);
     clearInterval(rotation);

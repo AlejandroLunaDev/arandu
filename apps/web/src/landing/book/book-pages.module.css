@@ -9,8 +9,9 @@
   left: 50%;
   width: 630px;
   height: 450px;
-  translate: -50% -50%;
-  scale: var(--k, 1);
+  /* The Quarto's open book closes in by a pinch or the wheel (run-stage: --book-*), with its 3D book. */
+  translate: calc(-50% + var(--book-x, 0px)) calc(-50% + var(--book-y, 0px));
+  scale: calc(var(--k, 1) * var(--book-z, 1));
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   /* The pages' row takes the whole height: the proofs' holder (book-pages.tsx) falls into a second, empty
