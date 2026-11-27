@@ -50,7 +50,8 @@ cards say. An app builds many exercises from them, for different people, so each
 person is a curious beginner trying the subject: let them practise what the topic asks them to do, not only its words.
 The lesson is one part of the topic: keep to it, and leave what the other lessons teach to them. When the careers
 that study the subject are given, set the cases, examples and problems in their work (a patient, a client, a
-project...), with only what the cards support.`;
+project...), with only what the cards support. What a piece asks or states speaks of the subject itself, never of
+"the card", "the text" or "the lesson"; only a "why" may point back to the cards.`;
 
 const PIECES_END = `Within one piece, no two options, items, steps, words or ideas have the same text: a piece that repeats one is
 discarded.
@@ -68,7 +69,8 @@ ${PIECES}
   words) changed so it becomes false, every other word the same; "why" says what makes the wrong one false.
 - classification (0 or 1): two categories of the topic as baskets, and 4 to 8 short examples, each with its basket
   (0 or 1), both baskets used.
-- sequence (0 or 1): 3 to 6 steps of a process in the topic, in the right order.
+- sequence (0 or 1): 3 to 6 steps of a process the cards state, in the order the cards give them; never a step
+  they do not state. None when the cards state no such process.
 - sentence (0 or 1): a key idea as 3 to 12 words in order, one word per item, and up to 3 distractor words that are
   not in it.
 - question: one open question the person answers in their own words, and 2 to 4 short ideas a good answer mentions.
