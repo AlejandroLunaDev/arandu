@@ -16,6 +16,7 @@ export const CHAPTER_PEIXINHOS = 10;
 
 import {
   asPerson,
+  DEMO_CHAPTERS,
   madeChapters,
   studyRows,
   openWallet,
@@ -77,7 +78,7 @@ export class PathsRepository {
       where p.slug = ${slug} and cardinality(d.topics) > 0
       order by institution, c.city, c.id, d.name`;
 
-    // A subject lists only its leading chapters that are already made, so opening one never waits on a live generation;
+    // A subject lists only its leading chapters that are already made, up to DEMO_CHAPTERS (as madeChapters), so opening one never waits on a live generation;
     // a subject with none, and a path with no such subject, are left out.
     const ids = [...new Set(rows.map((r) => r.discipline_id))];
     const made = new Set(
@@ -93,7 +94,10 @@ export class PathsRepository {
       const gap = row.topics.findIndex(
         (text, t) => !made.has(`${row.discipline_id}:${t}:${text}`),
       );
-      return gap < 0 ? row.topics : row.topics.slice(0, gap);
+      return row.topics.slice(
+        0,
+        Math.min(gap < 0 ? row.topics.length : gap, DEMO_CHAPTERS),
+      );
     };
 
     const paths = new Map<number, CareerPath>();

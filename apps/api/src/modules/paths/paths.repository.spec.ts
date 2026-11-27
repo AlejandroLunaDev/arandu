@@ -68,12 +68,12 @@ describe('PathsRepository.careerPaths (ready chapters only)', () => {
     expect(await subjects(r)).toEqual([]);
   });
 
-  it('keeps every topic when all are stored', async () => {
+  it('keeps every topic when all are stored, up to DEMO_CHAPTERS', async () => {
     const r = repo(
-      [row(1, 10, topics)],
-      topics.map((text, t) => chapter(10, t, text)),
+      [row(1, 10, topics), row(1, 11, ['a'])],
+      [...topics.map((text, t) => chapter(10, t, text)), chapter(11, 0, 'a')],
     );
-    expect(await subjects(r)).toEqual([[topics]]);
+    expect(await subjects(r)).toEqual([[['t0', 't1'], ['a']]]);
   });
 });
 
