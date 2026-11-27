@@ -292,7 +292,7 @@ describe('ChaptersService', () => {
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
-        2,
+        5,
         true,
       );
       expect(promptOf(steps.cards)).toContain(
@@ -646,7 +646,7 @@ describe('ChaptersService', () => {
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo T0 T1 T2 T3 T4 T5',
-        2,
+        5,
         true,
       );
       expect(subjectCall().prompt).toContain(

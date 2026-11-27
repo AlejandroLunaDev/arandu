@@ -51,9 +51,12 @@ import { quoteIn, refusedPage } from './source-check.js';
 
 /** Topics whose cards one search writes: the search is paid once for them, not once per chapter. */
 export const TOPICS_PER_SEARCH = 6;
-/** Pages a search downloads (a Firecrawl credit each): academic ones, then Wikipedia's, for a block or a lone topic. */
-const BLOCK_PAGES = { academic: 5, wikipedia: 2 };
-const TOPIC_PAGES = { academic: 5, wikipedia: 2 };
+/**
+ * Pages a search downloads (a Firecrawl credit each): academic ones, then Wikipedia's, for a block or a lone topic.
+ * Wikipedia's 5, not 2 (#157): its clean text gives quotes that check, and with 2, 5 of 35 chapters had too few cards.
+ */
+const BLOCK_PAGES = { academic: 5, wikipedia: 5 };
+const TOPIC_PAGES = { academic: 5, wikipedia: 5 };
 /** A chapter rests on MIN_CARDS verified cards at least, MAX_CARDS at most: one card's text gives too few concepts. */
 const MIN_CARDS = 3;
 const MAX_CARDS = 5;
