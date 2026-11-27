@@ -1,6 +1,6 @@
 import type { Lesson, LessonExercise } from '@arandu/contracts';
 import type { Mock } from 'vitest';
-import { AiModelError, AiOutputError, type AiService } from '@nestjs/ai';
+import { AiOutputError, type AiService } from '@nestjs/ai';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../core/config/env.js';
@@ -32,11 +32,31 @@ const sourceOf = (page: Page, quote: string) => ({
   quote,
 });
 
-const cardsReply = () => ({
-  cards: [
-    { title: 't1', text: 'x', page: 1, quote: 'q1' },
-    { title: 't2', text: 'x', page: 2, quote: 'w1' },
-    { title: 't3', text: 'x', page: 1, quote: 'q-a' },
+/** A card on the academic page, its quote q-<name>. */
+const card = (name: string) => ({
+  title: name,
+  text: 'x',
+  page: 1,
+  quote: `q-${name}`,
+});
+
+const lessonsReply = () => ({
+  lessons: [
+    {
+      title: 'L1',
+      search: 'S1',
+      cards: [
+        { title: 't1', text: 'x', page: 1, quote: 'q1' },
+        { title: 't2', text: 'x', page: 2, quote: 'w1' },
+        { title: 't3', text: 'x', page: 1, quote: 'q-a' },
+      ],
+    },
+    { title: 'L2', search: 'S2', cards: [card('b'), card('c'), card('good')] },
+    {
+      title: 'L3',
+      search: 'S3',
+      cards: [card('other'), card('zero'), card('seven')],
+    },
   ],
 });
 
@@ -105,13 +125,18 @@ describe('ChaptersService', () => {
   >;
   type Fn = Mock<(...args: never[]) => unknown>;
   // One mock per model call; `ai.generateObject` routes to it by the call's label.
-  let steps: { subject: Step; cards: Step; practice: Step; pieces: Step };
+  let steps: {
+    search: Step;
+    lessons: Step;
+    lessonCards: Step;
+    practice: Step;
+    pieces: Step;
+  };
   let ai: { generateObject: Step };
   let paths: Record<
     | 'discipline'
     | 'madeCount'
-    | 'chapterCards'
-    | 'saveChapterCards'
+    | 'careersOf'
     | 'chapterContent'
     | 'saveChapterContent'
     | 'subjectPieces'
@@ -139,28 +164,29 @@ describe('ChaptersService', () => {
         wikipedia ? [wiki] : [academic],
       );
     steps = {
-      // By default the block search verifies nothing, so a chapter falls back to its own search.
-      subject: vi.fn().mockResolvedValue(reply({ cards: [] })),
-      cards: vi.fn().mockResolvedValue(reply(cardsReply())),
+      search: vi.fn().mockResolvedValue(reply({ search: 'Calculus limits' })),
+      lessons: vi.fn().mockResolvedValue(reply(lessonsReply())),
+      lessonCards: vi.fn().mockResolvedValue(reply({ cards: [] })),
       practice: vi.fn().mockResolvedValue(reply({ problems: [], code: [] })),
       pieces: vi.fn().mockResolvedValue(reply(piecesReply())),
     };
     ai = {
       generateObject: vi.fn((o) =>
-        o.label === 'arandu-subject-cards'
-          ? steps.subject(o)
-          : o.label === 'arandu-chapter-cards'
-            ? steps.cards(o)
-            : o.label === 'arandu-chapter-practice'
-              ? steps.practice(o)
-              : steps.pieces(o),
+        o.label === 'arandu-chapter-search'
+          ? steps.search(o)
+          : o.label === 'arandu-chapter-lessons'
+            ? steps.lessons(o)
+            : o.label === 'arandu-lesson-cards'
+              ? steps.lessonCards(o)
+              : o.label === 'arandu-chapter-practice'
+                ? steps.practice(o)
+                : steps.pieces(o),
       ),
     };
     paths = {
       discipline: vi.fn().mockResolvedValue(discipline),
       madeCount: vi.fn().mockResolvedValue(2),
-      chapterCards: vi.fn().mockResolvedValue(new Map()),
-      saveChapterCards: vi.fn().mockResolvedValue(undefined),
+      careersOf: vi.fn().mockResolvedValue(['Engenharia civil']),
       chapterContent: vi.fn().mockResolvedValue(null),
       saveChapterContent: vi.fn().mockResolvedValue(undefined),
       subjectPieces: vi.fn().mockResolvedValue([]),
@@ -215,6 +241,7 @@ describe('ChaptersService', () => {
 
       await expect(service.chapter(7, 1)).resolves.toEqual({
         ...stored,
+        lessonTitles: [],
         exercises: composeChapter({ topic: 1, pieces }, '7:1', [earlier]),
       });
       expect(paths.chapterContent).toHaveBeenCalledWith(7, 1, 'Derivadas');
@@ -249,40 +276,12 @@ describe('ChaptersService', () => {
     expect(ai.generateObject).not.toHaveBeenCalled();
   });
 
-  it('make with remake writes the pieces again over a stored chapter', async () => {
-    paths.chapterContent.mockResolvedValue({ cards: [], exercises: [] });
-
-    const chapter = await service.make(7, 0, true);
-
-    expect(steps.pieces).toHaveBeenCalledTimes(1);
-    expect(paths.saveChapterContent).toHaveBeenCalledWith(chapter);
-  });
-
-  it("a remake keeps the chapter's cards and adds a search's, saving them for the topic", async () => {
-    const own = {
-      title: 'own',
-      text: 'x',
-      source: { label: 'l', url: 'https://b.org/1', quote: 'o' },
-    };
-    paths.chapterContent.mockResolvedValue({ cards: [own], exercises: [] });
-
-    const chapter = await service.make(7, 0, true);
-
-    expect(chapter.cards.map((c) => c.title)).toEqual([
-      'own',
-      't1',
-      't2',
-      't3',
-    ]);
-    expect(paths.saveChapterCards).toHaveBeenLastCalledWith(7, [
-      { topic: 0, topicText: 'Limites', cards: chapter.cards },
-    ]);
-  });
-
-  describe('sources', () => {
-    it("searches the topic's academic pages, then Wikipedia's, and cites the page each quote is on", async () => {
+  describe('lessons', () => {
+    it("searches the topic in 5 academic pages and 5 of each Wikipedia's (in English for the English one), and stores its three lessons with their verified cards", async () => {
       const chapter = await service.make(7, 0);
 
+      expect(searchPages).toHaveBeenCalledTimes(3);
+      expect(promptOf(steps.search)).toBe('Cálculo Limites');
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
@@ -292,120 +291,199 @@ describe('ChaptersService', () => {
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
-        2,
-        true,
+        5,
+        'pt',
       );
-      expect(promptOf(steps.cards)).toContain(
-        `[Page 1] Página acadêmica (https://a.org/1)\n${academic.markdown}`,
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Calculus limits',
+        5,
+        'en',
       );
-      expect(promptOf(steps.cards)).toContain(
+      expect(promptOf(steps.lessons)).toContain(
+        `Subject: Cálculo\nTopic 1 of 2: Limites\n\nPages:\n[Page 1] Página acadêmica (https://a.org/1)\n${academic.markdown}`,
+      );
+      expect(promptOf(steps.lessons)).toContain(
         '[Page 2, Wikipedia] Limite – Wikipédia (https://pt.wikipedia.org/wiki/Limite)',
       );
-      expect(chapter.cards).toEqual([
+      expect(chapter.lessons?.map((l) => l.title)).toEqual(['L1', 'L2', 'L3']);
+      expect(chapter.lessons?.[0]?.cards).toEqual([
         { title: 't1', text: 'x', source: sourceOf(academic, 'q1') },
         { title: 't2', text: 'x', source: sourceOf(wiki, 'w1') },
         { title: 't3', text: 'x', source: sourceOf(academic, 'q-a') },
       ]);
+      expect(chapter.cards.map((c) => c.title)).toEqual(
+        lessonsReply().lessons.flatMap((l) => l.cards.map((c) => c.title)),
+      );
+      expect(steps.lessonCards).not.toHaveBeenCalled();
+      expect(saved()).toBe(chapter);
     });
 
-    it('drops a card whose quote is not on its page, names a page not given, or is too long', async () => {
-      steps.cards.mockResolvedValue(
+    it('drops a card whose quote is not on its page, names a page not given or is too long, and keeps a card in one lesson', async () => {
+      const r = lessonsReply();
+      r.lessons[0]!.cards.push(
+        { title: 'elsewhere', text: 'x', page: 2, quote: 'q1' },
+        { title: 'invented', text: 'x', page: 1, quote: 'não está' },
+        { title: 'no page', text: 'x', page: 3, quote: 'q1' },
+        { title: 'long', text: 'x', page: 1, quote: LONG },
+      );
+      // L2's first card repeats one of L1's.
+      r.lessons[1]!.cards.unshift({
+        title: 'again',
+        text: 'x',
+        page: 1,
+        quote: 'q1',
+      });
+      steps.lessons.mockResolvedValue(reply(r));
+
+      const chapter = await service.make(7, 0);
+
+      expect(chapter.lessons?.map((l) => l.cards.map((c) => c.title))).toEqual([
+        ['t1', 't2', 't3'],
+        ['b', 'c', 'good'],
+        ['other', 'zero', 'seven'],
+      ]);
+    });
+
+    it('a lesson left short gets more cards from the same pages first, without a search', async () => {
+      const r = lessonsReply();
+      r.lessons[2]!.cards = r.lessons[2]!.cards.slice(0, 1);
+      steps.lessons.mockResolvedValue(reply(r));
+      steps.lessonCards.mockResolvedValue(
         reply({
           cards: [
-            { title: 'ok', text: 'x', page: 1, quote: 'O limite descreve q1.' },
-            { title: 'elsewhere', text: 'x', page: 2, quote: 'q1' },
-            { title: 'invented', text: 'x', page: 1, quote: 'não está' },
-            { title: 'no page', text: 'x', page: 3, quote: 'q1' },
-            { title: 'long', text: 'x', page: 1, quote: LONG },
-            { title: 'b', text: 'x', page: 1, quote: 'q-b' },
-            { title: 'c', text: 'x', page: 1, quote: 'q-c' },
+            card('c1'),
+            { title: 'dup', text: 'x', page: 1, quote: 'q1' },
+            card('c2'),
           ],
         }),
       );
 
       const chapter = await service.make(7, 0);
 
-      expect(chapter.cards.map((c) => c.title)).toEqual(['ok', 'b', 'c']);
+      expect(searchPages).toHaveBeenCalledTimes(3);
+      expect(promptOf(steps.lessonCards)).toContain(
+        'Subject: Cálculo\nTopic 1 of 2: Limites\nLesson 3 of 3: L3\nOther lessons: L1; L2\nCards it has: other\n\nPages:\n[Page 1]',
+      );
+      // q1 is L1's: not used twice.
+      expect(chapter.lessons?.[2]?.cards.map((c) => c.title)).toEqual([
+        'other',
+        'c1',
+        'c2',
+      ]);
     });
 
-    it('lists a page both searches found once', async () => {
-      vi.mocked(searchPages).mockResolvedValue([academic]);
-      steps.cards.mockResolvedValue(
-        reply({
-          cards: ['q1', 'q-a', 'q-b'].map((quote) => ({
-            title: quote,
-            text: 'x',
-            page: 1,
-            quote,
-          })),
-        }),
+    it("then searches the English Wikipedia with the lesson's English query, and keeps what both gave, quoting the English page", async () => {
+      const english: Page = {
+        url: 'https://en.wikipedia.org/wiki/Limit',
+        title: 'Limit - Wikipedia',
+        markdown: 'In mathematics, e1.',
+      };
+      const r = lessonsReply();
+      r.lessons[2]!.cards = r.lessons[2]!.cards.slice(0, 1);
+      steps.lessons.mockResolvedValue(reply(r));
+      steps.lessonCards
+        .mockResolvedValueOnce(reply({ cards: [card('c1')] }))
+        .mockResolvedValueOnce(
+          reply({ cards: [{ title: 'en', text: 'x', page: 1, quote: 'e1' }] }),
+        );
+      vi.mocked(searchPages).mockImplementation(
+        async (_key, query, _limit, wikipedia) =>
+          query === 'S3' ? [english] : wikipedia ? [wiki] : [academic],
       );
+
+      const chapter = await service.make(7, 0);
+
+      expect(searchPages).toHaveBeenCalledTimes(4);
+      expect(searchPages).toHaveBeenLastCalledWith('fc-key', 'S3', 5, 'en');
+      expect(steps.lessonCards.mock.lastCall![0].prompt).toContain(
+        '[Page 1, Wikipedia] Limit - Wikipedia (https://en.wikipedia.org/wiki/Limit)',
+      );
+      expect(chapter.lessons?.[2]?.cards).toEqual([
+        expect.objectContaining({ title: 'other' }),
+        expect.objectContaining({ title: 'c1' }),
+        { title: 'en', text: 'x', source: sourceOf(english, 'e1') },
+      ]);
+    });
+
+    it('searches in Portuguese when the English search cannot be written', async () => {
+      steps.search.mockRejectedValue(outputError());
 
       await service.make(7, 0);
 
-      expect(promptOf(steps.cards)).not.toContain('[Page 2');
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo Limites',
+        5,
+        'en',
+      );
     });
 
-    it('retries the cards once when no card verifies, then succeeds', async () => {
-      steps.cards
-        .mockResolvedValueOnce(
-          reply({ cards: [{ title: 'x', text: 'x', page: 1, quote: 'não' }] }),
-        )
-        .mockResolvedValueOnce(reply(cardsReply()));
+    it('keeps a lesson with 2 cards after every try', async () => {
+      const r = lessonsReply();
+      r.lessons[1]!.cards = r.lessons[1]!.cards.slice(0, 2);
+      steps.lessons.mockResolvedValue(reply(r));
+      steps.lessonCards.mockResolvedValue(reply({ cards: [] }));
 
       const chapter = await service.make(7, 0);
 
-      expect(steps.cards).toHaveBeenCalledTimes(2);
-      expect(chapter.cards).toHaveLength(3);
+      expect(steps.lessonCards).toHaveBeenCalledTimes(2);
+      expect(chapter.lessons?.[1]?.cards).toHaveLength(2);
     });
 
-    it("keeps the cards a first attempt verified and adds the retry's, each quote once", async () => {
-      steps.cards
-        .mockResolvedValueOnce(
-          reply({ cards: [{ title: 't1', text: 'x', page: 1, quote: 'q1' }] }),
-        )
-        .mockResolvedValueOnce(reply(cardsReply()));
-
-      const chapter = await service.make(7, 0);
-
-      expect(chapter.cards.map((c) => c.title)).toEqual(['t1', 't2', 't3']);
-    });
-
-    it('503s when fewer than three cards verify after the retry, and writes no pieces', async () => {
-      steps.cards.mockResolvedValue(
-        reply({ cards: cardsReply().cards.slice(0, 2) }),
-      );
+    it('503s when a lesson stays under 2 cards, and writes no pieces', async () => {
+      const r = lessonsReply();
+      r.lessons[1]!.cards = r.lessons[1]!.cards.slice(0, 1);
+      steps.lessons.mockResolvedValue(reply(r));
+      steps.lessonCards.mockResolvedValue(reply({ cards: [] }));
 
       await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-      expect(steps.cards).toHaveBeenCalledTimes(2);
-      expect(steps.pieces).not.toHaveBeenCalled();
-    });
-
-    it('retries the cards after an AiOutputError, then succeeds', async () => {
-      steps.cards
-        .mockRejectedValueOnce(outputError())
-        .mockResolvedValueOnce(reply(cardsReply()));
-
-      await expect(service.make(7, 0)).resolves.toBeDefined();
-      expect(steps.cards).toHaveBeenCalledTimes(2);
-    });
-
-    it('503s when no card ever verifies, and writes no pieces', async () => {
-      steps.cards.mockResolvedValue(
-        reply({ cards: [{ title: 'x', text: 'x', page: 1, quote: 'não' }] }),
-      );
-
-      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-      expect(steps.cards).toHaveBeenCalledTimes(2);
       expect(steps.pieces).not.toHaveBeenCalled();
       expect(paths.saveChapterContent).not.toHaveBeenCalled();
     });
 
-    it('503s when the searches find no page, without calling the model', async () => {
+    it('retries the lessons once after an AiOutputError or fewer than 3 lessons, then succeeds', async () => {
+      steps.lessons
+        .mockRejectedValueOnce(outputError())
+        .mockResolvedValueOnce(reply(lessonsReply()));
+      await expect(service.make(7, 0)).resolves.toBeDefined();
+
+      steps.lessons
+        .mockReset()
+        .mockResolvedValueOnce(
+          reply({ lessons: lessonsReply().lessons.slice(0, 2) }),
+        )
+        .mockResolvedValueOnce(reply(lessonsReply()));
+      await expect(service.make(7, 1)).resolves.toBeDefined();
+      expect(steps.lessons).toHaveBeenCalledTimes(2);
+    });
+
+    it('503s when the lessons never come, and writes nothing', async () => {
+      steps.lessons.mockRejectedValue(outputError());
+
+      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
+      expect(steps.lessons).toHaveBeenCalledTimes(2);
+      expect(steps.pieces).not.toHaveBeenCalled();
+      expect(paths.saveChapterContent).not.toHaveBeenCalled();
+    });
+
+    it('503s when the searches find no page, without writing lessons', async () => {
       vi.mocked(searchPages).mockResolvedValue([]);
 
       await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-      expect(ai.generateObject).not.toHaveBeenCalled();
+      expect(steps.lessons).not.toHaveBeenCalled();
+    });
+
+    it('lists a page both searches found once', async () => {
+      vi.mocked(searchPages).mockResolvedValue([academic]);
+      const r = lessonsReply();
+      for (const l of r.lessons) for (const c of l.cards) c.page = 1;
+      r.lessons[0]!.cards[1]!.quote = 'q-c1';
+      steps.lessons.mockResolvedValue(reply(r));
+
+      await service.make(7, 0);
+
+      expect(promptOf(steps.lessons)).not.toContain('[Page 2');
     });
 
     it('fails without searching when FIRECRAWL_API_KEY is not set', async () => {
@@ -418,13 +496,21 @@ describe('ChaptersService', () => {
   });
 
   describe('pieces', () => {
-    it('writes them from the verified cards and stores them with the composed exercises', async () => {
+    it("writes each lesson's from its own cards, with the other lessons and the careers, tagged with the lesson", async () => {
       await service.make(7, 0);
 
+      expect(steps.pieces).toHaveBeenCalledTimes(3);
       expect(promptOf(steps.pieces)).toBe(
-        'Subject: Cálculo\nTopic 1 of 2: Limites\n\nCards:\n[{"title":"t1","text":"x"},{"title":"t2","text":"x"},{"title":"t3","text":"x"}]',
+        'Subject: Cálculo\nTopic 1 of 2: Limites\nLesson 1 of 3: L1\nOther lessons: L2; L3\nCareers that study this subject: Engenharia civil\n\nCards:\n[{"title":"t1","text":"x"},{"title":"t2","text":"x"},{"title":"t3","text":"x"}]',
       );
-      const pieces = piecesOf(piecesReply());
+      expect(steps.pieces.mock.calls[2]![0].prompt).toContain(
+        'Lesson 3 of 3: L3\nOther lessons: L1; L2\n',
+      );
+      expect(paths.careersOf).toHaveBeenCalledWith(7);
+      const one = piecesOf(piecesReply());
+      const pieces = [1, 2, 3].flatMap((lesson) =>
+        one.map((p) => ({ ...p, lesson })),
+      );
       expect(saved()).toMatchObject({
         discipline: { id: 7, name: 'Cálculo' },
         topic: { index: 0, text: 'Limites', total: 2 },
@@ -434,20 +520,28 @@ describe('ChaptersService', () => {
       expect(saved().exercises.at(-1)?.kind).toBe('explique_para_o_arandu');
     });
 
-    it('retries once when there are not enough consistent pieces, then succeeds', async () => {
+    it('names no careers when no grid plays the subject', async () => {
+      paths.careersOf.mockResolvedValue([]);
+
+      await service.make(7, 0);
+
+      expect(promptOf(steps.pieces)).not.toContain('Careers');
+    });
+
+    it('retries a lesson once when its pieces are not enough, then succeeds', async () => {
       steps.pieces
         .mockResolvedValueOnce(
           reply({ ...piecesReply(), cases: [], sequence: [] }),
         )
-        .mockResolvedValueOnce(reply(piecesReply()));
+        .mockResolvedValue(reply(piecesReply()));
 
       await service.make(7, 0);
 
-      expect(steps.pieces).toHaveBeenCalledTimes(2);
+      expect(steps.pieces).toHaveBeenCalledTimes(4);
       expect(paths.saveChapterContent).toHaveBeenCalledTimes(1);
     });
 
-    it('503s when the pieces are never enough, and saves nothing', async () => {
+    it('503s when a lesson never has enough pieces, and saves nothing', async () => {
       steps.pieces.mockResolvedValue(
         reply({ ...piecesReply(), cases: [], sequence: [] }),
       );
@@ -464,8 +558,8 @@ describe('ChaptersService', () => {
       expect(steps.pieces).toHaveBeenCalledTimes(2);
     });
 
-    it('adds the problems the practice call wrote, from the same cards', async () => {
-      steps.practice.mockResolvedValue(
+    it('adds the problems the practice call wrote, from the same lesson', async () => {
+      steps.practice.mockResolvedValueOnce(
         reply({
           problems: [
             {
@@ -495,17 +589,54 @@ describe('ChaptersService', () => {
       await service.make(7, 0);
 
       expect(promptOf(steps.practice)).toBe(promptOf(steps.pieces));
-      expect(saved().pieces?.map((p) => p.type)).toContain('problema');
-      expect(saved().exercises.map((e) => e.kind)).toContain('resolva');
+      expect(
+        saved()
+          .pieces?.filter((p) => p.type === 'problema')
+          .map((p) => p.lesson),
+      ).toEqual([1]);
     });
 
-    it('a practice answer that missed its schema leaves the chapter without problems or code', async () => {
+    it('a practice answer that missed its schema leaves the lesson without problems or code', async () => {
       steps.practice.mockRejectedValue(outputError());
 
       await service.make(7, 0);
 
-      expect(steps.practice).toHaveBeenCalledTimes(1);
+      expect(steps.practice).toHaveBeenCalledTimes(3);
       expect(saved().pieces?.map((p) => p.type)).not.toContain('problema');
+    });
+
+    it("a remake writes the pieces again from the stored lessons' cards, without a search", async () => {
+      const lessons = [1, 2, 3].map((n) => ({
+        title: `S${n}`,
+        cards: [card(`s${n}`), card(`r${n}`)].map((c) => ({
+          title: c.title,
+          text: c.text,
+          source: sourceOf(academic, c.quote),
+        })),
+      }));
+      paths.chapterContent.mockResolvedValue({
+        cards: [],
+        exercises: [],
+        lessons,
+      });
+
+      const chapter = await service.make(7, 0, true);
+
+      expect(searchPages).not.toHaveBeenCalled();
+      expect(steps.lessons).not.toHaveBeenCalled();
+      expect(chapter.lessons).toBe(lessons);
+      expect(promptOf(steps.pieces)).toContain(
+        'Lesson 1 of 3: S1\nOther lessons: S2; S3',
+      );
+    });
+
+    it('a remake of a chapter made before lessons makes it again from a search', async () => {
+      paths.chapterContent.mockResolvedValue({ cards: [], exercises: [] });
+
+      const chapter = await service.make(7, 0, true);
+
+      expect(searchPages).toHaveBeenCalledTimes(3);
+      expect(chapter.lessons).toHaveLength(3);
     });
 
     it('shares one generation between concurrent calls for the same chapter', async () => {
@@ -515,283 +646,7 @@ describe('ChaptersService', () => {
       ]);
 
       expect(a).toBe(b);
-      expect(steps.pieces).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('subject cards', () => {
-    const topics = Array.from({ length: 14 }, (_, i) => `T${i}`);
-    const cardOf = (n: number, title: string) => ({
-      title,
-      text: 'x',
-      page: 1,
-      quote: `q-${title}`,
-      topic: n,
-    });
-    const stored = (title: string) => ({
-      title,
-      text: 'x',
-      source: { label: 'l', url: 'https://a.org/s', quote: title },
-    });
-    const titles = (cards: { title: string }[]) => cards.map((c) => c.title);
-    const subjectCall = () => steps.subject.mock.calls[0]![0];
-    const savedEntry = (topic: number, ...cardTitles: string[]) => ({
-      topic,
-      topicText: `T${topic}`,
-      cards: cardTitles.map((t) => ({
-        title: t,
-        text: 'x',
-        source: sourceOf(academic, `q-${t}`),
-      })),
-    });
-
-    beforeEach(() => {
-      paths.discipline.mockResolvedValue({ id: 7, name: 'Cálculo', topics });
-    });
-
-    it('uses three stored cards and makes no search', async () => {
-      paths.chapterCards.mockResolvedValue(
-        new Map([[1, ['s1', 's2', 's3'].map(stored)]]),
-      );
-
-      const chapter = await service.make(7, 1);
-
-      expect(paths.chapterCards).toHaveBeenCalledWith(7, topics);
-      expect(searchPages).not.toHaveBeenCalled();
-      expect(steps.subject).not.toHaveBeenCalled();
-      expect(steps.cards).not.toHaveBeenCalled();
-      expect(titles(chapter.cards)).toEqual(['s1', 's2', 's3']);
-    });
-
-    it("a topic with fewer stored cards searches alone, adds to them and saves the topic's", async () => {
-      paths.chapterCards.mockResolvedValue(new Map([[1, [stored('s1')]]]));
-
-      const chapter = await service.make(7, 1);
-
-      expect(steps.subject).not.toHaveBeenCalled();
-      expect(titles(chapter.cards)).toEqual(['s1', 't1', 't2', 't3']);
-      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
-        { topic: 1, topicText: 'T1', cards: chapter.cards },
-      ]);
-    });
-
-    it('drops a stored card from a refused site and makes its topic again', async () => {
-      paths.chapterCards.mockResolvedValue(
-        new Map([
-          [
-            1,
-            [
-              {
-                title: 'video',
-                text: 'x',
-                source: {
-                  label: 'l',
-                  url: 'https://www.youtube.com/watch?v=1',
-                  quote: 'q',
-                },
-              },
-            ],
-          ],
-        ]),
-      );
-      steps.subject.mockResolvedValue(
-        reply({ cards: ['a', 'b', 'c'].map((t) => cardOf(2, t)) }),
-      );
-
-      const chapter = await service.make(7, 1);
-
-      expect(steps.subject).toHaveBeenCalledTimes(1);
-      expect(titles(chapter.cards)).toEqual(['a', 'b', 'c']);
-    });
-
-    it('a block query keeps the first words of every topic, without its numbering', async () => {
-      paths.discipline.mockResolvedValue({
-        id: 7,
-        name: 'Cálculo',
-        topics: Array.from(
-          { length: 6 },
-          (_, i) => `${i + 1}. Tema ${i} com muitas palavras que não cabem`,
-        ),
-      });
-
-      await service.make(7, 0);
-
-      expect(searchPages).toHaveBeenCalledWith(
-        'fc-key',
-        'Cálculo ' +
-          [0, 1, 2, 3, 4, 5]
-            .map((i) => `Tema ${i} com muitas palavras`)
-            .join(' '),
-        5,
-        false,
-      );
-    });
-
-    it("searches the block once, saves every topic with a verified card and returns this topic's", async () => {
-      steps.subject.mockResolvedValue(
-        reply({
-          cards: [...['a', 'b', 'c'].map((t) => cardOf(2, t)), cardOf(3, 'c1')],
-        }),
-      );
-
-      const chapter = await service.make(7, 1);
-
-      expect(searchPages).toHaveBeenCalledTimes(2);
-      expect(searchPages).toHaveBeenCalledWith(
-        'fc-key',
-        'Cálculo T0 T1 T2 T3 T4 T5',
-        5,
-        false,
-      );
-      expect(searchPages).toHaveBeenCalledWith(
-        'fc-key',
-        'Cálculo T0 T1 T2 T3 T4 T5',
-        2,
-        true,
-      );
-      expect(subjectCall().prompt).toContain(
-        'Subject: Cálculo\nTopics:\n1. T0\n2. T1\n3. T2\n4. T3\n5. T4\n6. T5\n\nPages:\n[Page 1] Página acadêmica',
-      );
-      expect(steps.cards).not.toHaveBeenCalled();
-      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
-        savedEntry(1, 'a', 'b', 'c'),
-        savedEntry(2, 'c1'),
-      ]);
-      expect(chapter.cards).toEqual(savedEntry(1, 'a', 'b', 'c').cards);
-    });
-
-    it('starts topic 7 at its block start 6', async () => {
-      // numbers count the listed topics: 2 is T7
-      steps.subject.mockResolvedValue(
-        reply({ cards: ['a', 'b', 'c'].map((t) => cardOf(2, t)) }),
-      );
-
-      const chapter = await service.make(7, 7);
-
-      expect(subjectCall().prompt).toContain(
-        'Topics:\n1. T6\n2. T7\n3. T8\n4. T9\n5. T10\n6. T11\n',
-      );
-      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
-        savedEntry(7, 'a', 'b', 'c'),
-      ]);
-      expect(titles(chapter.cards)).toEqual(['a', 'b', 'c']);
-    });
-
-    it('drops cards with an unverified quote or a topic number outside the block', async () => {
-      steps.subject.mockResolvedValue(
-        reply({
-          cards: [
-            cardOf(1, 'bad'),
-            cardOf(1, 'good'),
-            cardOf(0, 'zero'),
-            cardOf(7, 'seven'),
-          ],
-        }),
-      );
-
-      const chapter = await service.make(7, 0);
-
-      expect(paths.saveChapterCards).toHaveBeenNthCalledWith(1, 7, [
-        savedEntry(0, 'good'),
-      ]);
-      // One card is not enough: the topic's own search adds to it.
-      expect(titles(chapter.cards)).toEqual(['good', 't1', 't2', 't3']);
-    });
-
-    it('keeps at most 5 verified cards per topic', async () => {
-      steps.subject.mockResolvedValue(
-        reply({
-          cards: ['c1', 'c2', 'c3', 'c4', 'a', 'b'].map((t) => cardOf(1, t)),
-        }),
-      );
-
-      const chapter = await service.make(7, 0);
-
-      expect(titles(chapter.cards)).toEqual(['c1', 'c2', 'c3', 'c4', 'a']);
-    });
-
-    it("falls back to the topic's own search when it got no verified card, keeping the others saved", async () => {
-      steps.subject.mockResolvedValue(reply({ cards: [cardOf(2, 'other')] }));
-
-      const chapter = await service.make(7, 0);
-
-      expect(paths.saveChapterCards).toHaveBeenCalledWith(7, [
-        savedEntry(1, 'other'),
-      ]);
-      expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(searchPages).toHaveBeenCalledWith(
-        'fc-key',
-        'Cálculo T0',
-        5,
-        false,
-      );
-      expect(titles(chapter.cards)).toEqual(['t1', 't2', 't3']);
-    });
-
-    it.each([
-      ['an AiOutputError', outputError()],
-      ['a provider error', new AiModelError([])],
-    ])(
-      "falls back to the topic's own search after %s in the block call",
-      async (_, error) => {
-        steps.subject.mockRejectedValue(error);
-
-        const chapter = await service.make(7, 0);
-
-        expect(steps.subject).toHaveBeenCalledTimes(1);
-        // Only the topic's own search is saved.
-        expect(paths.saveChapterCards).toHaveBeenCalledExactlyOnceWith(7, [
-          { topic: 0, topicText: 'T0', cards: chapter.cards },
-        ]);
-        expect(steps.cards).toHaveBeenCalledTimes(1);
-        expect(chapter.cards).toHaveLength(3);
-      },
-    );
-
-    it("falls back to the topic's own search when the block search fails", async () => {
-      vi.mocked(searchPages).mockRejectedValueOnce(new Error('HTTP 500'));
-
-      const chapter = await service.make(7, 0);
-
-      expect(steps.subject).not.toHaveBeenCalled();
-      expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(chapter.cards).toHaveLength(3);
-    });
-
-    it('the fallback still retries once, then 503s', async () => {
-      steps.cards.mockRejectedValue(outputError());
-
-      await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-      expect(steps.cards).toHaveBeenCalledTimes(2);
-    });
-
-    it("an AiModelError from the topic's own search still propagates", async () => {
-      const error = new AiModelError([]);
-      steps.subject.mockRejectedValue(new AiModelError([]));
-      steps.cards.mockRejectedValue(error);
-
-      await expect(service.make(7, 0)).rejects.toBe(error);
-      expect(steps.cards).toHaveBeenCalledTimes(1);
-      expect(paths.saveChapterContent).not.toHaveBeenCalled();
-    });
-
-    it('with one of its topics stored, the block is not searched again: an uncovered topic searches alone', async () => {
-      paths.chapterCards.mockResolvedValue(new Map([[3, [stored('s3')]]]));
-
-      const chapter = await service.make(7, 1);
-
-      expect(steps.subject).not.toHaveBeenCalled();
-      expect(searchPages).toHaveBeenCalledTimes(2);
-      expect(titles(chapter.cards)).toEqual(['t1', 't2', 't3']);
-      expect(paths.saveChapterCards).toHaveBeenCalledExactlyOnceWith(7, [
-        { topic: 1, topicText: 'T1', cards: chapter.cards },
-      ]);
-    });
-
-    it('asks for 1500 output tokens per block topic', async () => {
-      await service.make(7, 7);
-
-      expect(subjectCall().maxOutputTokens).toBe(9000);
+      expect(steps.lessons).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -951,6 +806,32 @@ describe('ChaptersService', () => {
         );
 
         expect(titles).toEqual([['a', 'b'], ['c'], ['d']]);
+        expect((await service.start('u', 7, 1, 1)).title).toBeNull();
+      });
+
+      it('in a chapter made since #157, gives each lesson its own title and cards and plays only its own pieces', async () => {
+        const tagged = [1, 2, 3].flatMap((lesson) =>
+          pieces.map((p) => ({ ...p, lesson })),
+        );
+        const lessons = [1, 2, 3].map((n) => ({
+          title: `L${n}`,
+          cards: [cards[n - 1]!],
+        }));
+        paths.chapterContent.mockResolvedValue({
+          ...chapterOf(1),
+          pieces: tagged,
+          lessons,
+        });
+        paths.lessons.mockResolvedValue(done(1, 2));
+
+        for (const n of [1, 2, 3]) {
+          const lesson = await service.start('u', 7, 1, n);
+          expect(lesson.title).toBe(`L${n}`);
+          expect(lesson.cards).toEqual(lessons[n - 1]!.cards);
+          expect(
+            lesson.exercises.every((e) => tagged[e.index]!.lesson === n),
+          ).toBe(true);
+        }
       });
 
       it('charges the lesson price in peixinhos on every entry until the lesson is done', async () => {

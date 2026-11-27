@@ -3,8 +3,8 @@
  *
  *   node dist/scripts/make-chapters.js 8:6 9
  *
- * `<id>` covers every topic of subject id; `<id>:<n>` its first n topics. A chapter stored with pieces is kept; one
- * stored without them (made before pieces existed) gets its pieces written from its stored cards. It stops a subject
+ * `<id>` covers every topic of subject id; `<id>:<n>` its first n topics. A chapter stored with its three lessons is
+ * kept; one made before lessons (#157) is made again, from a new search. It stops a subject
  * at its first failure, so a book keeps its leading run of made chapters. Every Firecrawl search and model call is
  * paid: run it only with the owner's OK on its estimated cost.
  */
@@ -35,11 +35,11 @@ try {
     try {
       for (const [topic, text] of discipline.topics.slice(0, limit).entries()) {
         const stored = await paths.chapterContent(id, topic, text);
-        if (stored?.pieces?.length) continue;
+        if (stored?.lessons) continue;
         const content = await chapters.make(id, topic, Boolean(stored));
         made++;
         console.log(
-          `${stored ? 'remade' : 'made'} ${id}:${topic} "${text}": ${content.cards.length} cards, ${content.pieces?.length ?? 0} pieces, ${content.exercises.length} exercises`,
+          `${stored ? 'remade' : 'made'} ${id}:${topic} "${text}": lessons ${content.lessons?.map((l) => `"${l.title}" ${l.cards.length}`).join(', ')}; ${content.pieces?.length ?? 0} pieces, ${content.exercises.length} exercises`,
         );
       }
     } catch (error) {

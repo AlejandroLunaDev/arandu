@@ -1,4 +1,4 @@
-import type { ChapterContent } from '@arandu/contracts';
+import type { ChapterCard, ChapterContent } from '@arandu/contracts';
 import { z } from 'zod';
 import { CalcError, evaluate, reserved, variablesOf } from './calc.js';
 import { seeded } from './lessons.logic.js';
@@ -42,8 +42,23 @@ export type Piece =
       why: string;
     };
 
-/** A chapter as stored: what everyone sees, and the pieces lessons are built from (never sent to a client). */
-export type StoredChapter = ChapterContent & { pieces?: Piece[] };
+/** A piece as stored: `lesson` (1-3) is the lesson whose cards it was written from; none in a chapter before #157. */
+export type StoredPiece = Piece & { lesson?: number };
+
+/** One lesson of a chapter made since #157: a part of the topic, with its own verified cards. */
+export interface StoredLesson {
+  title: string;
+  cards: ChapterCard[];
+}
+
+/**
+ * A chapter as stored: what everyone sees (its lesson titles from `lessons`), and the pieces lessons are built from
+ * (never sent to a client).
+ */
+export type StoredChapter = Omit<ChapterContent, 'lessonTitles'> & {
+  pieces?: StoredPiece[];
+  lessons?: StoredLesson[];
+};
 
 const text = z.string().min(1);
 const two = z.object({ first: text, second: text });
@@ -242,7 +257,7 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
   return out;
 }
 
-/** Enough pieces for three lessons: 4 concepts, 3 statements, the open question and one more piece of any kind. */
+/** Enough pieces for a lesson, or for three in an older chapter: 4 concepts, 3 statements, the open question and one more piece of any kind. */
 export function enoughPieces(pieces: Piece[]): boolean {
   const count = (type: Piece['type']) =>
     pieces.filter((p) => p.type === type).length;

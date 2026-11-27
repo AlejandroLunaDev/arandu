@@ -1,6 +1,6 @@
 import type { Exercise } from '@arandu/contracts';
 import { seeded } from './lessons.logic.js';
-import type { Piece } from './pieces.js';
+import type { Piece, StoredPiece } from './pieces.js';
 import { instanceOf } from './problem.js';
 
 export type Kind = Exercise['kind'];
@@ -14,7 +14,7 @@ export interface PieceRef {
 
 export interface ChapterPieces {
   topic: number;
-  pieces: Piece[];
+  pieces: StoredPiece[];
 }
 
 export interface Composed {
@@ -327,7 +327,8 @@ const MAX_PER_LESSON = 6;
  * Lesson 1 to 3 of a chapter for one seed (a person, a chapter): 1 recognises (concepts and statements), 2 applies
  * (cases, the right sentence, the wrong stretch, baskets), 3 solves and produces (problems, code, steps, sentences,
  * the open question). Which pieces a lesson tests depends only on the chapter and the seed, never on the other
- * chapters, so a lesson keeps its pieces while the subject grows.
+ * chapters, so a lesson keeps its pieces while the subject grows. In a chapter made since #157 each lesson plays only
+ * the pieces written from its own cards.
  */
 export function composeLesson(
   chapter: ChapterPieces,
@@ -338,8 +339,12 @@ export function composeLesson(
   const pick = seeded(`${seed}:${lesson}:pick`);
   const b = new Builder(chapter, others, seeded(`${seed}:${lesson}:play`));
   const p = chapter.pieces;
-  const concepts = shuffle(piecesOfType(p, 'conceito'), pick);
-  const statements = shuffle(piecesOfType(p, 'afirmacao'), pick);
+  const of = <T extends Piece['type']>(type: T) =>
+    piecesOfType(p, type).filter(
+      (a) => ((a.piece as StoredPiece).lesson ?? lesson) === lesson,
+    );
+  const concepts = shuffle(of('conceito'), pick);
+  const statements = shuffle(of('afirmacao'), pick);
   const out: (Composed | null)[] = [];
   const play = (at: At | undefined, kind: Kind) =>
     at ? out.push(b.play(at, kind)) : undefined;
@@ -358,30 +363,27 @@ export function composeLesson(
         },
       });
   } else if (lesson === 2) {
-    for (const c of shuffle(piecesOfType(p, 'caso'), pick))
-      play(c, 'escolha_uma');
+    for (const c of shuffle(of('caso'), pick)) play(c, 'escolha_uma');
     play(statements[0], 'escolha_a_frase_certa');
     // The first statement whose change is one short stretch, other than the one just played.
     const tappable = statements
       .slice(1)
       .find((s) => tapSegments(s.piece.right, s.piece.wrong));
     play(tappable, 'toque_no_trecho');
-    for (const c of piecesOfType(p, 'classificacao'))
-      play(c, 'separe_nas_cestas');
+    for (const c of of('classificacao')) play(c, 'separe_nas_cestas');
   } else {
-    for (const q of shuffle(piecesOfType(p, 'problema'), pick))
-      play(q, 'resolva');
+    for (const q of shuffle(of('problema'), pick)) play(q, 'resolva');
     // Each snippet once a lesson, in one of its two kinds.
-    for (const c of piecesOfType(p, 'codigo'))
+    for (const c of of('codigo'))
       play(c, pick() < 0.5 ? 'ordene' : 'complete_a_frase');
-    for (const s of piecesOfType(p, 'sequencia')) play(s, 'ordene');
-    for (const f of piecesOfType(p, 'frase')) play(f, 'monte_a_frase');
+    for (const s of of('sequencia')) play(s, 'ordene');
+    for (const f of of('frase')) play(f, 'monte_a_frase');
     play(concepts[concepts.length - 1], 'complete_a_frase');
   }
   let list = out.filter((c): c is Composed => c !== null);
   if (lesson === 3) {
     list = list.slice(0, MAX_PER_LESSON - 1);
-    const question = piecesOfType(p, 'pergunta')[0];
+    const question = of('pergunta')[0];
     const ask = question ? b.play(question, 'explique_para_o_arandu') : null;
     if (ask) list.push(ask);
   }

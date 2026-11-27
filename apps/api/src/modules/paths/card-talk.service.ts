@@ -1,4 +1,4 @@
-import type { AskReply, ExplainReply, ChapterContent } from '@arandu/contracts';
+import type { AskReply, ExplainReply } from '@arandu/contracts';
 import { AiService } from '@nestjs/ai';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
@@ -9,6 +9,7 @@ import {
 } from '../arandu/arandu.safety.js';
 import { askInstructions, explainInstructions } from './card-talk.prompt.js';
 import { PathsRepository } from './paths.repository.js';
+import type { StoredChapter } from './pieces.js';
 import {
   aranduUnavailable,
   explainNotFound,
@@ -27,7 +28,7 @@ export class CardTalkService {
   private async content(
     disciplineId: number,
     topic: number,
-  ): Promise<ChapterContent> {
+  ): Promise<StoredChapter> {
     const discipline = await this.paths.discipline(disciplineId);
     const topicText = discipline?.topics[topic];
     const content =

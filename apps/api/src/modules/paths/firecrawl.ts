@@ -36,14 +36,14 @@ const response = z.object({
 
 /**
  * One Firecrawl search in Brazil, with each result's main text: academic pages (Wikipedia and user-upload sites left
- * out), or pt.wikipedia only. Costs 2 credits per 10 results plus 1 per page downloaded. PDFs are not parsed (they
- * would cost a credit per page): they come back without text and are dropped.
+ * out), or one Wikipedia only (pt or en). Costs 2 credits per 10 results plus 1 per page downloaded. PDFs are not
+ * parsed (they would cost a credit per page): they come back without text and are dropped.
  */
 export async function searchPages(
   apiKey: string,
   query: string,
   limit: number,
-  wikipedia: boolean,
+  wikipedia: false | 'pt' | 'en',
 ): Promise<Page[]> {
   const body = JSON.stringify({
     query,
@@ -51,7 +51,7 @@ export async function searchPages(
     country: 'BR',
     location: 'Brazil',
     ...(wikipedia
-      ? { includeDomains: ['pt.wikipedia.org'] }
+      ? { includeDomains: [`${wikipedia}.wikipedia.org`] }
       : { excludeDomains: EXCLUDED }),
     scrapeOptions: {
       formats: ['markdown'],

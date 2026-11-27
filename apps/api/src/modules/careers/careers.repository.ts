@@ -73,8 +73,8 @@ export class CareersRepository {
       where exists (
         select 1 from public.career_grids g
         join public.curriculum_subjects cs on cs.source_id = g.source_id
-        join public.subjects su on su.key = cs.subject_key
-        join public.disciplines d on d.id = su.discipline_id
+        join public.grid_disciplines gd on gd.curriculum_subject_id = cs.id
+        join public.disciplines d on d.id = gd.discipline_id
         join public.chapter_contents sc on sc.discipline_id = d.id and sc.topic = 0 and sc.topic_text = d.topics[1]
         where g.profession_id = c.profession_id and (cs.term = 1 or (cs.term is null and cs.year = 1))
           and cardinality(d.topics) > 0

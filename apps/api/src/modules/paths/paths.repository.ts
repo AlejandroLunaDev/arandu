@@ -2,7 +2,6 @@ import type {
   CareerPath,
   CareerPaths,
   LessonResult,
-  ChapterCard,
   ChapterResult,
 } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
@@ -61,7 +60,7 @@ export class PathsRepository {
 
     // One content per career (ADR-0008): every course of the career is lived through the first semester of the
     // career's grid (term 1, or year 1 when the source states no term), whichever institution published it. A subject
-    // is played from the one discipline its name is taught from; its code is shown only at its own institution.
+    // is played from its grid's own discipline (grid_disciplines, #157); its code is shown only at its own institution.
     const rows = await this.sql<PathRow[]>`
       select c.id::int as course_id, coalesce(i.short_name, i.name) as institution, c.name as course, c.city,
         d.id::int as discipline_id, case when d.institution_id = c.institution_id then d.code end as code,
@@ -72,8 +71,8 @@ export class PathsRepository {
       join public.courses c on c.profession_id = p.id
       join public.institutions i on i.id = c.institution_id
       join public.disciplines d on d.id in (
-        select su.discipline_id from public.curriculum_subjects cs
-        join public.subjects su on su.key = cs.subject_key
+        select gd.discipline_id from public.curriculum_subjects cs
+        join public.grid_disciplines gd on gd.curriculum_subject_id = cs.id
         where cs.source_id = g.source_id and (cs.term = 1 or (cs.term is null and cs.year = 1)))
       where p.slug = ${slug} and cardinality(d.topics) > 0
       order by institution, c.city, c.id, d.name`;
@@ -173,32 +172,16 @@ export class PathsRepository {
       .map((r) => ({ topic: r.topic, pieces: r.pieces ?? [] }));
   }
 
-  /** The subject's stored cards by topic, those made from the same topic text. */
-  async chapterCards(
-    disciplineId: number,
-    topics: string[],
-  ): Promise<Map<number, ChapterCard[]>> {
-    const rows = await this.sql<
-      { topic: number; topic_text: string; cards: ChapterCard[] }[]
-    >`
-      select topic::int, topic_text, cards from public.chapter_cards where discipline_id = ${disciplineId}`;
-    return new Map(
-      rows
-        .filter((r) => topics[r.topic] === r.topic_text)
-        .map((r) => [r.topic, r.cards]),
-    );
-  }
-
-  async saveChapterCards(
-    disciplineId: number,
-    entries: { topic: number; topicText: string; cards: ChapterCard[] }[],
-  ): Promise<void> {
-    for (const e of entries)
-      await this.sql`
-        insert into public.chapter_cards (discipline_id, topic, topic_text, cards)
-        values (${disciplineId}, ${e.topic}, ${e.topicText}, ${this.sql.json(e.cards as never)})
-        on conflict (discipline_id, topic) do update
-          set topic_text = excluded.topic_text, cards = excluded.cards, created_at = now()`;
+  /** The careers whose grid plays this discipline (grid_disciplines, #157): its lessons set their cases in their work. */
+  async careersOf(disciplineId: number): Promise<string[]> {
+    const rows = await this.sql<{ name: string }[]>`
+      select distinct p.name from public.career_grids g
+      join public.professions p on p.id = g.profession_id
+      join public.curriculum_subjects cs on cs.source_id = g.source_id
+      join public.grid_disciplines gd on gd.curriculum_subject_id = cs.id
+      where gd.discipline_id = ${disciplineId}
+      order by p.name`;
+    return rows.map((r) => r.name);
   }
 
   async saveChapterContent(content: StoredChapter): Promise<void> {
