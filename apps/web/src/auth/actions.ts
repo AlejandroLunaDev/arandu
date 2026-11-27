@@ -2,6 +2,8 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { authApi } from "@/app-shell/api";
+import { clearSession, getSession } from "./session";
 import { supabaseServer } from "./sign-in";
 
 /**
@@ -15,4 +17,13 @@ export async function signInWithGoogle(): Promise<void> {
   const { data, error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${origin}/auth/callback` } });
   if (error || !data.url) throw error ?? new Error("Supabase gave no Google URL");
   redirect(data.url);
+}
+
+/** Você's "Sair": the API ends this session, the cookie goes, and the person is back on the landing. */
+export async function signOut(): Promise<void> {
+  const session = await getSession().catch(() => null);
+  // A session the API already ended, or an API that is down, must not keep the person signed in here.
+  if (session) await authApi("/auth/logout", session.accessToken, { method: "POST" }).catch(() => undefined);
+  await clearSession();
+  redirect("/");
 }
