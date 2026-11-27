@@ -82,17 +82,22 @@ export async function openWallet(
   return { row: given, gift };
 }
 
+/** The chapters a subject offers at most: the demo plays its first 2 (#161). */
+// shortcut: older chapters past the 2nd stay stored but unplayed; raise this when full subjects are made.
+export const DEMO_CHAPTERS = 2;
+
 /**
- * SQL for how many leading topics of the discipline aliased `d` have a stored chapter for the same topic text: the chapters a
- * book offers (the paths list the same run), so no screen points at a chapter that would be generated live.
+ * SQL for how many leading topics of the discipline aliased `d` have a stored chapter for the same topic text, up to
+ * DEMO_CHAPTERS: the chapters a book offers (the paths list the same run), so no screen points at a chapter that would be
+ * generated live, and a book is finished with the chapters it shows.
  */
 export const madeChapters = (sql: Tx) => sql`
-  coalesce((
+  least(coalesce((
     select min(g.t)::int from generate_series(0, cardinality(coalesce(d.topics, '{}')) - 1) g(t)
     where not exists (
       select 1 from public.chapter_contents s
       where s.discipline_id = d.id and s.topic = g.t and s.topic_text = d.topics[g.t + 1])
-  ), cardinality(coalesce(d.topics, '{}')))`;
+  ), cardinality(coalesce(d.topics, '{}'))), ${DEMO_CHAPTERS})`;
 
 /** A subject the person studied, as Arandu's chats see it. */
 export interface Studied {
