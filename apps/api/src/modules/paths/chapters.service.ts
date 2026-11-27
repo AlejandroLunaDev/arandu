@@ -20,6 +20,7 @@ import {
   lessonCardsInstructions,
   lessonsInstructions,
   practiceInstructions,
+  searchInstructions,
 } from './chapter.prompt.js';
 import {
   type Composed,
@@ -52,11 +53,12 @@ import {
 import { quoteIn } from './source-check.js';
 
 /**
- * Pages a search downloads (a Firecrawl credit each), academic ones and then Wikipedia's: one search for the chapter's
- * topic gives its three lessons (#157), and one for a lesson's own part when those pages left it short of cards.
+ * Pages a search downloads (a Firecrawl credit each). The chapter's topic is searched once (#157) in academic pages and
+ * both Wikipedias: Portuguese's for what is Brazil's own (its law, the SUS), English's, the fullest, for the rest. A
+ * lesson those pages left short searches the English Wikipedia for its own part.
  */
-const CHAPTER_PAGES = { academic: 5, wikipedia: 10 };
-const LESSON_PAGES = { academic: 5, wikipedia: 5 };
+const CHAPTER_PAGES = { academic: 5, pt: 5, en: 5 };
+const LESSON_PAGES = 5;
 /** A lesson's verified cards: LESSON_CARDS wanted, MIN_LESSON_CARDS at least, or the chapter is not made. */
 const LESSON_CARDS = 3;
 const MIN_LESSON_CARDS = 2;
@@ -72,8 +74,11 @@ const card = z.object({ title: text, text, page: index, quote: text });
 
 // No counts in these schemas: a list one card too long would drop every card. A lesson keeps LESSON_CARDS verified.
 const cardsDraft = z.object({ cards: z.array(card) });
+const searchDraft = z.object({ search: text });
 const lessonsDraft = z.object({
-  lessons: z.array(z.object({ title: text, cards: z.array(card) })),
+  lessons: z.array(
+    z.object({ title: text, search: text, cards: z.array(card) }),
+  ),
 });
 
 /** A page with where it comes from: the model is told to prefer academic pages over Wikipedia's. */
@@ -414,23 +419,40 @@ export class ChaptersService {
     );
   }
 
-  private async pages(
-    query: string,
-    count: { academic: number; wikipedia: number },
-  ): Promise<Source[]> {
+  private key(): string {
     const key = this.config.get('FIRECRAWL_API_KEY', { infer: true });
     if (!key)
       throw new Error(
         'FIRECRAWL_API_KEY is not set: chapters are made only by the generation script',
       );
-    const [academic, wikipedia] = await Promise.all([
-      searchPages(key, query, count.academic, false),
-      searchPages(key, query, count.wikipedia, true),
+    return key;
+  }
+
+  /** The chapter's pages: academic ones, then the Portuguese and English Wikipedias' (the query put in English). */
+  private async pages(name: string, topicText: string): Promise<Source[]> {
+    const key = this.key();
+    const query = queryOf(name, [topicText]);
+    const english =
+      (
+        await orRetry(
+          this.ai.generateObject({
+            label: 'arandu-chapter-search',
+            schema: searchDraft,
+            instructions: searchInstructions(),
+            prompt: query,
+            maxOutputTokens: 200,
+          }),
+        )
+      )?.search ?? query;
+    const [academic, pt, en] = await Promise.all([
+      searchPages(key, query, CHAPTER_PAGES.academic, false),
+      searchPages(key, query, CHAPTER_PAGES.pt, 'pt'),
+      searchPages(key, english, CHAPTER_PAGES.en, 'en'),
     ]);
     const seen = new Set<string>();
     return [
       ...academic.map((p) => ({ ...p, wikipedia: false })),
-      ...wikipedia.map((p) => ({ ...p, wikipedia: true })),
+      ...[...pt, ...en].map((p) => ({ ...p, wikipedia: true })),
     ].filter((p) => !seen.has(p.url) && seen.add(p.url));
   }
 
@@ -443,7 +465,7 @@ export class ChaptersService {
     head: string,
     topicText: string,
   ): Promise<StoredLesson[]> {
-    const pages = await this.pages(queryOf(name, [topicText]), CHAPTER_PAGES);
+    const pages = await this.pages(name, topicText);
     if (!pages.length) throw chapterUnavailable();
     let draft: z.infer<typeof lessonsDraft> | null = null;
     for (let attempt = 1; attempt <= ATTEMPTS && !draft; attempt++) {
@@ -468,15 +490,14 @@ export class ChaptersService {
         .slice(0, LESSON_CARDS);
       lessons.push({ title: l.title, cards });
     }
-    for (const lesson of lessons)
+    for (const [i, lesson] of lessons.entries())
       if (lesson.cards.length < LESSON_CARDS)
         lesson.cards = await this.moreCards(
-          name,
           head,
-          topicText,
           lessons,
           lesson,
           pages,
+          draft.lessons[i]!.search,
         );
     this.logger.log(
       `${head.split('\n')[1]}: lessons ${lessons.map((l) => `"${l.title}" ${l.cards.length}`).join(', ')}`,
@@ -485,28 +506,30 @@ export class ChaptersService {
   }
 
   /**
-   * More cards for a lesson left short: from the chapter's pages again (no search paid), then from a search for its own
-   * part. Fewer than MIN_LESSON_CARDS after both: the chapter is unavailable.
+   * More cards for a lesson left short: from the chapter's pages again (no search paid), then from the English
+   * Wikipedia for its own part (`search`, the model's English query). Fewer than MIN_LESSON_CARDS after both: the
+   * chapter is unavailable.
    */
   private async moreCards(
-    name: string,
     head: string,
-    topicText: string,
     lessons: StoredLesson[],
     lesson: StoredLesson,
     pages: Source[],
+    search: string,
   ): Promise<ChapterCard[]> {
     const n = lessons.indexOf(lesson) + 1;
     const others = lessons.filter((l) => l !== lesson);
     const taken = others.flatMap((o) => o.cards);
     let kept = lesson.cards;
-    for (const search of [false, true]) {
-      const from = search
-        ? await this.pages(
-            queryOf(name, [topicText, lesson.title]),
-            LESSON_PAGES,
-          )
-        : pages;
+    const sources = [
+      async () => pages,
+      async () =>
+        (await searchPages(this.key(), search, LESSON_PAGES, 'en')).map(
+          (p) => ({ ...p, wikipedia: true }),
+        ),
+    ];
+    for (const source of sources) {
+      const from = await source();
       if (!from.length) continue;
       const object = await orRetry(
         this.ai.generateObject({

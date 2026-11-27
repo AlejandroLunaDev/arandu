@@ -44,14 +44,19 @@ const lessonsReply = () => ({
   lessons: [
     {
       title: 'L1',
+      search: 'S1',
       cards: [
         { title: 't1', text: 'x', page: 1, quote: 'q1' },
         { title: 't2', text: 'x', page: 2, quote: 'w1' },
         { title: 't3', text: 'x', page: 1, quote: 'q-a' },
       ],
     },
-    { title: 'L2', cards: [card('b'), card('c'), card('good')] },
-    { title: 'L3', cards: [card('other'), card('zero'), card('seven')] },
+    { title: 'L2', search: 'S2', cards: [card('b'), card('c'), card('good')] },
+    {
+      title: 'L3',
+      search: 'S3',
+      cards: [card('other'), card('zero'), card('seven')],
+    },
   ],
 });
 
@@ -121,6 +126,7 @@ describe('ChaptersService', () => {
   type Fn = Mock<(...args: never[]) => unknown>;
   // One mock per model call; `ai.generateObject` routes to it by the call's label.
   let steps: {
+    search: Step;
     lessons: Step;
     lessonCards: Step;
     practice: Step;
@@ -158,6 +164,7 @@ describe('ChaptersService', () => {
         wikipedia ? [wiki] : [academic],
       );
     steps = {
+      search: vi.fn().mockResolvedValue(reply({ search: 'Calculus limits' })),
       lessons: vi.fn().mockResolvedValue(reply(lessonsReply())),
       lessonCards: vi.fn().mockResolvedValue(reply({ cards: [] })),
       practice: vi.fn().mockResolvedValue(reply({ problems: [], code: [] })),
@@ -165,13 +172,15 @@ describe('ChaptersService', () => {
     };
     ai = {
       generateObject: vi.fn((o) =>
-        o.label === 'arandu-chapter-lessons'
-          ? steps.lessons(o)
-          : o.label === 'arandu-lesson-cards'
-            ? steps.lessonCards(o)
-            : o.label === 'arandu-chapter-practice'
-              ? steps.practice(o)
-              : steps.pieces(o),
+        o.label === 'arandu-chapter-search'
+          ? steps.search(o)
+          : o.label === 'arandu-chapter-lessons'
+            ? steps.lessons(o)
+            : o.label === 'arandu-lesson-cards'
+              ? steps.lessonCards(o)
+              : o.label === 'arandu-chapter-practice'
+                ? steps.practice(o)
+                : steps.pieces(o),
       ),
     };
     paths = {
@@ -268,10 +277,11 @@ describe('ChaptersService', () => {
   });
 
   describe('lessons', () => {
-    it("searches the topic's 5 academic pages and 10 Wikipedia's, and stores its three lessons with their verified cards", async () => {
+    it("searches the topic in 5 academic pages and 5 of each Wikipedia's (in English for the English one), and stores its three lessons with their verified cards", async () => {
       const chapter = await service.make(7, 0);
 
-      expect(searchPages).toHaveBeenCalledTimes(2);
+      expect(searchPages).toHaveBeenCalledTimes(3);
+      expect(promptOf(steps.search)).toBe('Cálculo Limites');
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
@@ -281,8 +291,14 @@ describe('ChaptersService', () => {
       expect(searchPages).toHaveBeenCalledWith(
         'fc-key',
         'Cálculo Limites',
-        10,
-        true,
+        5,
+        'pt',
+      );
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Calculus limits',
+        5,
+        'en',
       );
       expect(promptOf(steps.lessons)).toContain(
         `Subject: Cálculo\nTopic 1 of 2: Limites\n\nPages:\n[Page 1] Página acadêmica (https://a.org/1)\n${academic.markdown}`,
@@ -345,7 +361,7 @@ describe('ChaptersService', () => {
 
       const chapter = await service.make(7, 0);
 
-      expect(searchPages).toHaveBeenCalledTimes(2);
+      expect(searchPages).toHaveBeenCalledTimes(3);
       expect(promptOf(steps.lessonCards)).toContain(
         'Subject: Cálculo\nTopic 1 of 2: Limites\nLesson 3 of 3: L3\nOther lessons: L1; L2\nCards it has: other\n\nPages:\n[Page 1]',
       );
@@ -357,31 +373,53 @@ describe('ChaptersService', () => {
       ]);
     });
 
-    it("then searches the lesson's own part, and keeps what both gave", async () => {
+    it("then searches the English Wikipedia with the lesson's English query, and keeps what both gave, quoting the English page", async () => {
+      const english: Page = {
+        url: 'https://en.wikipedia.org/wiki/Limit',
+        title: 'Limit - Wikipedia',
+        markdown: 'In mathematics, e1.',
+      };
       const r = lessonsReply();
       r.lessons[2]!.cards = r.lessons[2]!.cards.slice(0, 1);
       steps.lessons.mockResolvedValue(reply(r));
       steps.lessonCards
         .mockResolvedValueOnce(reply({ cards: [card('c1')] }))
-        .mockResolvedValueOnce(reply({ cards: [card('c2'), card('c3')] }));
+        .mockResolvedValueOnce(
+          reply({ cards: [{ title: 'en', text: 'x', page: 1, quote: 'e1' }] }),
+        );
+      vi.mocked(searchPages).mockImplementation(
+        async (_key, query, _limit, wikipedia) =>
+          query === 'S3' ? [english] : wikipedia ? [wiki] : [academic],
+      );
 
       const chapter = await service.make(7, 0);
 
       expect(searchPages).toHaveBeenCalledTimes(4);
-      expect(searchPages).toHaveBeenCalledWith(
-        'fc-key',
-        'Cálculo Limites L3',
-        5,
-        true,
+      expect(searchPages).toHaveBeenLastCalledWith('fc-key', 'S3', 5, 'en');
+      expect(steps.lessonCards.mock.lastCall![0].prompt).toContain(
+        '[Page 1, Wikipedia] Limit - Wikipedia (https://en.wikipedia.org/wiki/Limit)',
       );
-      expect(chapter.lessons?.[2]?.cards.map((c) => c.title)).toEqual([
-        'other',
-        'c1',
-        'c2',
+      expect(chapter.lessons?.[2]?.cards).toEqual([
+        expect.objectContaining({ title: 'other' }),
+        expect.objectContaining({ title: 'c1' }),
+        { title: 'en', text: 'x', source: sourceOf(english, 'e1') },
       ]);
     });
 
-    it('keeps a lesson with 2 cards after both tries', async () => {
+    it('searches in Portuguese when the English search cannot be written', async () => {
+      steps.search.mockRejectedValue(outputError());
+
+      await service.make(7, 0);
+
+      expect(searchPages).toHaveBeenCalledWith(
+        'fc-key',
+        'Cálculo Limites',
+        5,
+        'en',
+      );
+    });
+
+    it('keeps a lesson with 2 cards after every try', async () => {
       const r = lessonsReply();
       r.lessons[1]!.cards = r.lessons[1]!.cards.slice(0, 2);
       steps.lessons.mockResolvedValue(reply(r));
@@ -429,11 +467,11 @@ describe('ChaptersService', () => {
       expect(paths.saveChapterContent).not.toHaveBeenCalled();
     });
 
-    it('503s when the searches find no page, without calling the model', async () => {
+    it('503s when the searches find no page, without writing lessons', async () => {
       vi.mocked(searchPages).mockResolvedValue([]);
 
       await expect(service.make(7, 0)).rejects.toMatchObject({ status: 503 });
-      expect(ai.generateObject).not.toHaveBeenCalled();
+      expect(steps.lessons).not.toHaveBeenCalled();
     });
 
     it('lists a page both searches found once', async () => {
@@ -597,7 +635,7 @@ describe('ChaptersService', () => {
 
       const chapter = await service.make(7, 0, true);
 
-      expect(searchPages).toHaveBeenCalledTimes(2);
+      expect(searchPages).toHaveBeenCalledTimes(3);
       expect(chapter.lessons).toHaveLength(3);
     });
 
