@@ -102,6 +102,9 @@ const piecesReply = (): PiecesDraft => ({
     {
       situation: 'Um carro chega cada vez mais perto de um sinal.',
       term: 'Limite',
+      question: 'O que o motorista deve fazer?',
+      right: 'Frear aos poucos.',
+      wrong: ['Acelerar.', 'Parar de repente.', 'Ignorar o sinal.'],
       why: 'w',
     },
   ],

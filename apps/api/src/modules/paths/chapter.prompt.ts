@@ -73,7 +73,9 @@ ${PIECES}
   not in it.
 - question: one open question the person answers in their own words, and 2 to 4 short ideas a good answer mentions.
 - cases (0 to 2): a short real-life situation, 2 sentences at most, where exactly one of the topic's key terms
-  applies; "term" is that term, written exactly as in your concepts.
+  applies; "term" is that term, written exactly as in your concepts. "question" asks what to decide or do in that
+  situation, never which concept it is; "right" is the choice that concept supports; "wrong" is 3 plausible choices
+  that ignore or misread it, each about as long as "right"; "why" says why the right choice works, naming the term.
 
 ${PIECES_END}`;
 }

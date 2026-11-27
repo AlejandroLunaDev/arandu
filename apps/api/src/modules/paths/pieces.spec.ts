@@ -89,6 +89,9 @@ const draft = (over: Partial<PiecesDraft> = {}): PiecesDraft => ({
     {
       situation: 'Um pavão de cauda enorme atrai mais fêmeas.',
       term: 'seleção sexual',
+      question: 'O que explica a cauda?',
+      right: 'Ela atrai parceiras.',
+      wrong: ['Ela ajuda a voar.', 'Ela espanta predadores.'],
       why: 'É escolha de parceiros.',
     },
   ],
@@ -149,9 +152,28 @@ describe('piecesOf', () => {
     expect(enoughPieces(pieces)).toBe(true);
   });
 
-  it("gives a case its concept's own term", () => {
+  it("gives a case its concept's own term and its decision", () => {
     const caso = piecesOf(draft()).find((p) => p.type === 'caso');
+    expect(caso).toMatchObject({
+      term: 'Seleção sexual',
+      decision: {
+        question: 'O que explica a cauda?',
+        right: 'Ela atrai parceiras.',
+        wrong: ['Ela ajuda a voar.', 'Ela espanta predadores.'],
+      },
+    });
+  });
+
+  it.each([
+    ['a choice twice', ['Ela atrai parceiras.', 'Ela ajuda a voar.']],
+    ['one wrong choice', ['Ela ajuda a voar.']],
+  ])('keeps a case without its decision when it has %s', (_, wrong) => {
+    const [base] = draft().cases;
+    const caso = piecesOf(draft({ cases: [{ ...base!, wrong }] })).find(
+      (p) => p.type === 'caso',
+    );
     expect(caso).toMatchObject({ term: 'Seleção sexual' });
+    expect(caso).not.toHaveProperty('decision');
   });
 
   it.each<[string, Partial<PiecesDraft>, string]>([
@@ -197,7 +219,18 @@ describe('piecesOf', () => {
     ],
     [
       'a case about no concept of the chapter',
-      { cases: [{ situation: 's', term: 'Genética', why: 'x' }] },
+      {
+        cases: [
+          {
+            situation: 's',
+            term: 'Genética',
+            question: 'q',
+            right: 'r',
+            wrong: ['a', 'b'],
+            why: 'x',
+          },
+        ],
+      },
       'caso',
     ],
   ])('drops %s', (_, over, type) => {

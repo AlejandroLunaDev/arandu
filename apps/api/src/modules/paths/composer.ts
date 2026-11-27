@@ -130,9 +130,14 @@ class Builder {
 
   private exercise(at: At, kind: Kind): Exercise | null {
     const { piece } = at;
-    const statements = piecesOfType(this.chapter.pieces, 'afirmacao').filter(
+    // The other statements, of the piece's own lesson when it has two: a lesson never shows another lesson's sentences.
+    const others = piecesOfType(this.chapter.pieces, 'afirmacao').filter(
       (s) => s.index !== at.index,
     );
+    const own = others.filter(
+      (s) => (s.piece as StoredPiece).lesson === (piece as StoredPiece).lesson,
+    );
+    const statements = own.length >= 2 ? own : others;
     switch (piece.type) {
       case 'conceito': {
         const terms = this.terms(piece.term);
@@ -189,8 +194,17 @@ class Builder {
         return null;
       }
       case 'caso': {
+        if (kind !== 'escolha_uma') return null;
+        if (piece.decision)
+          return {
+            kind,
+            mode: 'reconhecer',
+            prompt: `${piece.situation}\n${piece.decision.question}`,
+            ...choice(piece.decision.right, piece.decision.wrong, this.random),
+            why: piece.why,
+          };
         const terms = this.terms(piece.term);
-        if (kind !== 'escolha_uma' || terms.length < 2) return null;
+        if (terms.length < 2) return null;
         return {
           kind,
           mode: 'reconhecer',
@@ -322,6 +336,15 @@ class Builder {
 const MIN_PER_LESSON = 3;
 /** The most exercises lesson 3 takes. */
 const MAX_PER_LESSON = 6;
+/** The kinds a filler concept or statement can be played in, the usual one first. */
+const FILLER_KINDS: Record<'conceito' | 'afirmacao', Kind[]> = {
+  conceito: ['escolha_uma', 'complete_a_frase'],
+  afirmacao: [
+    'escolha_a_frase_certa',
+    'toque_no_trecho',
+    'verdadeiro_ou_falso',
+  ],
+};
 
 /**
  * Lesson 1 to 3 of a chapter for one seed (a person, a chapter): 1 recognises (concepts and statements), 2 applies
@@ -387,14 +410,18 @@ export function composeLesson(
     const ask = question ? b.play(question, 'explique_para_o_arandu') : null;
     if (ask) list.push(ask);
   }
-  // A thin lesson gets more of the chapter's concepts, then of its statements, each piece once.
+  // A thin lesson gets more of the chapter's concepts, then of its statements, each piece once, each in a kind the
+  // lesson has not played yet when it can.
   const used = new Set(list.map((c) => c.ref.index));
   for (const extra of [...concepts, ...statements]) {
     if (list.length >= MIN_PER_LESSON) break;
     if (used.has(extra.index)) continue;
-    const kind =
-      extra.piece.type === 'conceito' ? 'escolha_uma' : 'escolha_a_frase_certa';
-    const filler = b.play(extra, kind);
+    const played = new Set(list.map((c) => c.ref.kind));
+    const kinds = FILLER_KINDS[extra.piece.type as 'conceito' | 'afirmacao'];
+    const filler = [
+      ...kinds.filter((k) => !played.has(k)),
+      ...kinds.filter((k) => played.has(k)),
+    ].reduce<Composed | null>((found, k) => found ?? b.play(extra, k), null);
     if (filler) {
       list.push(filler);
       used.add(extra.index);

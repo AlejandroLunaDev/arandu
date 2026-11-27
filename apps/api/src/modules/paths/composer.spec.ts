@@ -231,6 +231,68 @@ describe('composeLesson', () => {
         composeLesson(thin, [], lesson, 'x').length,
       ).toBeGreaterThanOrEqual(3);
   });
+
+  it('fills a thin lesson in kinds it has not played yet', () => {
+    const thin: ChapterPieces = {
+      topic: 0,
+      pieces: pieces.filter((p) => p.type === 'afirmacao'),
+    };
+    for (let i = 0; i < 10; i++) {
+      const list = kinds(composeLesson(thin, [], 3, `p${i}`));
+      expect(list.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(list).size).toBe(list.length);
+    }
+  });
+
+  it('asks a case with a decision what to do, with its own choices; an older case asks for its concept', () => {
+    const decision = {
+      question: 'O que o pesquisador deveria concluir?',
+      right: 'Que a cauda ajuda a atrair parceiras.',
+      wrong: [
+        'Que a cauda serve para voar.',
+        'Que a cauda espanta predadores.',
+      ],
+    };
+    const withDecision: ChapterPieces = {
+      topic: 2,
+      pieces: pieces.map((p) => (p.type === 'caso' ? { ...p, decision } : p)),
+    };
+    const caseOf = (c: ChapterPieces) =>
+      composeLesson(c, [other], 2, 'ana:7:2')[0]!.exercise;
+
+    const asked = caseOf(withDecision);
+    expect(asked.kind).toBe('escolha_uma');
+    if (asked.kind === 'escolha_uma') {
+      expect(asked.prompt).toMatch(/O que o pesquisador deveria concluir\?$/);
+      expect([...asked.options].sort()).toEqual(
+        [decision.right, ...decision.wrong].sort(),
+      );
+      expect(asked.options[asked.answer]).toBe(decision.right);
+    }
+    const old = caseOf(chapter);
+    if (old.kind === 'escolha_uma')
+      expect(old.prompt).toMatch(/Qual conceito explica isso\?$/);
+  });
+
+  it("in a chapter made since #157, the right sentence takes its wrong options from its own lesson's statements", () => {
+    const statement = (lesson: number, n: number) => ({
+      type: 'afirmacao' as const,
+      right: `Frase certa ${lesson}.${n} do capítulo.`,
+      wrong: `Frase errada ${lesson}.${n} do capítulo.`,
+      why: 'w',
+      lesson,
+    });
+    const tagged: ChapterPieces = {
+      topic: 0,
+      pieces: [1, 2].flatMap((lesson) =>
+        [1, 2, 3].map((n) => statement(lesson, n)),
+      ),
+    };
+    for (let i = 0; i < 10; i++)
+      for (const c of composeLesson(tagged, [], 2, `p${i}`))
+        if (c.exercise.kind === 'escolha_a_frase_certa')
+          for (const o of c.exercise.options) expect(o).toMatch(/ 2\.\d /);
+  });
 });
 
 describe('composeChapter', () => {
