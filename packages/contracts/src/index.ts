@@ -422,6 +422,9 @@ export type LessonExercise = Exercise & { topic: number; index: number };
  * every lesson of a finished chapter, is practice: free, and it gives no rewards. Lessons 1 and 2 open in any
  * order, 3 once both are done: 409 `lesson_locked` before. The same person gets the same lesson again; another person
  * gets another variant. Each lesson is a full pass: its cards, its exercises, then its misses again until right.
+ *
+ * GET /chapters/:disciplineId/:topic/lessons/:lesson (1-3) serves the same lesson as a sample (O14-O18, #163): public,
+ * one variant for everyone, never locked, recording and charging nothing; 404 `chapter_not_found` like the chapter GET.
  */
 export interface Lesson {
   index: number;

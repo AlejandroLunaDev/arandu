@@ -783,6 +783,50 @@ describe('ChaptersService', () => {
       ]);
     });
 
+    describe('sample', () => {
+      it('serves a lesson of any made chapter like start, with its own cards and pieces, recording and charging nothing', async () => {
+        const tagged = [1, 2, 3].flatMap((lesson) =>
+          pieces.map((p) => ({ ...p, lesson })),
+        );
+        const lessons = [1, 2, 3].map((n) => ({
+          title: `L${n}`,
+          cards: [cards[n - 1]!],
+        }));
+        paths.chapterContent.mockResolvedValue({
+          ...chapterOf(1),
+          pieces: tagged,
+          lessons,
+        });
+
+        const lesson = await service.sample(7, 1, 1);
+        const again = await service.sample(7, 1, 1);
+
+        expect(lesson).toMatchObject({
+          index: 1,
+          total: 3,
+          title: 'L1',
+          lives: 3,
+        });
+        expect(lesson.cards).toEqual(lessons[0]!.cards);
+        expect(lesson.exercises.length).toBeGreaterThan(0);
+        expect(
+          lesson.exercises.every((e) => tagged[e.index]!.lesson === 1),
+        ).toBe(true);
+        expect(again).toEqual(lesson);
+        expect(paths.lessons).not.toHaveBeenCalled();
+        expect(paths.finishLesson).not.toHaveBeenCalled();
+        expect(wallet.pay).not.toHaveBeenCalled();
+      });
+
+      it('404s for a chapter past the made run', async () => {
+        paths.madeCount.mockResolvedValue(1);
+
+        await expect(service.sample(7, 1, 1)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      });
+    });
+
     describe('start', () => {
       it('composes each lesson for this person, the same on every call, with 3 lives', async () => {
         const first = await service.start('u', 7, 1, 1);

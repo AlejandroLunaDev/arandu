@@ -167,6 +167,25 @@ const shown = ({
   exercises,
 });
 
+/** A lesson as served: its own title and cards (or its share of an older chapter's) and the exercises composed for it. */
+const lessonOf = (
+  chapter: StoredChapter,
+  composed: Composed[],
+  index: number,
+): Lesson => ({
+  index,
+  total: LESSONS,
+  title: chapter.lessons?.[index - 1]?.title ?? null,
+  cards:
+    chapter.lessons?.[index - 1]?.cards ?? lessonCards(chapter.cards, index),
+  exercises: composed.map((c): LessonExercise => ({
+    ...c.exercise,
+    topic: c.ref.topic,
+    index: c.ref.index,
+  })),
+  lives: LESSON_LIVES,
+});
+
 /**
  * A chapter of a subject: made once from pages Firecrawl found, as three lessons that each teach a different part of
  * its topic (#157), with every card's quote checked on its page and each lesson's pieces written from its own cards;
@@ -300,20 +319,24 @@ export class ChaptersService {
     const practice = await this.mustBeOpen(userId, disciplineId, topic, index);
     const composed = await this.composed(userId, chapter, topics, index);
     if (!practice) await this.wallet.pay(userId, 'peixinhos', LESSON_PRICE);
-    return {
+    return lessonOf(chapter, composed, index);
+  }
+
+  /**
+   * O14-O18: one lesson of a chapter as a sample, for anyone and for free (#163), composed the way `start` composes it.
+   * It records nothing: the onboarding plays it before there is a person to record it for.
+   */
+  async sample(
+    disciplineId: number,
+    topic: number,
+    index: number,
+  ): Promise<Lesson> {
+    const { chapter, topics } = await this.opened(disciplineId, topic);
+    return lessonOf(
+      chapter,
+      await this.composed('sample', chapter, topics, index),
       index,
-      total: LESSONS,
-      title: chapter.lessons?.[index - 1]?.title ?? null,
-      cards:
-        chapter.lessons?.[index - 1]?.cards ??
-        lessonCards(chapter.cards, index),
-      exercises: composed.map((c): LessonExercise => ({
-        ...c.exercise,
-        topic: c.ref.topic,
-        index: c.ref.index,
-      })),
-      lives: LESSON_LIVES,
-    };
+    );
   }
 
   /** Goes on with a lesson after its last life, for CONTINUE_PRICE of the currency: 409 `not_enough_currency`. */
@@ -403,7 +426,7 @@ export class ChaptersService {
 
   /** A lesson's exercises for this person: the same on every call, so its result is checked against what was served. */
   private async composed(
-    userId: string,
+    who: string,
     chapter: StoredChapter,
     topics: string[],
     index: number,
@@ -415,7 +438,7 @@ export class ChaptersService {
       { topic, pieces: chapter.pieces ?? [] },
       subject.filter((c) => c.topic !== topic),
       index,
-      `${userId}:${disciplineId}:${topic}`,
+      `${who}:${disciplineId}:${topic}`,
     );
   }
 
