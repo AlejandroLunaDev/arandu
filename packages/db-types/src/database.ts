@@ -742,6 +742,14 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"grid_disciplines": {
+                  Row: {
+                    "curriculum_subject_id": number,"discipline_id": number | null
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Functions: {
