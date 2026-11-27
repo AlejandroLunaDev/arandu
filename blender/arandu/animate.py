@@ -1,4 +1,4 @@
-"""Key Arandu's clips on the armature that build.py made: sit, walk, jump, tap, read, lie, and his moods: startle,
+"""Key Arandu's clips on the armature that build.py made: sit, walk, jump, tap, read, lie, rest, and his moods: startle,
 arch and stretch.
 
 Run it inside Blender after build.py, for example through the Blender MCP:
@@ -7,7 +7,7 @@ Run it inside Blender after build.py, for example through the Blender MCP:
 Every clip is one action at 30 fps, keyed on every frame with linear interpolation, so the web
 plays exactly what is keyed here. Clips key only the body bones (root, spine, legs, tail): the page
 owns the face bones (head, ears, eyes, pupils, lids) for gaze, blinks, moods and the head look-at.
-sit, walk, read, lie and arch loop (their last frame repeats the first); jump, tap, startle and stretch start and end
+sit, walk, read, lie, rest and arch loop (their last frame repeats the first); jump, tap, startle and stretch start and end
 in a rest pose (stand for jump, sit for the others).
 
 Poses are written in the armature's axes: x forward, y the cat's left, z up. A negative turn about
@@ -246,6 +246,11 @@ LIE = {
 # A sleeper's breath: slow and deep.
 BREATH_DEEP = {"spine": [("y", -2.4)], "chest": [("y", -3.2)]}
 
+# Rest: the same loaf awake, in a house's door: head up looking out, the left front paw crossed over the right.
+REST = merge(LIE, {"neck": [("y", -40), ("z", -10)], "chest": [("y", -4)], "upperArmR": [("z", 6)]})
+REST.update({"upperArmL": [("y", -76), ("z", -34)], "foreArmL": [("y", -4)], "pawL": [("y", 42)], "plant": ["FR"]})
+REST_TIP = {"tail": LIE["tail"][:4] + [(-0.09, -0.15, 0.07)]}
+
 # Startle: from sit he jerks upright and back, head up, front legs stiff, tail straight up. The page opens his
 # eyes and pricks his ears.
 STARTLE = merge(SIT, {
@@ -408,6 +413,15 @@ def lie(arm):
     ])
 
 
+def rest(arm):
+    return keyed(arm, [
+        (0, REST, "smooth"),
+        (45, merge(REST, BREATH_IN), "smooth"),
+        (70, merge(REST, REST_TIP), "smooth"),
+        (90, REST, "smooth"),
+    ])
+
+
 def startle(arm):
     return keyed(arm, [
         (0, SIT, "smooth"),
@@ -439,7 +453,7 @@ def stretch(arm):
 
 
 CLIPS = {
-    "sit": sit, "walk": walk, "jump": jump, "tap": tap, "read": read, "lie": lie,
+    "sit": sit, "walk": walk, "jump": jump, "tap": tap, "read": read, "lie": lie, "rest": rest,
     "startle": startle, "arch": arch, "stretch": stretch,
 }
 

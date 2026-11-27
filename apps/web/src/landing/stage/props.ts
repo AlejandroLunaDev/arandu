@@ -462,7 +462,15 @@ export function makeKit(gltf: GLTF): Kit {
         g.lineWidth = w * 0.012;
         g.strokeRect(w * 0.08, h * 0.06, w * 0.84, h * 0.88);
         g.translate(w / 2, h * 0.5);
-        write(g, career, w * 0.3, w * 0.74);
+        // A title of several words that would shrink past reading on one line goes on two (the tower's chapters).
+        const lines = spineLines(g, career, w * 0.3, w * 0.53);
+        const size = lines.length === 1 ? w * 0.3 : w * 0.2;
+        lines.forEach((line, i) => {
+          g.save();
+          g.translate(0, (i - (lines.length - 1) / 2) * size * 1.15);
+          write(g, line, size, w * 0.74);
+          g.restore();
+        });
         return;
       }
       g.fillRect(w * 0.12, h * 0.14, w * 0.76, h * 0.01);
