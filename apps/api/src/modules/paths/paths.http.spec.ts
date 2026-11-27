@@ -228,8 +228,28 @@ describe('paths and journey routes', () => {
       },
     );
 
-    it('has no GET lesson route: a lesson is entered with POST start', async () => {
-      await server().get('/chapters/7/1/lessons/1').expect(404);
+    it.each(['0', '4', 'abc'])('GET sample lesson %s 404s', async (n) => {
+      await server().get(`/chapters/7/1/lessons/${n}`).expect(404);
+
+      expect(paths.discipline).not.toHaveBeenCalled();
+    });
+
+    it('GET serves a sample lesson and records nothing', async () => {
+      paths.chapterContent.mockResolvedValue({
+        discipline: { id: 7, name: 'C' },
+        topic: { index: 1, text: 'b', total: 2 },
+        cards: [],
+        exercises: [],
+        pieces: [],
+      });
+
+      const { body } = await server()
+        .get('/chapters/7/1/lessons/1')
+        .expect(200);
+
+      expect(body).toMatchObject({ index: 1, total: 3, lives: 3 });
+      expect(paths.lessons).not.toHaveBeenCalled();
+      expect(paths.finishLesson).not.toHaveBeenCalled();
     });
 
     it.each(['0', '4'])('POST lesson %s result 404s', async (n) => {

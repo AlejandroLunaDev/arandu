@@ -87,6 +87,18 @@ export class PathsController {
     return this.chapters.chapter(disciplineId, topicIndex);
   }
 
+  /** O14-O18: one lesson of a chapter as a sample (#163), for anyone; records and charges nothing. Else as the chapter GET. */
+  @Public()
+  @SkipThrottle({ burst: true, daily: true })
+  @Get('chapters/:disciplineId/:topic/lessons/:lesson')
+  sample(
+    @Param('disciplineId', param(id, chapterNotFound)) disciplineId: number,
+    @Param('topic', param(topic, chapterNotFound)) topicIndex: number,
+    @Param('lesson', param(lessonIndex, chapterNotFound)) lessonNumber: number,
+  ): Promise<Lesson> {
+    return this.chapters.sample(disciplineId, topicIndex, lessonNumber);
+  }
+
   /** O19: the chapter is done. */
   @Post('chapters/:disciplineId/:topic/result')
   @HttpCode(200)
