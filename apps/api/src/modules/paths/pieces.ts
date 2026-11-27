@@ -28,8 +28,17 @@ export type Piece =
   /** A key sentence, word by word, and words that are not in it. */
   | { type: 'frase'; words: string[]; distractors: string[]; why: string }
   | { type: 'pergunta'; prompt: string; ideas: string[]; why: string }
-  /** A situation where one of the chapter's concepts applies: `term` is that concept's term. */
-  | { type: 'caso'; situation: string; term: string; why: string }
+  /**
+   * A situation where one of the chapter's concepts applies: `term` is that concept's term. `decision`, since #164, asks
+   * what to do in it: `right` is what the concept supports. Without it the case asks which concept explains it.
+   */
+  | {
+      type: 'caso';
+      situation: string;
+      term: string;
+      why: string;
+      decision?: { question: string; right: string; wrong: string[] };
+    }
   | ProblemPiece
   /** Correct code; `blank` is the token a complete-the-code exercise hides, on `blank.line`. */
   | {
@@ -85,7 +94,16 @@ export const basicsDraft = z.object({
     z.object({ words: z.array(text), distractors: z.array(text), why: text }),
   ),
   question: z.object({ prompt: text, ideas: z.array(text), why: text }),
-  cases: z.array(z.object({ situation: text, term: text, why: text })),
+  cases: z.array(
+    z.object({
+      situation: text,
+      term: text,
+      question: text,
+      right: text,
+      wrong: z.array(text),
+      why: text,
+    }),
+  ),
 });
 
 /** Practice for topics that calculate, reason with rules or program: empty lists for any other topic. */
@@ -221,12 +239,23 @@ export function piecesOf(draft: PiecesDraft): Piece[] {
     out.push({ type: 'pergunta', ...q });
   for (const c of draft.cases.slice(0, 2)) {
     const concept = concepts.find((o) => same(o.term, c.term));
+    // A decision whose choices repeat is dropped; the case then asks for its concept.
+    const choices = [c.right, ...c.wrong];
     if (concept)
       out.push({
         type: 'caso',
         situation: c.situation,
         term: concept.term,
         why: c.why,
+        ...(within(c.wrong, 2, 3) && distinct(choices)
+          ? {
+              decision: {
+                question: c.question,
+                right: c.right,
+                wrong: c.wrong,
+              },
+            }
+          : {}),
       });
   }
   for (const p of draft.problems.slice(0, 2)) {
