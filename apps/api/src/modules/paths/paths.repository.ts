@@ -2,7 +2,6 @@ import type {
   CareerPath,
   CareerPaths,
   LessonResult,
-  ChapterCard,
   ChapterResult,
 } from '@arandu/contracts';
 import { Inject, Injectable } from '@nestjs/common';
@@ -173,32 +172,16 @@ export class PathsRepository {
       .map((r) => ({ topic: r.topic, pieces: r.pieces ?? [] }));
   }
 
-  /** The subject's stored cards by topic, those made from the same topic text. */
-  async chapterCards(
-    disciplineId: number,
-    topics: string[],
-  ): Promise<Map<number, ChapterCard[]>> {
-    const rows = await this.sql<
-      { topic: number; topic_text: string; cards: ChapterCard[] }[]
-    >`
-      select topic::int, topic_text, cards from public.chapter_cards where discipline_id = ${disciplineId}`;
-    return new Map(
-      rows
-        .filter((r) => topics[r.topic] === r.topic_text)
-        .map((r) => [r.topic, r.cards]),
-    );
-  }
-
-  async saveChapterCards(
-    disciplineId: number,
-    entries: { topic: number; topicText: string; cards: ChapterCard[] }[],
-  ): Promise<void> {
-    for (const e of entries)
-      await this.sql`
-        insert into public.chapter_cards (discipline_id, topic, topic_text, cards)
-        values (${disciplineId}, ${e.topic}, ${e.topicText}, ${this.sql.json(e.cards as never)})
-        on conflict (discipline_id, topic) do update
-          set topic_text = excluded.topic_text, cards = excluded.cards, created_at = now()`;
+  /** The careers whose grid plays this discipline (grid_disciplines, #157): its lessons set their cases in their work. */
+  async careersOf(disciplineId: number): Promise<string[]> {
+    const rows = await this.sql<{ name: string }[]>`
+      select distinct p.name from public.career_grids g
+      join public.professions p on p.id = g.profession_id
+      join public.curriculum_subjects cs on cs.source_id = g.source_id
+      join public.grid_disciplines gd on gd.curriculum_subject_id = cs.id
+      where gd.discipline_id = ${disciplineId}
+      order by p.name`;
+    return rows.map((r) => r.name);
   }
 
   async saveChapterContent(content: StoredChapter): Promise<void> {

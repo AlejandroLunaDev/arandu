@@ -16,10 +16,10 @@ import { CONTINUE_PRICE, LESSON_PRICE } from '../progress/progress.logic.js';
 import { ProgressRepository } from '../progress/progress.repository.js';
 import { ProgressService } from '../progress/progress.service.js';
 import {
-  cardsInstructions,
   basicsInstructions,
+  lessonCardsInstructions,
+  lessonsInstructions,
   practiceInstructions,
-  subjectCardsInstructions,
 } from './chapter.prompt.js';
 import {
   type Composed,
@@ -46,20 +46,20 @@ import {
   practiceDraft,
   piecesOf,
   type StoredChapter,
+  type StoredLesson,
+  type StoredPiece,
 } from './pieces.js';
-import { quoteIn, refusedPage } from './source-check.js';
+import { quoteIn } from './source-check.js';
 
-/** Topics whose cards one search writes: the search is paid once for them, not once per chapter. */
-export const TOPICS_PER_SEARCH = 6;
 /**
- * Pages a search downloads (a Firecrawl credit each): academic ones, then Wikipedia's, for a block or a lone topic.
- * Wikipedia's 5, not 2 (#157): its clean text gives quotes that check, and with 2, 5 of 35 chapters had too few cards.
+ * Pages a search downloads (a Firecrawl credit each), academic ones and then Wikipedia's: one search for the chapter's
+ * topic gives its three lessons (#157), and one for a lesson's own part when those pages left it short of cards.
  */
-const BLOCK_PAGES = { academic: 5, wikipedia: 5 };
-const TOPIC_PAGES = { academic: 5, wikipedia: 5 };
-/** A chapter rests on MIN_CARDS verified cards at least, MAX_CARDS at most: one card's text gives too few concepts. */
-const MIN_CARDS = 3;
-const MAX_CARDS = 5;
+const CHAPTER_PAGES = { academic: 5, wikipedia: 10 };
+const LESSON_PAGES = { academic: 5, wikipedia: 5 };
+/** A lesson's verified cards: LESSON_CARDS wanted, MIN_LESSON_CARDS at least, or the chapter is not made. */
+const LESSON_CARDS = 3;
+const MIN_LESSON_CARDS = 2;
 /** Words a search query keeps: a search engine reads a long query badly. */
 const QUERY_WORDS = 30;
 /** The longest quote a card keeps: one sentence, a short citation. */
@@ -70,11 +70,10 @@ const index = z.number().int();
 // `page` is the page's number as listed (1-based); the card's source is that page.
 const card = z.object({ title: text, text, page: index, quote: text });
 
-// No counts in these schemas: a list one card too long would drop every card. A chapter keeps MAX_CARDS verified.
+// No counts in these schemas: a list one card too long would drop every card. A lesson keeps LESSON_CARDS verified.
 const cardsDraft = z.object({ cards: z.array(card) });
-// Cards for several topics of a subject from one search; `topic` is the topic's number as listed (1-based).
-const subjectCardsDraft = z.object({
-  cards: z.array(card.extend({ topic: index })),
+const lessonsDraft = z.object({
+  lessons: z.array(z.object({ title: text, cards: z.array(card) })),
 });
 
 /** A page with where it comes from: the model is told to prefer academic pages over Wikipedia's. */
@@ -92,7 +91,7 @@ async function orRetry<T>(draft: Promise<{ object: T }>): Promise<T | null> {
   }
 }
 
-/** Tries to write a chapter's cards, and then its pieces, this many times before giving up. */
+/** Tries to write a chapter's lessons, and then each lesson's pieces, this many times before giving up. */
 const ATTEMPTS = 2;
 
 /** The subject's name and the first words of every topic (its "1." numbering left out), so each topic is in the query. */
@@ -116,7 +115,7 @@ const pagesPrompt = (pages: Source[]) =>
     )
     .join('\n\n---\n\n');
 
-/** The cards of both lists, each quote once: a second search adds to the cards a topic has. */
+/** The cards of both lists, each quote once: `b`'s cards that `a` already has are left out. */
 const together = (a: ChapterCard[], b: ChapterCard[]) =>
   [...a, ...b].filter(
     (c, i, all) =>
@@ -127,10 +126,10 @@ const together = (a: ChapterCard[], b: ChapterCard[]) =>
   );
 
 /** The cards whose quote is on the page they name, each citing that page. */
-function verified<T extends z.infer<typeof card>>(
-  cards: T[],
+function verified(
+  cards: z.infer<typeof card>[],
   pages: Source[],
-): (ChapterCard & { draft: T })[] {
+): ChapterCard[] {
   return cards.flatMap((c) => {
     const page = pages[c.page - 1];
     if (
@@ -144,7 +143,6 @@ function verified<T extends z.infer<typeof card>>(
         title: c.title,
         text: c.text,
         source: { label: page.title, url: page.url, quote: c.quote },
-        draft: c,
       },
     ];
   });
@@ -153,13 +151,21 @@ function verified<T extends z.infer<typeof card>>(
 const shown = ({
   discipline,
   topic,
+  lessons,
   cards,
   exercises,
-}: StoredChapter): ChapterContent => ({ discipline, topic, cards, exercises });
+}: StoredChapter): ChapterContent => ({
+  discipline,
+  topic,
+  lessonTitles: lessons?.map((l) => l.title) ?? [],
+  cards,
+  exercises,
+});
 
 /**
- * A chapter of a subject: made once from pages Firecrawl found, with every card's quote checked on its page, and its
- * pieces written from the verified cards; then reused. Its lessons are composed from the pieces, per person.
+ * A chapter of a subject: made once from pages Firecrawl found, as three lessons that each teach a different part of
+ * its topic (#157), with every card's quote checked on its page and each lesson's pieces written from its own cards;
+ * then reused. Its lessons' exercises are composed from those pieces, per person.
  */
 @Injectable()
 export class ChaptersService {
@@ -212,8 +218,9 @@ export class ChaptersService {
   }
 
   /**
-   * A chapter, made now when it is not stored yet: for the generation script, not for people. `remake` writes its
-   * pieces again over the stored chapter, from its stored cards; the old chapter stays if that fails.
+   * A chapter, made now when it is not stored yet: for the generation script, not for people. `remake` makes a stored
+   * chapter again: its lessons' pieces from their stored cards, or all of it when it was made before lessons (#157). The
+   * old chapter stays if that fails.
    */
   async make(
     disciplineId: number,
@@ -239,7 +246,7 @@ export class ChaptersService {
         discipline.name,
         topic,
         discipline.topics,
-        stored?.cards ?? [],
+        stored?.lessons,
       ).finally(() => this.pending.delete(key));
       this.pending.set(key, generation);
     }
@@ -276,7 +283,7 @@ export class ChaptersService {
   /**
    * Enters one lesson of a chapter for this person (#123, #145), composed from its pieces: lessons 1-3 recognise, apply
    * and solve. 409 `lesson_locked` before it opens. The first entry costs LESSON_PRICE peixinhos, 409
-   * `not_enough_peixinhos` with too few; practice is free (#150). Each lesson brings its share of the chapter's cards.
+   * `not_enough_peixinhos` with too few; practice is free (#150). Each lesson brings its own cards, or its share of an older chapter's.
    */
   async start(
     userId: string,
@@ -291,7 +298,10 @@ export class ChaptersService {
     return {
       index,
       total: LESSONS,
-      cards: lessonCards(chapter.cards, index),
+      title: chapter.lessons?.[index - 1]?.title ?? null,
+      cards:
+        chapter.lessons?.[index - 1]?.cards ??
+        lessonCards(chapter.cards, index),
       exercises: composed.map((c): LessonExercise => ({
         ...c.exercise,
         topic: c.ref.topic,
@@ -404,7 +414,6 @@ export class ChaptersService {
     );
   }
 
-  /** Academic pages, then Wikipedia's, for one query; a page both searches found comes once. */
   private async pages(
     query: string,
     count: { academic: number; wikipedia: number },
@@ -426,156 +435,123 @@ export class ChaptersService {
   }
 
   /**
-   * The chapter's cards from a search for its topic alone, added to those it `has`, keeping only those whose quote is
-   * on its page. Fewer than MIN_CARDS: unavailable.
+   * The chapter's three lessons from one search for its topic (#157), each a different part of it with up to
+   * LESSON_CARDS verified cards, no card in two lessons. A lesson left short asks for more of its own.
    */
-  private async cards(
+  private async lessons(
     name: string,
-    topic: number,
+    head: string,
     topicText: string,
-    total: number,
-    has: ChapterCard[],
-  ): Promise<ChapterCard[]> {
-    const pages = await this.pages(queryOf(name, [topicText]), TOPIC_PAGES);
+  ): Promise<StoredLesson[]> {
+    const pages = await this.pages(queryOf(name, [topicText]), CHAPTER_PAGES);
     if (!pages.length) throw chapterUnavailable();
-    let kept = has;
-    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    let draft: z.infer<typeof lessonsDraft> | null = null;
+    for (let attempt = 1; attempt <= ATTEMPTS && !draft; attempt++) {
       const object = await orRetry(
         this.ai.generateObject({
-          label: 'arandu-chapter-cards',
+          label: 'arandu-chapter-lessons',
+          schema: lessonsDraft,
+          instructions: lessonsInstructions(),
+          prompt: `${head}\n\nPages:\n${pagesPrompt(pages)}`,
+          maxOutputTokens: 6000,
+        }),
+      );
+      if (object && object.lessons.length >= LESSONS) draft = object;
+    }
+    if (!draft) throw chapterUnavailable();
+
+    const lessons: StoredLesson[] = [];
+    for (const l of draft.lessons.slice(0, LESSONS)) {
+      const taken = lessons.flatMap((o) => o.cards);
+      const cards = together(taken, verified(l.cards, pages))
+        .slice(taken.length)
+        .slice(0, LESSON_CARDS);
+      lessons.push({ title: l.title, cards });
+    }
+    for (const lesson of lessons)
+      if (lesson.cards.length < LESSON_CARDS)
+        lesson.cards = await this.moreCards(
+          name,
+          head,
+          topicText,
+          lessons,
+          lesson,
+          pages,
+        );
+    this.logger.log(
+      `${head.split('\n')[1]}: lessons ${lessons.map((l) => `"${l.title}" ${l.cards.length}`).join(', ')}`,
+    );
+    return lessons;
+  }
+
+  /**
+   * More cards for a lesson left short: from the chapter's pages again (no search paid), then from a search for its own
+   * part. Fewer than MIN_LESSON_CARDS after both: the chapter is unavailable.
+   */
+  private async moreCards(
+    name: string,
+    head: string,
+    topicText: string,
+    lessons: StoredLesson[],
+    lesson: StoredLesson,
+    pages: Source[],
+  ): Promise<ChapterCard[]> {
+    const n = lessons.indexOf(lesson) + 1;
+    const others = lessons.filter((l) => l !== lesson);
+    const taken = others.flatMap((o) => o.cards);
+    let kept = lesson.cards;
+    for (const search of [false, true]) {
+      const from = search
+        ? await this.pages(
+            queryOf(name, [topicText, lesson.title]),
+            LESSON_PAGES,
+          )
+        : pages;
+      if (!from.length) continue;
+      const object = await orRetry(
+        this.ai.generateObject({
+          label: 'arandu-lesson-cards',
           schema: cardsDraft,
-          instructions: cardsInstructions(),
-          prompt: `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}\n\nPages:\n${pagesPrompt(pages)}`,
+          instructions: lessonCardsInstructions(),
+          prompt: `${head}\nLesson ${n} of ${LESSONS}: ${lesson.title}\nOther lessons: ${others.map((o) => o.title).join('; ')}\nCards it has: ${kept.map((c) => c.title).join('; ') || 'none'}\n\nPages:\n${pagesPrompt(from)}`,
           maxOutputTokens: 2500,
         }),
       );
-      if (!object) continue;
-      const cards = verified(object.cards, pages).map(
-        ({ title, text, source }) => ({ title, text, source }),
-      );
-      kept = together(kept, cards);
-      this.logger.log(
-        `Chapter cards attempt ${attempt}: ${cards.length}/${object.cards.length} verified, ${kept.length} in all`,
-      );
-      if (kept.length >= MIN_CARDS) return kept.slice(0, MAX_CARDS);
+      if (object)
+        kept = together(
+          taken,
+          together(kept, verified(object.cards, from)),
+        ).slice(taken.length);
+      if (kept.length >= LESSON_CARDS) return kept.slice(0, LESSON_CARDS);
     }
+    if (kept.length >= MIN_LESSON_CARDS) return kept;
     throw chapterUnavailable();
   }
 
-  /**
-   * The chapter's cards: stored ones (and those of the chapter being remade, `current`) when they are MIN_CARDS, else one
-   * search for its block of topics (saving every topic's verified cards), and then a search for this topic alone that
-   * adds to what it has, saved for the next remake.
-   */
-  private async chapterCards(
-    id: number,
-    name: string,
-    topic: number,
-    topics: string[],
-    current: ChapterCard[],
-  ): Promise<ChapterCard[]> {
-    const stored = await this.paths.chapterCards(id, topics);
-    // A card stored before its site was refused is dropped; a topic left without cards is made again.
-    for (const [t, cards] of stored) {
-      const kept = cards.filter((c) => !refusedPage(c.source.url));
-      if (kept.length) stored.set(t, kept);
-      else stored.delete(t);
-    }
-    let mine = together(
-      stored.get(topic) ?? [],
-      current.filter((c) => !refusedPage(c.source.url)),
-    );
-    if (mine.length >= MIN_CARDS) return mine.slice(0, MAX_CARDS);
-
-    const start = topic - (topic % TOPICS_PER_SEARCH);
-    const whole = topics
-      .slice(start, start + TOPICS_PER_SEARCH)
-      .map((text, i) => ({ index: start + i, text }));
-    const block = whole.filter((t) => !stored.has(t.index));
-    // A block already searched (some topic of it stored) is not searched again: its uncovered topics search alone.
-    if (block.length === whole.length) {
-      const found = await this.blockCards(id, name, block);
-      if (found) {
-        await this.paths.saveChapterCards(id, found);
-        mine = together(
-          mine,
-          found.find((e) => e.topic === topic)?.cards ?? [],
-        );
-        if (mine.length >= MIN_CARDS) return mine.slice(0, MAX_CARDS);
-      }
-    }
-    const topicText = topics[topic];
-    if (topicText === undefined) throw chapterNotFound();
-    const cards = await this.cards(name, topic, topicText, topics.length, mine);
-    await this.paths.saveChapterCards(id, [{ topic, topicText, cards }]);
-    return cards;
-  }
-
-  /**
-   * One search for a block of topics, and each topic's verified cards. Null when the search or the provider failed or
-   * the answer missed the schema: the chapter then falls back to a search for its own topic.
-   */
-  private async blockCards(
-    id: number,
-    name: string,
-    block: { index: number; text: string }[],
-  ) {
-    try {
-      const pages = await this.pages(
-        queryOf(
-          name,
-          block.map((t) => t.text),
-        ),
-        BLOCK_PAGES,
-      );
-      if (!pages.length) return null;
-      const object = await orRetry(
-        this.ai.generateObject({
-          label: 'arandu-subject-cards',
-          schema: subjectCardsDraft,
-          instructions: subjectCardsInstructions(),
-          prompt: `Subject: ${name}\nTopics:\n${block.map((t, i) => `${i + 1}. ${t.text}`).join('\n')}\n\nPages:\n${pagesPrompt(pages)}`,
-          maxOutputTokens: 1500 * block.length,
-        }),
-      );
-      if (!object) return null;
-      const cards = verified(object.cards, pages);
-      const found = block
-        .map((t, i) => ({
-          topic: t.index,
-          topicText: t.text,
-          cards: cards
-            .filter((c) => c.draft.topic === i + 1)
-            .slice(0, MAX_CARDS)
-            .map(({ title, text, source }) => ({ title, text, source })),
-        }))
-        .filter((e) => e.cards.length);
-      this.logger.log(
-        `Subject ${id} cards for topics ${block[0]!.index + 1}-${block.at(-1)!.index + 1}: ${cards.length}/${object.cards.length} verified from ${pages.length} pages, ${found.length}/${block.length} topics`,
-      );
-      return found;
-    } catch (error) {
-      this.logger.warn(`Subject ${id} block search failed: ${String(error)}`);
-      return null;
-    }
-  }
-
-  private async generate(
-    id: number,
-    name: string,
-    topic: number,
-    topics: string[],
-    current: ChapterCard[],
-  ): Promise<StoredChapter> {
-    const topicText = topics[topic];
-    if (topicText === undefined) throw chapterNotFound();
-    const total = topics.length;
-    const cards = await this.chapterCards(id, name, topic, topics, current);
+  /** One lesson's pieces, written from its own cards and tagged with it; unavailable when they are never enough. */
+  private async lessonPieces(
+    chapter: string,
+    head: string,
+    careers: string[],
+    lessons: StoredLesson[],
+    n: number,
+  ): Promise<StoredPiece[]> {
+    const lesson = lessons[n - 1]!;
     const facts = JSON.stringify(
-      cards.map((c) => ({ title: c.title, text: c.text })),
+      lesson.cards.map((c) => ({ title: c.title, text: c.text })),
     );
-    const prompt = `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}\n\nCards:\n${facts}`;
-    // Practice is optional: an answer that missed its schema leaves the chapter without problems or code.
+    const others = lessons.filter((l) => l !== lesson).map((l) => l.title);
+    const prompt = [
+      head,
+      `Lesson ${n} of ${LESSONS}: ${lesson.title}`,
+      `Other lessons: ${others.join('; ')}`,
+      ...(careers.length
+        ? [`Careers that study this subject: ${careers.join(', ')}`]
+        : []),
+      '',
+      `Cards:\n${facts}`,
+    ].join('\n');
+    // Practice is optional: an answer that missed its schema leaves the lesson without problems or code.
     const practice = (await orRetry(
       this.ai.generateObject({
         label: 'arandu-chapter-practice',
@@ -597,25 +573,55 @@ export class ChaptersService {
       );
       if (!basics) {
         this.logger.warn(
-          `Chapter ${id}:${topic} pieces attempt ${attempt}: the answer missed its schema`,
+          `Chapter ${chapter} lesson ${n} pieces attempt ${attempt}: the answer missed its schema`,
         );
         continue;
       }
       const pieces = piecesOf({ ...basics, ...practice });
       this.logger.log(
-        `Chapter ${id}:${topic} pieces attempt ${attempt}: ${pieces.map((p) => p.type).join(', ')}`,
+        `Chapter ${chapter} lesson ${n} pieces attempt ${attempt}: ${pieces.map((p) => p.type).join(', ')}`,
       );
-      if (!enoughPieces(pieces)) continue;
-      const content: StoredChapter = {
-        discipline: { id, name },
-        topic: { index: topic, text: topicText, total },
-        cards,
-        exercises: composeChapter({ topic, pieces }, `${id}:${topic}`),
-        pieces,
-      };
-      await this.paths.saveChapterContent(content);
-      return content;
+      if (enoughPieces(pieces)) return pieces.map((p) => ({ ...p, lesson: n }));
     }
     throw chapterUnavailable();
+  }
+
+  private async generate(
+    id: number,
+    name: string,
+    topic: number,
+    topics: string[],
+    stored: StoredLesson[] | undefined,
+  ): Promise<StoredChapter> {
+    const topicText = topics[topic];
+    if (topicText === undefined) throw chapterNotFound();
+    const total = topics.length;
+    const head = `Subject: ${name}\nTopic ${topic + 1} of ${total}: ${topicText}`;
+    const lessons =
+      stored?.length === LESSONS
+        ? stored
+        : await this.lessons(name, head, topicText);
+    const careers = await this.paths.careersOf(id);
+    const pieces: StoredPiece[] = [];
+    for (let n = 1; n <= LESSONS; n++)
+      pieces.push(
+        ...(await this.lessonPieces(
+          `${id}:${topic}`,
+          head,
+          careers,
+          lessons,
+          n,
+        )),
+      );
+    const content: StoredChapter = {
+      discipline: { id, name },
+      topic: { index: topic, text: topicText, total },
+      cards: lessons.flatMap((l) => l.cards),
+      lessons,
+      exercises: composeChapter({ topic, pieces }, `${id}:${topic}`),
+      pieces,
+    };
+    await this.paths.saveChapterContent(content);
+    return content;
   }
 }
