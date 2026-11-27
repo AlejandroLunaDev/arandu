@@ -61,7 +61,7 @@ export class PathsRepository {
 
     // One content per career (ADR-0008): every course of the career is lived through the first semester of the
     // career's grid (term 1, or year 1 when the source states no term), whichever institution published it. A subject
-    // is played from the one discipline its name is taught from; its code is shown only at its own institution.
+    // is played from its grid's own discipline (grid_disciplines, #157); its code is shown only at its own institution.
     const rows = await this.sql<PathRow[]>`
       select c.id::int as course_id, coalesce(i.short_name, i.name) as institution, c.name as course, c.city,
         d.id::int as discipline_id, case when d.institution_id = c.institution_id then d.code end as code,
@@ -72,8 +72,8 @@ export class PathsRepository {
       join public.courses c on c.profession_id = p.id
       join public.institutions i on i.id = c.institution_id
       join public.disciplines d on d.id in (
-        select su.discipline_id from public.curriculum_subjects cs
-        join public.subjects su on su.key = cs.subject_key
+        select gd.discipline_id from public.curriculum_subjects cs
+        join public.grid_disciplines gd on gd.curriculum_subject_id = cs.id
         where cs.source_id = g.source_id and (cs.term = 1 or (cs.term is null and cs.year = 1)))
       where p.slug = ${slug} and cardinality(d.topics) > 0
       order by institution, c.city, c.id, d.name`;

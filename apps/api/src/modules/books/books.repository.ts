@@ -36,8 +36,8 @@ const CAREER_GRID = `(
 const IN_POOL = `exists (
   select 1 from public.career_grids g
   join public.curriculum_subjects pcs on pcs.source_id = g.source_id
-  join public.subjects su on su.key = pcs.subject_key
-  join public.disciplines pd on pd.id = su.discipline_id
+  join public.grid_disciplines gd on gd.curriculum_subject_id = pcs.id
+  join public.disciplines pd on pd.id = gd.discipline_id
   where g.profession_id = p.id and ${sampleSubject('pcs', 'pd')})`;
 
 /** The book's sample: at most 2 subjects (the contract's 1-2). */
@@ -249,18 +249,18 @@ export class BooksRepository {
       (SourceRow & Omit<SampleSubject, 'source'>)[]
     >(
       `select name, topics, institution, source_label, source_url, retrieved_at from (
-        select distinct on (su.key) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
+        select distinct on (cs.subject_key) d.name, d.topics, coalesce(i.short_name, i.name) as institution,
           s.label as source_label, s.url as source_url, s.last_fetched_at as retrieved_at,
           (select count(distinct og.profession_id) from public.career_grids og
-            join public.curriculum_subjects ocs on ocs.source_id = og.source_id and ocs.subject_key = su.key
+            join public.curriculum_subjects ocs on ocs.source_id = og.source_id and ocs.subject_key = cs.subject_key
             where ocs.term = 1 or (ocs.term is null and ocs.year = 1)) as spread
         from public.curriculum_subjects cs
-        join public.subjects su on su.key = cs.subject_key
-        join public.disciplines d on d.id = su.discipline_id
+        join public.grid_disciplines gd on gd.curriculum_subject_id = cs.id
+        join public.disciplines d on d.id = gd.discipline_id
         join public.institutions i on i.id = d.institution_id
         join public.sources s on s.id = d.source_id and s.last_fetched_at is not null
         where cs.source_id in ${CAREER_GRID} and ${sampleSubject('cs', 'd')}
-        order by su.key
+        order by cs.subject_key
       ) named
       order by spread, name
       limit $2`,
