@@ -44,7 +44,7 @@ export function PathLesson({ wallet }: { wallet: Wallet }) {
   if (finished) return <LessonDone entry={entry} finished={finished} onNext={back} />;
   return (
     <ChapterView
-      chapter={{ discipline: { id: disciplineId, name: entry.discipline }, topic: { index: topic, text: entry.text, total: entry.total }, cards: lesson.cards, exercises: lesson.exercises }}
+      chapter={{ discipline: { id: disciplineId, name: entry.discipline }, topic: { index: topic, text: entry.text, total: entry.total }, lessonTitles: [], cards: lesson.cards, exercises: lesson.exercises }}
       caption={`Arandu explica · capítulo ${entry.number} · lição ${lesson.index} de ${lesson.total}`}
       busy={busy}
       failed={failed}
