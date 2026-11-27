@@ -399,7 +399,12 @@ export type Exercise = { mode: ExerciseMode; why: string } & (
 export interface ChapterContent {
   discipline: { id: number; name: string };
   topic: { index: number; text: string; total: number };
-  /** 3 to 5 (a few early chapters have fewer). */
+  /**
+   * The titles of lessons 1-3: each lesson is a different part of the topic, with its own cards and exercises (#157).
+   * Empty for a chapter made before that, whose lessons share its cards.
+   */
+  lessonTitles: string[];
+  /** Every lesson's cards in lesson order: 3 per lesson (2 in a few), or 3 to 5 in a chapter made before #157. */
   cards: ChapterCard[];
   exercises: Exercise[];
 }
@@ -421,7 +426,9 @@ export type LessonExercise = Exercise & { topic: number; index: number };
 export interface Lesson {
   index: number;
   total: 3;
-  /** This lesson's share of the chapter's cards (all of them when the chapter has fewer than 3). */
+  /** The part of the topic this lesson teaches (#157); null in a chapter made before that. */
+  title: string | null;
+  /** This lesson's cards: its own, or its share of an older chapter's (all of them when it has fewer than 3). */
   cards: ChapterCard[];
   exercises: LessonExercise[];
   /**
